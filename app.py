@@ -168,7 +168,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         split_store_total += best_price
         
         item_breakdown.append({
-            "item_name": f"{item_name}" if qty == 1 else f"{item_name}",
+            "item_name": item_name,
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
             "unit_price": f"${(best_price/qty):.2f}/{unit}",
@@ -416,7 +416,17 @@ if valid_rows_with_indices:
                     for idx, item in enumerate(items):
                         total_checkboxes += 1
                         unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
-                        is_checked = st.checkbox(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.9em;'>{item['unit_price']}</span> &nbsp;&nbsp;&nbsp;&nbsp; **{item['total_price']}**", key=unique_key)
+                        
+                        # Clean HTML rendering for checkboxes to strip out raw code tags
+                        is_checked = st.checkbox(f"_hidden_{unique_key}", value=False, key=unique_key, label_visibility="collapsed")
+                        
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
+                            <div><b>{item['item_name']}</b> <span style='color:gray; font-size:0.9em;'>({item['unit_price']})</span></div>
+                            <div><b>{item['total_price']}</b></div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
                         if not is_checked:
                             all_checked = False
 
