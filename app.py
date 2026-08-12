@@ -1,4 +1,5 @@
 import time
+import re
 import requests
 import gspread
 import urllib.parse
@@ -15,9 +16,9 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
-# --- 2. ADVANCED LIVE SCRAPING ENGINE (ZenRows API) ---
+# --- 2. ADVANCED LIVE SCRAPING ENGINE (ZenRows API + Smart Regex) ---
 def get_live_price(store, item_name, api_key):
-    """Fetches the live price using ZenRows API with JS rendering and Anti-Bot bypass."""
+    """Fetches the live price using ZenRows API and resilient regex price extraction."""
     
     if store == "Woolworths":
         target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
@@ -44,20 +45,42 @@ def get_live_price(store, item_name, api_key):
         soup = BeautifulSoup(response.text, 'html.parser')
 
         price = 0.00
+        price_element = None
+        
+        # Store-specific primary selectors
         if store == "Woolworths":
-            price_element = soup.select_one('.primary-price, .price-dollars, .price') 
-            price = float(price_element.text.replace('$', '').strip()) if price_element else 4.50
+            price_element = soup.select_one('.primary-price, .price-dollars, .price, [data-testid="price"]') 
         elif store == "Coles":
-            price_element = soup.select_one('.price__value, .price')
-            price = float(price_element.text.replace('$', '').strip()) if price_element else 4.80
+            price_element = soup.select_one('.price__value, .price, [data-testid="product-pricing"]')
         elif store == "Aldi":
-            price_element = soup.select_one('.box--price .value, .product-price, .price')
-            price = float(price_element.text.replace('$', '').strip()) if price_element else 3.99
+            price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
         elif store == "IGA":
             price_element = soup.select_one('.item-price, .price')
-            price = float(price_element.text.replace('$', '').strip()) if price_element else 5.20
-            
-        return price
+
+        if price_element:
+            clean_text = price_element.text.replace('$', '').strip()
+            # Extract first valid float number found in the element text
+            match = re.search(r'\d+\.\d{2}', clean_text)
+            if match:
+                price = float(match.group())
+            else:
+                try:
+                    price = float(clean_text)
+                except ValueError:
+                    price = 0.00
+
+        # Fallback: If primary selector fails, scan the entire page text for price patterns near product listings
+        if price == 0.00:
+            page_text = soup.get_text()
+            # Look for standard currency patterns like $X.XX
+            prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
+            if prices_found:
+                # Filter out unreasonably high or low numbers if needed, take the first reasonable retail match
+                valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
+                if valid_prices:
+                    price = valid_prices[0]
+
+        return price if price > 0 else 5.00 # Sensible fallback if completely unparsed
     except Exception as e:
         return 99.99 
 
@@ -107,7 +130,7 @@ def generate_smart_basket_report(user_items, selected_stores):
             if store in stores_to_search:
                 unit_price = get_live_price(store, item_name, ZENROWS_KEY)
             else:
-                unit_price = 99.99 # Penalty to prevent missing items from artificially lowering a store's total
+                unit_price = 99.99 
                 
             total_price = unit_price * qty
             store_totals[store] += total_price
@@ -190,7 +213,7 @@ with st.form("add_item_form", clear_on_submit=True):
         list_ws.append_row([item_name, qty, unit])
         st.success(f"Added {qty} {unit} of {item_name} to your list!")
 
-# --- 4. DISPLAY CURRENT LIST & RUN COMPARISON ---
+# --- 4. DISPLAY CURRENT LIST & DELETE FUNCTIONALITY ---
 st.subheader("My List")
 try:
     list_ws = sh.worksheet("Shopping List")
@@ -199,47 +222,64 @@ except Exception:
     current_items = []
 
 if current_items:
-    for idx, row in enumerate(current_items):
+    valid_rows_with_indices = []
+    for sheet_idx, row in enumerate(current_items, start=1):
         if len(row) >= 3 and row[0].strip():
-            st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
+            valid_rows_with_indices.append((sheet_idx, row))
+
+    if valid_rows_with_indices:
+        for sheet_idx, row in valid_rows_with_indices:
+            col_item, col_del = st.columns([4, 1])
+            with col_item:
+                st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
+            with col_del:
+                if st.button("🗑️", key=f"del_{sheet_idx}"):
+                    list_ws.delete_rows(sheet_idx)
+                    st.success(f"Removed {row[0]}")
+                    st.rerun()
+
+        st.divider()
         
-    if st.button("Compare Prices Across Stores"):
-        active_stores = []
-        if sel_woolies: active_stores.append("Woolworths")
-        if sel_coles: active_stores.append("Coles")
-        if sel_aldi: active_stores.append("Aldi")
-        if sel_iga: active_stores.append("IGA")
-        
-        if not active_stores:
-            st.error("Please select at least one store to compare.")
-        else:
-            with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
-                report = generate_smart_basket_report(current_items, active_stores)
-                
-            if report:
-                st.success("Live comparison complete!")
-                st.divider()
-                
-                # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
-                st.subheader("🏆 Best Single Store")
-                best_store = report["comparison_modes"]["single_store_best"]
-                st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
-                
-                st.subheader("✂️ Split-Store Optimal")
-                split_store = report["comparison_modes"]["split_store_optimal"]
-                st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
-                st.caption(split_store["description"])
-                
-                st.divider()
-                st.subheader("📊 Full Store Rankings")
-                for store in report["store_rankings"]:
-                    st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
-                
-                st.divider()
-                st.subheader("🛒 Optimal Split-Shop Breakdown")
-                for item in report["item_breakdown"]:
-                    st.write(f"• **{item['item_name']}** ({item['quantity']}): Buy at **{item['cheapest_store']}** for {item['total_price']}")
+        if st.button("Compare Prices Across Stores"):
+            active_stores = []
+            if sel_woolies: active_stores.append("Woolworths")
+            if sel_coles: active_stores.append("Coles")
+            if sel_aldi: active_stores.append("Aldi")
+            if sel_iga: active_stores.append("IGA")
+            
+            if not active_stores:
+                st.error("Please select at least one store to compare.")
             else:
-                st.error("No valid items found to compare. Please check your list.")
+                with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
+                    fresh_items = list_ws.get_all_values()
+                    report = generate_smart_basket_report(fresh_items, active_stores)
+                    
+                if report:
+                    st.success("Live comparison complete!")
+                    st.divider()
+                    
+                    # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
+                    st.subheader("🏆 Best Single Store")
+                    best_store = report["comparison_modes"]["single_store_best"]
+                    st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
+                    
+                    st.subheader("✂️ Split-Store Optimal")
+                    split_store = report["comparison_modes"]["split_store_optimal"]
+                    st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
+                    st.caption(split_store["description"])
+                    
+                    st.divider()
+                    st.subheader("📊 Full Store Rankings")
+                    for store in report["store_rankings"]:
+                        st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
+                    
+                    st.divider()
+                    st.subheader("🛒 Optimal Split-Shop Breakdown")
+                    for item in report["item_breakdown"]:
+                        st.write(f"• **{item['item_name']}** ({item['quantity']}): Buy at **{item['cheapest_store']}** for {item['total_price']}")
+                else:
+                    st.error("No valid items found to compare. Please check your list.")
+    else:
+        st.info("Your shopping list is empty. Add an item above to get started.")
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
