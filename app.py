@@ -165,7 +165,6 @@ def generate_smart_basket_report(user_items, selected_stores):
                 "total_price": total_price
             }
 
-        # Sort store prices for this item to find the best match for the breakdown view
         sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]['total_price'])
         cheapest_store = sorted_item_stores[0][0]
         best_price = sorted_item_stores[0][1]['total_price']
@@ -399,11 +398,11 @@ if valid_rows_with_indices:
                     
                     for store_idx, (store_name, store_data) in enumerate(item["all_stores"]):
                         store_initial = store_name[0].upper()
-                        is_best = (store_idx == 0) # First item in sorted list is cheapest
+                        is_best = (store_idx == 0)
                         
                         best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
                         
-                        st.markdown(f"""
+                        html_row = f"""
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
                             <div><b>{store_initial}</b> &nbsp; {store_name}</div>
                             <div>
@@ -412,7 +411,8 @@ if valid_rows_with_indices:
                                 {best_badge}
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        """
+                        st.markdown(html_row, unsafe_allow_html=True)
 
         elif tab_choice == "Discount Cycle":
             st.markdown("#### DISCOUNT CYCLE")
