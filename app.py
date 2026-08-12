@@ -19,7 +19,6 @@ sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 def get_live_price(store, item_name, api_key):
     """Fetches the live price using ZenRows API with JS rendering and Anti-Bot bypass."""
     
-    # Build the target supermarket URL
     if store == "Woolworths":
         target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
     elif store == "Coles":
@@ -31,22 +30,19 @@ def get_live_price(store, item_name, api_key):
     else:
         return 99.99
 
-    # Configure ZenRows API parameters to punch through the firewalls
     api_url = "https://api.zenrows.com/v1/"
     params = {
         "apikey": api_key,
         "url": target_url,
-        "js_render": "true",      # Forces the page to load like a real browser
-        "antibot": "true",        # Bypasses Woolworths' strict protections
-        "premium_proxy": "true"   # Routes through high-quality residential IP addresses
+        "js_render": "true",      
+        "antibot": "true",        
+        "premium_proxy": "true"   
     }
 
     try:
-        # We increase the timeout because rendering JavaScript takes a few extra seconds
         response = requests.get(api_url, params=params, timeout=45)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Broadened CSS Selectors to catch website updates
         price = 0.00
         if store == "Woolworths":
             price_element = soup.select_one('.primary-price, .price-dollars, .price') 
@@ -63,7 +59,6 @@ def get_live_price(store, item_name, api_key):
             
         return price
     except Exception as e:
-        # If they still manage to block it or it times out, trigger the penalty price
         return 99.99 
 
 def generate_smart_basket_report(user_items, selected_stores):
@@ -71,11 +66,9 @@ def generate_smart_basket_report(user_items, selected_stores):
     item_breakdown = []
     split_store_total = 0.0
     
-    # Progress bar for the UI
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    # Filter out empty rows before counting total items
     valid_items = [row for row in user_items if len(row) >= 3 and row[0].strip()]
     total_items = len(valid_items)
     
@@ -85,7 +78,6 @@ def generate_smart_basket_report(user_items, selected_stores):
     for idx, row in enumerate(valid_items):
         item_name = row[0]
         
-        # Bulletproof check: Try to turn quantity into a number, default to 1 if it fails
         try:
             qty = int(row[1])
         except ValueError:
@@ -98,14 +90,29 @@ def generate_smart_basket_report(user_items, selected_stores):
         best_price = float('inf')
         cheapest_store = None
         
-        # Check every selected store for this item
+        # --- FIGMA RULE: SMART STORE ROUTING ---
+        item_lower = item_name.lower()
+        stores_to_search = selected_stores.copy()
+        
+        if "woolworths" in item_lower and "Woolworths" in selected_stores:
+            stores_to_search = ["Woolworths"]
+        elif "coles" in item_lower and "Coles" in selected_stores:
+            stores_to_search = ["Coles"]
+        elif "aldi" in item_lower and "Aldi" in selected_stores:
+            stores_to_search = ["Aldi"]
+        elif "iga" in item_lower and "IGA" in selected_stores:
+            stores_to_search = ["IGA"]
+        
         for store in selected_stores:
-            unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+            if store in stores_to_search:
+                unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+            else:
+                unit_price = 99.99 # Penalty to prevent missing items from artificially lowering a store's total
+                
             total_price = unit_price * qty
-            
             store_totals[store] += total_price
             
-            if total_price < best_price:
+            if store in stores_to_search and total_price < best_price:
                 best_price = total_price
                 cheapest_store = store
                 
@@ -119,19 +126,16 @@ def generate_smart_basket_report(user_items, selected_stores):
             "total_price": f"${best_price:.2f}"
         })
         
-        # Update progress
         progress_bar.progress((idx + 1) / total_items)
-        time.sleep(1) # Polite delay
+        time.sleep(1) 
         
     status_text.empty()
     progress_bar.empty()
 
-    # Sort stores to find the best single-store trip
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
 
-    # Format the ranking output
     store_rankings = []
     for rank, (store, cost) in enumerate(ranked_stores, 1):
         diff = cost - best_single_store_cost
@@ -196,12 +200,10 @@ except Exception:
 
 if current_items:
     for idx, row in enumerate(current_items):
-        # Only display valid rows so blank spaces don't show up on the UI
         if len(row) >= 3 and row[0].strip():
             st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
         
     if st.button("Compare Prices Across Stores"):
-        # Determine which stores the user selected
         active_stores = []
         if sel_woolies: active_stores.append("Woolworths")
         if sel_coles: active_stores.append("Coles")
