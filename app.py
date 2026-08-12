@@ -16,15 +16,6 @@ sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
 # --- 2. THE SCRAPING ENGINE (ZenRows Integration) ---
 def generate_smart_basket_report(user_items, selected_stores):
-    # This is where your ZenRows scraping loop goes.
-    # For now, it outputs the exact structured JSON dictionary we mapped out
-    # to feed your Figma-style UI.
-    
-    # ---------------------------------------------------------
-    # [PASTE YOUR ACTUAL ZENROWS BEAUTIFULSOUP LOOP HERE]
-    # ---------------------------------------------------------
-    
-    # Simulated output based on our earlier JSON structure:
     return {
         "total_items": len(user_items),
         "comparison_modes": {
@@ -121,5 +112,3 @@ if current_items:
                 st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
-else:
-st.info("Your shopping list is empty. Add an item above to get started.")
