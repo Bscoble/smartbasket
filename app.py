@@ -75,11 +75,22 @@ def generate_smart_basket_report(user_items, selected_stores):
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    total_items = len(user_items)
+    # Filter out empty rows before counting total items
+    valid_items = [row for row in user_items if len(row) >= 3 and row[0].strip()]
+    total_items = len(valid_items)
     
-    for idx, row in enumerate(user_items):
+    if total_items == 0:
+        return None
+    
+    for idx, row in enumerate(valid_items):
         item_name = row[0]
-        qty = int(row[1])
+        
+        # Bulletproof check: Try to turn quantity into a number, default to 1 if it fails
+        try:
+            qty = int(row[1])
+        except ValueError:
+            qty = 1
+            
         unit = row[2]
         
         status_text.text(f"Scraping prices for: {item_name}...")
@@ -185,7 +196,9 @@ except Exception:
 
 if current_items:
     for idx, row in enumerate(current_items):
-        st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
+        # Only display valid rows so blank spaces don't show up on the UI
+        if len(row) >= 3 and row[0].strip():
+            st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
         
     if st.button("Compare Prices Across Stores"):
         # Determine which stores the user selected
@@ -201,27 +214,30 @@ if current_items:
             with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
                 report = generate_smart_basket_report(current_items, active_stores)
                 
-            st.success("Live comparison complete!")
-            st.divider()
-            
-            # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
-            st.subheader("🏆 Best Single Store")
-            best_store = report["comparison_modes"]["single_store_best"]
-            st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
-            
-            st.subheader("✂️ Split-Store Optimal")
-            split_store = report["comparison_modes"]["split_store_optimal"]
-            st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
-            st.caption(split_store["description"])
-            
-            st.divider()
-            st.subheader("📊 Full Store Rankings")
-            for store in report["store_rankings"]:
-                st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
-            
-            st.divider()
-            st.subheader("🛒 Optimal Split-Shop Breakdown")
-            for item in report["item_breakdown"]:
-                st.write(f"• **{item['item_name']}** ({item['quantity']}): Buy at **{item['cheapest_store']}** for {item['total_price']}")
+            if report:
+                st.success("Live comparison complete!")
+                st.divider()
+                
+                # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
+                st.subheader("🏆 Best Single Store")
+                best_store = report["comparison_modes"]["single_store_best"]
+                st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
+                
+                st.subheader("✂️ Split-Store Optimal")
+                split_store = report["comparison_modes"]["split_store_optimal"]
+                st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
+                st.caption(split_store["description"])
+                
+                st.divider()
+                st.subheader("📊 Full Store Rankings")
+                for store in report["store_rankings"]:
+                    st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
+                
+                st.divider()
+                st.subheader("🛒 Optimal Split-Shop Breakdown")
+                for item in report["item_breakdown"]:
+                    st.write(f"• **{item['item_name']}** ({item['quantity']}): Buy at **{item['cheapest_store']}** for {item['total_price']}")
+            else:
+                st.error("No valid items found to compare. Please check your list.")
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
