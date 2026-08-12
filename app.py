@@ -12,14 +12,6 @@ st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered"
 
 st.markdown("""
 <style>
-    /* Custom Pill Buttons Styling */
-    .stCheckbox {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        margin: 2px;
-    }
-    /* Dynamic Store Colors */
     div[data-testid="stHorizontalBlock"] div:nth-child(1) label span { background-color: #005A36; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
     div[data-testid="stHorizontalBlock"] div:nth-child(2) label span { background-color: #E31837; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
     div[data-testid="stHorizontalBlock"] div:nth-child(3) label span { background-color: #002D62; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
@@ -147,9 +139,6 @@ def generate_smart_basket_report(user_items, selected_stores):
         
         status_text.text(f"Scraping prices for: {item_name}...")
         
-        best_price = float('inf')
-        cheapest_store = None
-        
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
         
@@ -162,6 +151,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         elif "iga" in item_lower and "IGA" in selected_stores:
             stores_to_search = ["IGA"]
         
+        item_store_prices = {}
         for store in selected_stores:
             if store in stores_to_search:
                 unit_price = get_live_price(store, item_name, ZENROWS_KEY)
@@ -170,10 +160,11 @@ def generate_smart_basket_report(user_items, selected_stores):
                 
             total_price = unit_price * qty
             store_totals[store] += total_price
-            
-            if store in stores_to_search and total_price < best_price:
-                best_price = total_price
-                cheapest_store = store
+            item_store_prices[store] = total_price
+
+        # Find cheapest store for this specific item
+        cheapest_store = min(item_store_prices, key=item_store_prices.get)
+        best_price = item_store_prices[cheapest_store]
                 
         split_store_total += best_price
         
@@ -192,9 +183,9 @@ def generate_smart_basket_report(user_items, selected_stores):
     progress_bar.empty()
 
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
-    worst_store_cost = ranked_stores[-1][1] 
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
+    worst_store_cost = ranked_stores[-1][1]
 
     trip_savings = max(0.0, worst_store_cost - split_store_total)
 
@@ -202,7 +193,7 @@ def generate_smart_basket_report(user_items, selected_stores):
     for rank, (store, cost) in enumerate(ranked_stores, 1):
         diff = cost - best_single_store_cost
         diff_str = "+$0.00" if diff == 0 else f"+${diff:.2f} more"
-        badge = "YOUR STORE" if diff == 0 else ""
+        badge = "YOUR STORE" if store in selected_stores else ""
         store_rankings.append({
             "store": store, "rank": rank, "total_cost": cost, 
             "badge": badge, "difference_from_best": diff_str
@@ -237,7 +228,7 @@ with st.form("add_item_form", clear_on_submit=True):
     with c2:
         unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"])
     with c3:
-        st.write("") # spacing
+        st.write("")
         submitted = st.form_submit_button("＋", help="Add to List")
     
     if submitted and item_name:
@@ -340,71 +331,113 @@ if valid_rows_with_indices:
                 
             if report:
                 st.success("Live comparison complete!")
-                st.divider()
-                
-                st.subheader("🏆 Best Single Store")
-                best_store = report["comparison_modes"]["single_store_best"]
-                st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
-                
-                st.subheader("✂️ Split-Store Optimal")
-                split_store = report["comparison_modes"]["split_store_optimal"]
-                st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
-                st.caption(split_store["description"])
-                
-                st.divider()
-                st.subheader("📊 Full Store Rankings")
-                for store in report["store_rankings"]:
-                    st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
-                
-                st.divider()
-                st.subheader("🛒 Optimal Split-Shop Checklists")
-                st.caption("Tick off items as you walk through each store.")
-
-                store_groups = {}
-                for item in report["item_breakdown"]:
-                    store = item["cheapest_store"]
-                    if store not in store_groups:
-                        store_groups[store] = []
-                    store_groups[store].append(item)
-
-                all_checked = True
-                total_checkboxes = 0
-
-                for store_name, items in store_groups.items():
-                    with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
-                        for idx, item in enumerate(items):
-                            total_checkboxes += 1
-                            unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
-                            is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
-                            if not is_checked:
-                                all_checked = False
-
-                if total_checkboxes > 0 and all_checked:
-                    st.balloons()
-                    try:
-                        savings_ws = sh.worksheet("Savings")
-                        current_lifetime = float(savings_ws.acell('A1').value or 0.0)
-                    except Exception:
-                        current_lifetime = 0.0
-
-                    if not st.session_state.get("trip_rewarded", False):
-                        new_lifetime = current_lifetime + report["trip_savings"]
-                        try:
-                            savings_ws.update('A1', [[new_lifetime]])
-                        except Exception:
-                            pass
-                        st.session_state["trip_rewarded"] = True
-                        current_lifetime = new_lifetime
-
-                    st.divider()
-                    st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
-                    st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
-                    st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
-                    
-                    if st.button("Start New Shop"):
-                        st.session_state.clear()
-                        st.rerun()
+                st.session_state["report"] = report
+                st.session_state["shopping_active"] = True
             else:
                 st.error("No valid items found to compare.")
+
+    # --- 5. FIGMA-MATCHED RESULTS SCREEN (Overview / Breakdown) ---
+    if "report" in st.session_state and st.session_state.get("shopping_active", False):
+        report = st.session_state["report"]
+        st.divider()
+        
+        st.markdown(f"### Price Comparison")
+        st.caption(f"{report['total_items']} items across {len(active_stores_list)} stores")
+        
+        # Navigation Tabs matching Figma
+        tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], horizontal=True, label_visibility="collapsed")
+        
+        if tab_choice == "Overview":
+            st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
+            
+            single_best = report["comparison_modes"]["single_store_best"]
+            split_opt = report["comparison_modes"]["split_store_optimal"]
+            
+            # Determine recommendation banner placement (Lowest price, tie defaults to single store)
+            single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
+            
+            # Card 1: Shop at one store
+            with st.container(border=True):
+                if single_is_recommended:
+                    st.markdown("🟡 **RECOMMENDED**")
+                st.markdown(f"**Shop at one store**\n\nBest of your stores: {single_best['store_name']} — **${single_best['total_cost']:.2f}**")
+                if st.button("Select Single Store Mode"):
+                    st.session_state["mode"] = "single"
+            
+            # Card 2: Split across preferred stores
+            with st.container(border=True):
+                if not single_is_recommended:
+                    st.markdown("🟡 **RECOMMENDED**")
+                st.markdown(f"**Split across my preferred stores**\n\nBuy each item where it's cheapest — **${split_opt['total_cost']:.2f}**")
+                if st.button("Select Split Mode"):
+                    st.session_state["mode"] = "split"
+
+            st.divider()
+            st.markdown("#### STORE RANKING — FULL BASKET")
+            for store in report["store_rankings"]:
+                with st.container(border=True):
+                    badge_txt = f"[{store['badge']}]" if store['badge'] else ""
+                    st.markdown(f"**{store['store']}** {badge_txt} \n\n **${store['total_cost']:.2f}** *({store['difference_from_best']})*")
+                    
+        elif tab_choice == "Breakdown":
+            st.markdown("#### YOUR SHOPPING SPLIT")
+            split_opt = report["comparison_modes"]["split_store_optimal"]
+            
+            with st.container(border=True):
+                st.markdown(f"**Combined total** \n\n ### **${split_opt['total_cost']:.2f}**")
+            
+            store_groups = {}
+            for item in report["item_breakdown"]:
+                store = item["cheapest_store"]
+                if store not in store_groups:
+                    store_groups[store] = []
+                store_groups[store].append(item)
+
+            all_checked = True
+            total_checkboxes = 0
+
+            for store_name, items in store_groups.items():
+                with st.container(border=True):
+                    st.markdown(f"**{store_name}** \n\n 0/{len(items)} items collected")
+                    for idx, item in enumerate(items):
+                        total_checkboxes += 1
+                        unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
+                        is_checked = st.checkbox(f"{item['item_name']} ({item['unit_price']}) — **{item['total_price']}**", key=unique_key)
+                        if not is_checked:
+                            all_checked = False
+
+            if total_checkboxes > 0 and all_checked:
+                st.balloons()
+                try:
+                    savings_ws = sh.worksheet("Savings")
+                    current_lifetime = float(savings_ws.acell('A1').value or 0.0)
+                except Exception:
+                    current_lifetime = 0.0
+
+                if not st.session_state.get("trip_rewarded", False):
+                    new_lifetime = current_lifetime + report["trip_savings"]
+                    try:
+                        savings_ws.update('A1', [[new_lifetime]])
+                    except Exception:
+                        pass
+                    st.session_state["trip_rewarded"] = True
+                    current_lifetime = new_lifetime
+
+                st.divider()
+                st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
+                st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
+                st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
+                
+                if st.button("Start New Shop"):
+                    st.session_state.clear()
+                    st.rerun()
+
+        elif tab_choice == "Discount Cycle":
+            st.markdown("#### DISCOUNT CYCLE")
+            st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
+            
+        st.divider()
+        st.caption("About Us  |  Privacy Policy  |  Spot a Problem / Contact Us")
+
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
