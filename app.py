@@ -7,6 +7,26 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 
+# --- PAGE CONFIG & CUSTOM FIGMA CSS ---
+st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered")
+
+st.markdown("""
+<style>
+    /* Custom Pill Buttons Styling */
+    .stCheckbox {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        margin: 2px;
+    }
+    /* Dynamic Store Colors */
+    div[data-testid="stHorizontalBlock"] div:nth-child(1) label span { background-color: #005A36; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
+    div[data-testid="stHorizontalBlock"] div:nth-child(2) label span { background-color: #E31837; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
+    div[data-testid="stHorizontalBlock"] div:nth-child(3) label span { background-color: #002D62; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
+    div[data-testid="stHorizontalBlock"] div:nth-child(4) label span { background-color: #E31837; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
+
 # --- 1. CONFIGURATION & SECURE AUTH ---
 ZENROWS_KEY = st.secrets["ZENROWS_KEY"]
 creds_dict = dict(st.secrets["gcp_service_account"])
@@ -16,7 +36,6 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
-# Helper: Load or initialize store preferences from Google Sheets
 def load_store_preferences():
     default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True, "IGA": True}
     try:
@@ -30,7 +49,6 @@ def load_store_preferences():
                 "IGA": data[1][3] == "True"
             }
     except Exception:
-        # Create tab if it doesn't exist
         try:
             pref_ws = sh.add_worksheet(title="Preferences", rows=2, cols=4)
             pref_ws.append_row(["Woolworths", "Coles", "Aldi", "IGA"])
@@ -64,17 +82,12 @@ def get_live_price(store, item_name, api_key):
 
     api_url = "https://api.zenrows.com/v1/"
     params = {
-        "apikey": api_key,
-        "url": target_url,
-        "js_render": "true",      
-        "antibot": "true",        
-        "premium_proxy": "true"   
+        "apikey": api_key, "url": target_url, "js_render": "true", "antibot": "true", "premium_proxy": "true"
     }
 
     try:
         response = requests.get(api_url, params=params, timeout=45)
         soup = BeautifulSoup(response.text, 'html.parser')
-
         price = 0.00
         price_element = None
         
@@ -126,12 +139,10 @@ def generate_smart_basket_report(user_items, selected_stores):
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
-        
         try:
             qty = int(row[1])
         except ValueError:
             qty = 1
-            
         unit = row[2]
         
         status_text.text(f"Scraping prices for: {item_name}...")
@@ -216,27 +227,27 @@ def generate_smart_basket_report(user_items, selected_stores):
     }
 
 # --- 3. STREAMLIT UI LAYOUT ---
-st.title("🛒 SmartBasket")
-st.write("Shop smarter. Save every week.")
+st.subheader("ADD ITEM")
 
-# Load persisted preferences from Google Sheet
-saved_prefs = load_store_preferences()
-
-# --- REORDERED: ADD ITEM FIRST ---
-st.subheader("Add Item")
 with st.form("add_item_form", clear_on_submit=True):
     item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L")
-    qty = st.number_input("Quantity", min_value=1, value=1)
-    unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"])
-    submitted = st.form_submit_button("Add to List")
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c1:
+        qty = st.number_input("Qty", min_value=1, value=1)
+    with c2:
+        unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"])
+    with c3:
+        st.write("") # spacing
+        submitted = st.form_submit_button("＋", help="Add to List")
     
     if submitted and item_name:
         list_ws = sh.worksheet("Shopping List")
         list_ws.append_row([item_name, qty, unit])
-        st.success(f"Added {qty} {unit} of {item_name} to your list!")
+        st.success(f"Added {qty} {unit} of {item_name}!")
 
-# --- REORDERED: PREFERRED STORES SECOND ---
-st.subheader("Preferred Stores")
+st.subheader("PREFERRED STORES")
+saved_prefs = load_store_preferences()
+
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     sel_woolies = st.checkbox("Woolworths", value=saved_prefs["Woolworths"])
@@ -247,116 +258,153 @@ with col3:
 with col4:
     sel_iga = st.checkbox("IGA", value=saved_prefs["IGA"])
 
-# Save updated store states back to Google Sheets automatically if changed
 current_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
 if current_prefs != saved_prefs:
     save_store_preferences(current_prefs)
 
-# --- 4. DISPLAY CURRENT LIST & DELETE FUNCTIONALITY ---
-st.subheader("My List")
+# --- 4. DISPLAY CURRENT LIST & QUANTITY STEPPERS ---
 try:
     list_ws = sh.worksheet("Shopping List")
     current_items = list_ws.get_all_values()
 except Exception:
     current_items = []
 
+valid_rows_with_indices = []
 if current_items:
-    valid_rows_with_indices = []
     for sheet_idx, row in enumerate(current_items, start=1):
         if len(row) >= 3 and row[0].strip():
             valid_rows_with_indices.append((sheet_idx, row))
 
-    if valid_rows_with_indices:
-        for sheet_idx, row in valid_rows_with_indices:
-            col_item, col_del = st.columns([4, 1])
-            with col_item:
-                st.write(f"• **{row[0]}** ({row[1]} {row[2]})")
-            with col_del:
-                if st.button("🗑️", key=f"del_{sheet_idx}"):
-                    list_ws.delete_rows(sheet_idx)
-                    st.success(f"Removed {row[0]}")
+item_count = len(valid_rows_with_indices)
+
+c_head1, c_head2 = st.columns([3, 1])
+with c_head1:
+    st.subheader(f"MY LIST ({item_count} ITEMS)")
+with c_head2:
+    if item_count > 0 and st.button("Clear all"):
+        list_ws.clear()
+        list_ws.append_row(["Item", "Qty", "Unit"])
+        st.rerun()
+
+if valid_rows_with_indices:
+    for sheet_idx, row in valid_rows_with_indices:
+        i_name = row[0]
+        try:
+            i_qty = int(row[1])
+        except ValueError:
+            i_qty = 1
+        i_unit = row[2]
+
+        cols = st.columns([0.5, 2.5, 1, 0.5, 0.5])
+        with cols[0]:
+            st.markdown("🛒")
+        with cols[1]:
+            st.markdown(f"**{i_name}**<br><span style='color:gray; font-size:0.85em;'>{i_qty} {i_unit}</span>", unsafe_allow_html=True)
+        with cols[2]:
+            sub_c1, sub_c2, sub_c3 = st.columns(3)
+            with sub_c1:
+                if st.button("➖", key=f"sub_{sheet_idx}"):
+                    if i_qty > 1:
+                        list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
+                        st.rerun()
+            with sub_c2:
+                st.markdown(f"<div style='text-align:center; padding-top:4px;'><b>{i_qty}</b></div>", unsafe_allow_html=True)
+            with sub_c3:
+                if st.button("➕", key=f"add_{sheet_idx}"):
+                    list_ws.update(f'B{sheet_idx}', [[i_qty + 1]])
                     st.rerun()
+        with cols[3]:
+            st.write(i_unit)
+        with cols[4]:
+            if st.button("❌", key=f"del_{sheet_idx}"):
+                list_ws.delete_rows(sheet_idx)
+                st.rerun()
 
-        st.divider()
-        
-        # Calculate active store count for dynamic button naming
-        active_stores_list = []
-        if sel_woolies: active_stores_list.append("Woolworths")
-        if sel_coles: active_stores_list.append("Coles")
-        if sel_aldi: active_stores_list.append("Aldi")
-        if sel_iga: active_stores_list.append("IGA")
-        
-        store_count_label = len(active_stores_list)
-        
-        if st.button(f"Compare Prices Across {store_count_label} Stores"):
-            if not active_stores_list:
-                st.error("Please select at least one store to compare.")
-            else:
-                with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
-                    fresh_items = list_ws.get_all_values()
-                    report = generate_smart_basket_report(fresh_items, active_stores_list)
-                    
-                if report:
-                    st.success("Live comparison complete!")
-                    st.session_state["report"] = report
-                    st.session_state["shopping_active"] = True
-                else:
-                    st.error("No valid items found to compare.")
-
-        # --- 5. INTERACTIVE STORE CHECKLISTS & CELEBRATION SCREEN ---
-        if "report" in st.session_state and st.session_state.get("shopping_active", False):
-            report = st.session_state["report"]
-            st.divider()
-            st.subheader("🛒 Optimal Split-Shop Checklists")
-            st.caption("Tick off items as you walk through each store.")
-
-            store_groups = {}
-            for item in report["item_breakdown"]:
-                store = item["cheapest_store"]
-                if store not in store_groups:
-                    store_groups[store] = []
-                store_groups[store].append(item)
-
-            all_checked = True
-            total_checkboxes = 0
-
-            for store_name, items in store_groups.items():
-                with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
-                    for idx, item in enumerate(items):
-                        total_checkboxes += 1
-                        unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
-                        is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
-                        if not is_checked:
-                            all_checked = False
-
-            if total_checkboxes > 0 and all_checked:
-                st.balloons()
+    st.divider()
+    
+    active_stores_list = []
+    if sel_woolies: active_stores_list.append("Woolworths")
+    if sel_coles: active_stores_list.append("Coles")
+    if sel_aldi: active_stores_list.append("Aldi")
+    if sel_iga: active_stores_list.append("IGA")
+    
+    store_count_label = len(active_stores_list)
+    
+    if st.button(f"🔍 Compare Prices at {store_count_label} Stores"):
+        if not active_stores_list:
+            st.error("Please select at least one store to compare.")
+        else:
+            with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
+                fresh_items = list_ws.get_all_values()
+                report = generate_smart_basket_report(fresh_items, active_stores_list)
                 
-                try:
-                    savings_ws = sh.worksheet("Savings")
-                    current_lifetime = float(savings_ws.acell('A1').value or 0.0)
-                except Exception:
-                    current_lifetime = 0.0
-
-                if not st.session_state.get("trip_rewarded", False):
-                    new_lifetime = current_lifetime + report["trip_savings"]
-                    try:
-                        savings_ws.update('A1', [[new_lifetime]])
-                    except Exception:
-                        pass
-                    st.session_state["trip_rewarded"] = True
-                    current_lifetime = new_lifetime
-
+            if report:
+                st.success("Live comparison complete!")
                 st.divider()
-                st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
-                st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
-                st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
                 
-                if st.button("Start New Shop"):
-                    st.session_state.clear()
-                    st.rerun()
+                st.subheader("🏆 Best Single Store")
+                best_store = report["comparison_modes"]["single_store_best"]
+                st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
+                
+                st.subheader("✂️ Split-Store Optimal")
+                split_store = report["comparison_modes"]["split_store_optimal"]
+                st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
+                st.caption(split_store["description"])
+                
+                st.divider()
+                st.subheader("📊 Full Store Rankings")
+                for store in report["store_rankings"]:
+                    st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
+                
+                st.divider()
+                st.subheader("🛒 Optimal Split-Shop Checklists")
+                st.caption("Tick off items as you walk through each store.")
 
-    else:
-        st.info("Your shopping list is empty. Add an item above to get started.")
+                store_groups = {}
+                for item in report["item_breakdown"]:
+                    store = item["cheapest_store"]
+                    if store not in store_groups:
+                        store_groups[store] = []
+                    store_groups[store].append(item)
+
+                all_checked = True
+                total_checkboxes = 0
+
+                for store_name, items in store_groups.items():
+                    with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
+                        for idx, item in enumerate(items):
+                            total_checkboxes += 1
+                            unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
+                            is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
+                            if not is_checked:
+                                all_checked = False
+
+                if total_checkboxes > 0 and all_checked:
+                    st.balloons()
+                    try:
+                        savings_ws = sh.worksheet("Savings")
+                        current_lifetime = float(savings_ws.acell('A1').value or 0.0)
+                    except Exception:
+                        current_lifetime = 0.0
+
+                    if not st.session_state.get("trip_rewarded", False):
+                        new_lifetime = current_lifetime + report["trip_savings"]
+                        try:
+                            savings_ws.update('A1', [[new_lifetime]])
+                        except Exception:
+                            pass
+                        st.session_state["trip_rewarded"] = True
+                        current_lifetime = new_lifetime
+
+                    st.divider()
+                    st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
+                    st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
+                    st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
+                    
+                    if st.button("Start New Shop"):
+                        st.session_state.clear()
+                        st.rerun()
+            else:
+                st.error("No valid items found to compare.")
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
