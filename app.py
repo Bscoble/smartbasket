@@ -12,10 +12,30 @@ st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered"
 
 st.markdown("""
 <style>
+    /* Store Pill Colors */
     div[data-testid="stHorizontalBlock"] div:nth-child(1) label span { background-color: #005A36; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
     div[data-testid="stHorizontalBlock"] div:nth-child(2) label span { background-color: #E31837; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
     div[data-testid="stHorizontalBlock"] div:nth-child(3) label span { background-color: #002D62; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
     div[data-testid="stHorizontalBlock"] div:nth-child(4) label span { background-color: #E31837; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 600; }
+
+    /* Invisible Overlay Buttons Trick */
+    div[data-testid="element-container"]:has(#single-card-anchor),
+    div[data-testid="element-container"]:has(#split-card-anchor) {
+        display: none;
+    }
+    div[data-testid="element-container"]:has(#single-card-anchor) + div[data-testid="element-container"],
+    div[data-testid="element-container"]:has(#split-card-anchor) + div[data-testid="element-container"] {
+        margin-top: -95px !important;
+        margin-bottom: 15px !important;
+    }
+    div[data-testid="element-container"]:has(#single-card-anchor) + div[data-testid="element-container"] button,
+    div[data-testid="element-container"]:has(#split-card-anchor) + div[data-testid="element-container"] button {
+        opacity: 0 !important;
+        height: 95px !important;
+        width: 100% !important;
+        z-index: 99 !important;
+        cursor: pointer !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -366,21 +386,57 @@ if valid_rows_with_indices:
             
             single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
             
-            with st.container(border=True):
-                if single_is_recommended:
-                    st.markdown("🟡 **RECOMMENDED**")
-                st.markdown(f"**Shop at one store**\n\nBest of your stores: {single_best['store_name']} — **${single_best['total_cost']:.2f}**")
-                if st.button("Select Single Store Mode"):
-                    st.session_state["active_tab"] = "Breakdown"
-                    st.rerun()
+            # --- CARD 1: SINGLE STORE ---
+            c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
+            c1_border_width = "2px" if single_is_recommended else "1px"
+            c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
+
+            html_single = f"""
+            <div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
+                {c1_badge}
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="font-size: 26px;">🏪</div>
+                        <div style="line-height: 1.3;">
+                            <div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>
+                            <div style="font-size: 13px; color: #666;">Best of your stores: {single_best['store_name']}</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best['total_cost']:.2f}</div>
+                </div>
+            </div>
+            """
+            st.markdown(html_single, unsafe_allow_html=True)
+            st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
+            if st.button("Shop Single", key="btn_single", use_container_width=True):
+                st.session_state["active_tab"] = "Breakdown"
+                st.rerun()
             
-            with st.container(border=True):
-                if not single_is_recommended:
-                    st.markdown("🟡 **RECOMMENDED**")
-                st.markdown(f"**Split across my preferred stores**\n\nBuy each item where it's cheapest — **${split_opt['total_cost']:.2f}**")
-                if st.button("Select Split Mode"):
-                    st.session_state["active_tab"] = "Breakdown"
-                    st.rerun()
+            # --- CARD 2: SPLIT STORE ---
+            c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
+            c2_border_width = "2px" if not single_is_recommended else "1px"
+            c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
+
+            html_split = f"""
+            <div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
+                {c2_badge}
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="font-size: 26px;">🛍️</div>
+                        <div style="line-height: 1.3;">
+                            <div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>
+                            <div style="font-size: 13px; color: #666;">Buy each item where it's cheapest</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt['total_cost']:.2f}</div>
+                </div>
+            </div>
+            """
+            st.markdown(html_split, unsafe_allow_html=True)
+            st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
+            if st.button("Shop Split", key="btn_split", use_container_width=True):
+                st.session_state["active_tab"] = "Breakdown"
+                st.rerun()
 
             st.divider()
             st.markdown("#### STORE RANKING — FULL BASKET")
