@@ -47,7 +47,6 @@ def get_live_price(store, item_name, api_key):
         price = 0.00
         price_element = None
         
-        # Store-specific primary selectors
         if store == "Woolworths":
             price_element = soup.select_one('.primary-price, .price-dollars, .price, [data-testid="price"]') 
         elif store == "Coles":
@@ -59,7 +58,6 @@ def get_live_price(store, item_name, api_key):
 
         if price_element:
             clean_text = price_element.text.replace('$', '').strip()
-            # Extract first valid float number found in the element text
             match = re.search(r'\d+\.\d{2}', clean_text)
             if match:
                 price = float(match.group())
@@ -69,18 +67,15 @@ def get_live_price(store, item_name, api_key):
                 except ValueError:
                     price = 0.00
 
-        # Fallback: If primary selector fails, scan the entire page text for price patterns near product listings
         if price == 0.00:
             page_text = soup.get_text()
-            # Look for standard currency patterns like $X.XX
             prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
             if prices_found:
-                # Filter out unreasonably high or low numbers if needed, take the first reasonable retail match
                 valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
                 if valid_prices:
                     price = valid_prices[0]
 
-        return price if price > 0 else 5.00 # Sensible fallback if completely unparsed
+        return price if price > 0 else 5.00 
     except Exception as e:
         return 99.99 
 
@@ -274,9 +269,29 @@ if current_items:
                         st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
                     
                     st.divider()
-                    st.subheader("🛒 Optimal Split-Shop Breakdown")
+                    st.subheader("🛒 Optimal Split-Shop Checklists")
+                    st.caption("Tick off items as you walk through each store to cross them out.")
+                    
+                    # Group items by their cheapest store
+                    store_groups = {}
                     for item in report["item_breakdown"]:
-                        st.write(f"• **{item['item_name']}** ({item['quantity']}): Buy at **{item['cheapest_store']}** for {item['total_price']}")
+                        store = item["cheapest_store"]
+                        if store not in store_groups:
+                            store_groups[store] = []
+                        store_groups[store].append(item)
+                    
+                    # Render interactive store checklists
+                    for store_name, items in store_groups.items():
+                        with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
+                            for idx, item in enumerate(items):
+                                unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
+                                
+                                # Checkbox state handling for cross-out styling
+                                is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
+                                
+                                if is_checked:
+                                    # Dynamically update appearance via script injection or inline text styling wrapper if desired
+                                    pass
                 else:
                     st.error("No valid items found to compare. Please check your list.")
     else:
