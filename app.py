@@ -59,7 +59,7 @@ def save_store_preferences(prefs):
     except Exception:
         pass
 
-# --- 2. ADVANCED LIVE SCRAPING ENGINE (ZenRows API + Smart Regex) ---
+# --- 2. ADVANCED LIVE SCRAPING ENGINE ---
 def get_live_price(store, item_name, api_key):
     if store == "Woolworths":
         target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
@@ -151,7 +151,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         elif "iga" in item_lower and "IGA" in selected_stores:
             stores_to_search = ["IGA"]
         
-        item_store_prices = {}
+        item_store_data = {}
         for store in selected_stores:
             if store in stores_to_search:
                 unit_price = get_live_price(store, item_name, ZENROWS_KEY)
@@ -160,10 +160,15 @@ def generate_smart_basket_report(user_items, selected_stores):
                 
             total_price = unit_price * qty
             store_totals[store] += total_price
-            item_store_prices[store] = total_price
+            item_store_data[store] = {
+                "unit_price": f"${unit_price:.2f}/{unit}",
+                "total_price": total_price
+            }
 
-        cheapest_store = min(item_store_prices, key=item_store_prices.get)
-        best_price = item_store_prices[cheapest_store]
+        # Sort store prices for this item to find the best match for the breakdown view
+        sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]['total_price'])
+        cheapest_store = sorted_item_stores[0][0]
+        best_price = sorted_item_stores[0][1]['total_price']
                 
         split_store_total += best_price
         
@@ -172,7 +177,8 @@ def generate_smart_basket_report(user_items, selected_stores):
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
             "unit_price": f"${(best_price/qty):.2f}/{unit}",
-            "total_price": f"${best_price:.2f}"
+            "total_price": f"${best_price:.2f}",
+            "all_stores": sorted_item_stores
         })
         
         progress_bar.progress((idx + 1) / total_items)
@@ -385,76 +391,28 @@ if valid_rows_with_indices:
                     st.markdown(f"**{store['store']}** {badge_txt} \n\n **${store['total_cost']:.2f}** *({store['difference_from_best']})*")
                     
         elif tab_choice == "Breakdown":
-            st.markdown("#### YOUR SHOPPING SPLIT")
-            split_opt = report["comparison_modes"]["split_store_optimal"]
+            st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
             
-            with st.container(border=True):
-                st.markdown(f"**Combined total** \n\n ### **${split_opt['total_cost']:.2f}**")
-            
-            store_groups = {}
             for item in report["item_breakdown"]:
-                store = item["cheapest_store"]
-                if store not in store_groups:
-                    store_groups[store] = []
-                store_groups[store].append(item)
-
-            all_checked = True
-            total_checkboxes = 0
-
-            for store_name, items in store_groups.items():
-                store_subtotal = sum(float(i['total_price'].replace('$', '')) for i in items)
-                
                 with st.container(border=True):
-                    st.markdown(f"""
-                    <div style="background-color: #002D62; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                        <b>{store_name[0].upper()} &nbsp; {store_name}</b><br>
-                        <span style="font-size: 0.85em; opacity: 0.8;">0/{len(items)} items collected</span>
-                        <span style="float: right; font-size: 1.1em; font-weight: bold;">${store_subtotal:.2f}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    for idx, item in enumerate(items):
-                        total_checkboxes += 1
-                        unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
+                    st.markdown(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.85em;'>× {item['quantity']}</span>", unsafe_allow_html=True)
+                    
+                    for store_idx, (store_name, store_data) in enumerate(item["all_stores"]):
+                        store_initial = store_name[0].upper()
+                        is_best = (store_idx == 0) # First item in sorted list is cheapest
                         
-                        # Clean HTML rendering for checkboxes to strip out raw code tags
-                        is_checked = st.checkbox(f"_hidden_{unique_key}", value=False, key=unique_key, label_visibility="collapsed")
+                        best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
                         
                         st.markdown(f"""
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
-                            <div><b>{item['item_name']}</b> <span style='color:gray; font-size:0.9em;'>({item['unit_price']})</span></div>
-                            <div><b>{item['total_price']}</b></div>
+                            <div><b>{store_initial}</b> &nbsp; {store_name}</div>
+                            <div>
+                                <span style="color: gray; font-size: 0.85em;">{store_data['unit_price']}</span> &nbsp;&nbsp; 
+                                <b>${store_data['total_price']:.2f}</b>
+                                {best_badge}
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
-                        
-                        if not is_checked:
-                            all_checked = False
-
-            if total_checkboxes > 0 and all_checked:
-                st.balloons()
-                try:
-                    savings_ws = sh.worksheet("Savings")
-                    current_lifetime = float(savings_ws.acell('A1').value or 0.0)
-                except Exception:
-                    current_lifetime = 0.0
-
-                if not st.session_state.get("trip_rewarded", False):
-                    new_lifetime = current_lifetime + report["trip_savings"]
-                    try:
-                        savings_ws.update('A1', [[new_lifetime]])
-                    except Exception:
-                        pass
-                    st.session_state["trip_rewarded"] = True
-                    current_lifetime = new_lifetime
-
-                st.divider()
-                st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
-                st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
-                st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
-                
-                if st.button("Start New Shop"):
-                    st.session_state.clear()
-                    st.rerun()
 
         elif tab_choice == "Discount Cycle":
             st.markdown("#### DISCOUNT CYCLE")
