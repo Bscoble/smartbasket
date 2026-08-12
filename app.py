@@ -121,6 +121,5 @@ if current_items:
                 st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
-
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
