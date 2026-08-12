@@ -6,7 +6,6 @@ import streamlit as st
 from google.oauth2.service_account import Credentials
 
 # --- 1. CONFIGURATION & SECURE AUTH ---
-# Keys are now securely hidden in Streamlit Cloud Secrets
 ZENROWS_KEY = st.secrets["ZENROWS_KEY"]
 creds_dict = dict(st.secrets["gcp_service_account"])
 
@@ -15,7 +14,43 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
-# --- 2. STREAMLIT UI LAYOUT ---
+# --- 2. THE SCRAPING ENGINE (ZenRows Integration) ---
+def generate_smart_basket_report(user_items, selected_stores):
+    # This is where your ZenRows scraping loop goes.
+    # For now, it outputs the exact structured JSON dictionary we mapped out
+    # to feed your Figma-style UI.
+    
+    # ---------------------------------------------------------
+    # [PASTE YOUR ACTUAL ZENROWS BEAUTIFULSOUP LOOP HERE]
+    # ---------------------------------------------------------
+    
+    # Simulated output based on our earlier JSON structure:
+    return {
+        "total_items": len(user_items),
+        "comparison_modes": {
+            "single_store_best": {
+                "store_name": "Aldi",
+                "total_cost": 29.61,
+                "is_recommended": True
+            },
+            "split_store_optimal": {
+                "total_cost": 25.10,
+                "description": "Buy each item where it's cheapest across your stores"
+            }
+        },
+        "store_rankings": [
+            {"store": "Aldi", "rank": 1, "total_cost": 29.61, "badge": "YOUR STORE", "difference_from_best": "+$0.00"},
+            {"store": "Woolworths", "rank": 2, "total_cost": 32.50, "difference_from_best": "+$2.89 more"},
+            {"store": "Coles", "rank": 3, "total_cost": 34.20, "difference_from_best": "+$4.59 more"},
+            {"store": "IGA", "rank": 4, "total_cost": 35.14, "difference_from_best": "+$5.53 more"}
+        ],
+        "item_breakdown": [
+            {"item_name": "Milk", "quantity": "2 L", "cheapest_store": "Aldi", "unit_price": "$0.97/L", "total_price": "$1.94"},
+            {"item_name": "Bread", "quantity": "1 each", "cheapest_store": "Aldi", "unit_price": "$0.77/each", "total_price": "$0.77"}
+        ]
+    }
+
+# --- 3. STREAMLIT UI LAYOUT ---
 st.title("🛒 SmartBasket")
 st.write("Shop smarter. Save every week.")
 
@@ -42,7 +77,7 @@ with st.form("add_item_form", clear_on_submit=True):
         list_ws.append_row([item_name, qty, unit])
         st.success(f"Added {qty} {unit} of {item_name} to your list!")
 
-# --- 3. DISPLAY CURRENT LIST & COMPARE BUTTON ---
+# --- 4. DISPLAY CURRENT LIST & RUN COMPARISON ---
 st.subheader("My List")
 try:
     list_ws = sh.worksheet("Shopping List")
@@ -56,7 +91,36 @@ if current_items:
         
     if st.button("Compare Prices Across Stores"):
         with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
-            time.sleep(2)
-            st.success("Comparison complete! Results updated.")
+            
+            # Determine which stores the user selected
+            active_stores = []
+            if sel_woolies: active_stores.append("Woolworths")
+            if sel_coles: active_stores.append("Coles")
+            if sel_aldi: active_stores.append("Aldi")
+            if sel_iga: active_stores.append("IGA")
+            
+            # Run the scraping engine
+            report = generate_smart_basket_report(current_items, active_stores)
+            
+            st.success("Comparison complete!")
+            st.divider()
+            
+            # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
+            st.subheader("🏆 Best Single Store")
+            best_store = report["comparison_modes"]["single_store_best"]
+            st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
+            
+            st.subheader("✂️ Split-Store Optimal")
+            split_store = report["comparison_modes"]["split_store_optimal"]
+            st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
+            st.caption(split_store["description"])
+            
+            st.divider()
+            st.subheader("📊 Full Store Rankings")
+            for store in report["store_rankings"]:
+                st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
+else:
+    st.info("Your shopping list is empty. Add an item above to get started.")
+
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
