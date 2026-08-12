@@ -168,7 +168,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         split_store_total += best_price
         
         item_breakdown.append({
-            "item_name": f"{item_name} ({qty} {unit})" if qty > 1 else item_name,
+            "item_name": f"{item_name}" if qty == 1 else f"{item_name}",
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
             "unit_price": f"${(best_price/qty):.2f}/{unit}",
@@ -344,7 +344,6 @@ if valid_rows_with_indices:
         st.markdown(f"### Price Comparison")
         st.caption(f"{report['total_items']} items across {len(active_stores_list)} stores")
         
-        # Track selected tab via session state so buttons can switch it
         if "active_tab" not in st.session_state:
             st.session_state["active_tab"] = "Overview"
 
@@ -352,7 +351,6 @@ if valid_rows_with_indices:
                               index=["Overview", "Breakdown", "Discount Cycle"].index(st.session_state["active_tab"]),
                               horizontal=True, label_visibility="collapsed", key="nav_radio")
         
-        # Keep session state synced with radio button changes
         st.session_state["active_tab"] = tab_choice
         
         if tab_choice == "Overview":
@@ -404,14 +402,12 @@ if valid_rows_with_indices:
             total_checkboxes = 0
 
             for store_name, items in store_groups.items():
-                store_letter = store_name[0].upper()
                 store_subtotal = sum(float(i['total_price'].replace('$', '')) for i in items)
                 
                 with st.container(border=True):
-                    # Styled Header matching your screenshot card
                     st.markdown(f"""
                     <div style="background-color: #002D62; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                        <b>{store_letter} &nbsp; {store_name}</b><br>
+                        <b>{store_name[0].upper()} &nbsp; {store_name}</b><br>
                         <span style="font-size: 0.85em; opacity: 0.8;">0/{len(items)} items collected</span>
                         <span style="float: right; font-size: 1.1em; font-weight: bold;">${store_subtotal:.2f}</span>
                     </div>
