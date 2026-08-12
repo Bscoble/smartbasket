@@ -108,7 +108,6 @@ def generate_smart_basket_report(user_items, selected_stores):
         best_price = float('inf')
         cheapest_store = None
         
-        # --- FIGMA RULE: SMART STORE ROUTING ---
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
         
@@ -151,8 +150,12 @@ def generate_smart_basket_report(user_items, selected_stores):
     progress_bar.empty()
 
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
+    worst_store_cost = ranked_stores[-1][1] # Used to calculate maximum savings vs worst store/single store
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
+
+    # Calculate total money saved on this trip (Difference between worst single store trip and optimal split trip)
+    trip_savings = max(0.0, worst_store_cost - split_store_total)
 
     store_rankings = []
     for rank, (store, cost) in enumerate(ranked_stores, 1):
@@ -166,6 +169,7 @@ def generate_smart_basket_report(user_items, selected_stores):
 
     return {
         "total_items": total_items,
+        "trip_savings": trip_savings,
         "comparison_modes": {
             "single_store_best": {
                 "store_name": best_single_store,
@@ -239,7 +243,7 @@ if current_items:
             active_stores = []
             if sel_woolies: active_stores.append("Woolworths")
             if sel_coles: active_stores.append("Coles")
-            if sel_aldi: active_stores.append("Aldi")
+            if sel_aldi: active_stores.append("aldi")
             if sel_iga: active_stores.append("IGA")
             
             if not active_stores:
@@ -251,49 +255,67 @@ if current_items:
                     
                 if report:
                     st.success("Live comparison complete!")
-                    st.divider()
-                    
-                    # --- 5. RENDER THE FIGMA-STYLE RESULTS ---
-                    st.subheader("🏆 Best Single Store")
-                    best_store = report["comparison_modes"]["single_store_best"]
-                    st.metric(label=best_store["store_name"], value=f"${best_store['total_cost']:.2f}")
-                    
-                    st.subheader("✂️ Split-Store Optimal")
-                    split_store = report["comparison_modes"]["split_store_optimal"]
-                    st.metric(label="Total if you split your shop", value=f"${split_store['total_cost']:.2f}", delta=f"-${best_store['total_cost'] - split_store['total_cost']:.2f} vs Single Store")
-                    st.caption(split_store["description"])
-                    
-                    st.divider()
-                    st.subheader("📊 Full Store Rankings")
-                    for store in report["store_rankings"]:
-                        st.write(f"**#{store['rank']} {store['store']}**: ${store['total_cost']:.2f} *({store['difference_from_best']})*")
-                    
-                    st.divider()
-                    st.subheader("🛒 Optimal Split-Shop Checklists")
-                    st.caption("Tick off items as you walk through each store to cross them out.")
-                    
-                    # Group items by their cheapest store
-                    store_groups = {}
-                    for item in report["item_breakdown"]:
-                        store = item["cheapest_store"]
-                        if store not in store_groups:
-                            store_groups[store] = []
-                        store_groups[store].append(item)
-                    
-                    # Render interactive store checklists
-                    for store_name, items in store_groups.items():
-                        with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
-                            for idx, item in enumerate(items):
-                                unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
-                                
-                                # Checkbox state handling for cross-out styling
-                                is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
-                                
-                                if is_checked:
-                                    # Dynamically update appearance via script injection or inline text styling wrapper if desired
-                                    pass
+                    st.session_state["report"] = report
+                    st.session_state["shopping_active"] = True
                 else:
-                    st.error("No valid items found to compare. Please check your list.")
+                    st.error("No valid items found to compare.")
+
+        # --- 5. INTERACTIVE STORE CHECKLISTS & CELEBRATION SCREEN ---
+        if "report" in st.session_state and st.session_state.get("shopping_active", False):
+            report = st.session_state["report"]
+            st.divider()
+            st.subheader("🛒 Optimal Split-Shop Checklists")
+            st.caption("Tick off items as you walk through each store.")
+
+            store_groups = {}
+            for item in report["item_breakdown"]:
+                store = item["cheapest_store"]
+                if store not in store_groups:
+                    store_groups[store] = []
+                store_groups[store].append(item)
+
+            all_checked = True
+            total_checkboxes = 0
+
+            for store_name, items in store_groups.items():
+                with st.expander(f"📍 {store_name} ({len(items)} items)", expanded=True):
+                    for idx, item in enumerate(items):
+                        total_checkboxes += 1
+                        unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
+                        is_checked = st.checkbox(f"{item['item_name']} ({item['quantity']}) — {item['total_price']}", key=unique_key)
+                        if not is_checked:
+                            all_checked = False
+
+            # If every single checkbox across all stores is ticked, trigger the celebration screen!
+            if total_checkboxes > 0 and all_checked:
+                st.balloons()
+                
+                # Update lifetime savings in Google Sheets
+                try:
+                    savings_ws = sh.worksheet("Savings")
+                    current_lifetime = float(savings_ws.acell('A1').value or 0.0)
+                except Exception:
+                    current_lifetime = 0.0
+
+                # Prevent double-counting the same trip session
+                if not st.session_state.get("trip_rewarded", False):
+                    new_lifetime = current_lifetime + report["trip_savings"]
+                    try:
+                        savings_ws.update('A1', [[new_lifetime]])
+                    except Exception:
+                        pass
+                    st.session_state["trip_rewarded"] = True
+                    current_lifetime = new_lifetime
+
+                st.divider()
+                st.success("🎉 SHOPPING COMPLETE! AMAZING JOB!")
+                st.markdown(f"### 💰 You saved **${report['trip_savings']:.2f}** on this shop!")
+                st.markdown(f"### 🏆 Total Lifetime Savings: **${current_lifetime:.2f}**")
+                
+                if st.button("Start New Shop"):
+                    st.session_state.clear()
+                    st.rerun()
+
     else:
         st.info("Your shopping list is empty. Add an item above to get started.")
 else:
