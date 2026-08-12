@@ -16,10 +16,41 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
+# Helper: Load or initialize store preferences from Google Sheets
+def load_store_preferences():
+    default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True, "IGA": True}
+    try:
+        pref_ws = sh.worksheet("Preferences")
+        data = pref_ws.get_all_values()
+        if len(data) >= 2:
+            return {
+                "Woolworths": data[1][0] == "True",
+                "Coles": data[1][1] == "True",
+                "Aldi": data[1][2] == "True",
+                "IGA": data[1][3] == "True"
+            }
+    except Exception:
+        # Create tab if it doesn't exist
+        try:
+            pref_ws = sh.add_worksheet(title="Preferences", rows=2, cols=4)
+            pref_ws.append_row(["Woolworths", "Coles", "Aldi", "IGA"])
+            pref_ws.append_row(["True", "True", "True", "True"])
+        except Exception:
+            pass
+    return default_prefs
+
+def save_store_preferences(prefs):
+    try:
+        pref_ws = sh.worksheet("Preferences")
+        pref_ws.update('A1:D2', [
+            ["Woolworths", "Coles", "Aldi", "IGA"],
+            [str(prefs["Woolworths"]), str(prefs["Coles"]), str(prefs["Aldi"]), str(prefs["IGA"])]
+        ])
+    except Exception:
+        pass
+
 # --- 2. ADVANCED LIVE SCRAPING ENGINE (ZenRows API + Smart Regex) ---
 def get_live_price(store, item_name, api_key):
-    """Fetches the live price using ZenRows API and resilient regex price extraction."""
-    
     if store == "Woolworths":
         target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
     elif store == "Coles":
@@ -150,11 +181,10 @@ def generate_smart_basket_report(user_items, selected_stores):
     progress_bar.empty()
 
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
-    worst_store_cost = ranked_stores[-1][1] # Used to calculate maximum savings vs worst store/single store
+    worst_store_cost = ranked_stores[-1][1] 
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
 
-    # Calculate total money saved on this trip (Difference between worst single store trip and optimal split trip)
     trip_savings = max(0.0, worst_store_cost - split_store_total)
 
     store_rankings = []
@@ -189,17 +219,10 @@ def generate_smart_basket_report(user_items, selected_stores):
 st.title("🛒 SmartBasket")
 st.write("Shop smarter. Save every week.")
 
-st.subheader("Preferred Stores")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    sel_woolies = st.checkbox("Woolworths", value=True)
-with col2:
-    sel_coles = st.checkbox("Coles", value=True)
-with col3:
-    sel_aldi = st.checkbox("Aldi", value=True)
-with col4:
-    sel_iga = st.checkbox("IGA", value=True)
+# Load persisted preferences from Google Sheet
+saved_prefs = load_store_preferences()
 
+# --- REORDERED: ADD ITEM FIRST ---
 st.subheader("Add Item")
 with st.form("add_item_form", clear_on_submit=True):
     item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L")
@@ -211,6 +234,23 @@ with st.form("add_item_form", clear_on_submit=True):
         list_ws = sh.worksheet("Shopping List")
         list_ws.append_row([item_name, qty, unit])
         st.success(f"Added {qty} {unit} of {item_name} to your list!")
+
+# --- REORDERED: PREFERRED STORES SECOND ---
+st.subheader("Preferred Stores")
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    sel_woolies = st.checkbox("Woolworths", value=saved_prefs["Woolworths"])
+with col2:
+    sel_coles = st.checkbox("Coles", value=saved_prefs["Coles"])
+with col3:
+    sel_aldi = st.checkbox("Aldi", value=saved_prefs["Aldi"])
+with col4:
+    sel_iga = st.checkbox("IGA", value=saved_prefs["IGA"])
+
+# Save updated store states back to Google Sheets automatically if changed
+current_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
+if current_prefs != saved_prefs:
+    save_store_preferences(current_prefs)
 
 # --- 4. DISPLAY CURRENT LIST & DELETE FUNCTIONALITY ---
 st.subheader("My List")
@@ -239,19 +279,22 @@ if current_items:
 
         st.divider()
         
-        if st.button("Compare Prices Across Stores"):
-            active_stores = []
-            if sel_woolies: active_stores.append("Woolworths")
-            if sel_coles: active_stores.append("Coles")
-            if sel_aldi: active_stores.append("aldi")
-            if sel_iga: active_stores.append("IGA")
-            
-            if not active_stores:
+        # Calculate active store count for dynamic button naming
+        active_stores_list = []
+        if sel_woolies: active_stores_list.append("Woolworths")
+        if sel_coles: active_stores_list.append("Coles")
+        if sel_aldi: active_stores_list.append("Aldi")
+        if sel_iga: active_stores_list.append("IGA")
+        
+        store_count_label = len(active_stores_list)
+        
+        if st.button(f"Compare Prices Across {store_count_label} Stores"):
+            if not active_stores_list:
                 st.error("Please select at least one store to compare.")
             else:
                 with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
                     fresh_items = list_ws.get_all_values()
-                    report = generate_smart_basket_report(fresh_items, active_stores)
+                    report = generate_smart_basket_report(fresh_items, active_stores_list)
                     
                 if report:
                     st.success("Live comparison complete!")
@@ -286,18 +329,15 @@ if current_items:
                         if not is_checked:
                             all_checked = False
 
-            # If every single checkbox across all stores is ticked, trigger the celebration screen!
             if total_checkboxes > 0 and all_checked:
                 st.balloons()
                 
-                # Update lifetime savings in Google Sheets
                 try:
                     savings_ws = sh.worksheet("Savings")
                     current_lifetime = float(savings_ws.acell('A1').value or 0.0)
                 except Exception:
                     current_lifetime = 0.0
 
-                # Prevent double-counting the same trip session
                 if not st.session_state.get("trip_rewarded", False):
                     new_lifetime = current_lifetime + report["trip_savings"]
                     try:
