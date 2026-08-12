@@ -162,14 +162,13 @@ def generate_smart_basket_report(user_items, selected_stores):
             store_totals[store] += total_price
             item_store_prices[store] = total_price
 
-        # Find cheapest store for this specific item
         cheapest_store = min(item_store_prices, key=item_store_prices.get)
         best_price = item_store_prices[cheapest_store]
                 
         split_store_total += best_price
         
         item_breakdown.append({
-            "item_name": item_name,
+            "item_name": f"{item_name} ({qty} {unit})" if qty > 1 else item_name,
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
             "unit_price": f"${(best_price/qty):.2f}/{unit}",
@@ -333,6 +332,7 @@ if valid_rows_with_indices:
                 st.success("Live comparison complete!")
                 st.session_state["report"] = report
                 st.session_state["shopping_active"] = True
+                st.session_state["active_tab"] = "Overview"
             else:
                 st.error("No valid items found to compare.")
 
@@ -344,8 +344,16 @@ if valid_rows_with_indices:
         st.markdown(f"### Price Comparison")
         st.caption(f"{report['total_items']} items across {len(active_stores_list)} stores")
         
-        # Navigation Tabs matching Figma
-        tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], horizontal=True, label_visibility="collapsed")
+        # Track selected tab via session state so buttons can switch it
+        if "active_tab" not in st.session_state:
+            st.session_state["active_tab"] = "Overview"
+
+        tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], 
+                              index=["Overview", "Breakdown", "Discount Cycle"].index(st.session_state["active_tab"]),
+                              horizontal=True, label_visibility="collapsed", key="nav_radio")
+        
+        # Keep session state synced with radio button changes
+        st.session_state["active_tab"] = tab_choice
         
         if tab_choice == "Overview":
             st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
@@ -353,24 +361,23 @@ if valid_rows_with_indices:
             single_best = report["comparison_modes"]["single_store_best"]
             split_opt = report["comparison_modes"]["split_store_optimal"]
             
-            # Determine recommendation banner placement (Lowest price, tie defaults to single store)
             single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
             
-            # Card 1: Shop at one store
             with st.container(border=True):
                 if single_is_recommended:
                     st.markdown("🟡 **RECOMMENDED**")
                 st.markdown(f"**Shop at one store**\n\nBest of your stores: {single_best['store_name']} — **${single_best['total_cost']:.2f}**")
                 if st.button("Select Single Store Mode"):
-                    st.session_state["mode"] = "single"
+                    st.session_state["active_tab"] = "Breakdown"
+                    st.rerun()
             
-            # Card 2: Split across preferred stores
             with st.container(border=True):
                 if not single_is_recommended:
                     st.markdown("🟡 **RECOMMENDED**")
                 st.markdown(f"**Split across my preferred stores**\n\nBuy each item where it's cheapest — **${split_opt['total_cost']:.2f}**")
                 if st.button("Select Split Mode"):
-                    st.session_state["mode"] = "split"
+                    st.session_state["active_tab"] = "Breakdown"
+                    st.rerun()
 
             st.divider()
             st.markdown("#### STORE RANKING — FULL BASKET")
@@ -397,12 +404,23 @@ if valid_rows_with_indices:
             total_checkboxes = 0
 
             for store_name, items in store_groups.items():
+                store_letter = store_name[0].upper()
+                store_subtotal = sum(float(i['total_price'].replace('$', '')) for i in items)
+                
                 with st.container(border=True):
-                    st.markdown(f"**{store_name}** \n\n 0/{len(items)} items collected")
+                    # Styled Header matching your screenshot card
+                    st.markdown(f"""
+                    <div style="background-color: #002D62; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                        <b>{store_letter} &nbsp; {store_name}</b><br>
+                        <span style="font-size: 0.85em; opacity: 0.8;">0/{len(items)} items collected</span>
+                        <span style="float: right; font-size: 1.1em; font-weight: bold;">${store_subtotal:.2f}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
                     for idx, item in enumerate(items):
                         total_checkboxes += 1
                         unique_key = f"chk_{store_name}_{idx}_{item['item_name']}"
-                        is_checked = st.checkbox(f"{item['item_name']} ({item['unit_price']}) — **{item['total_price']}**", key=unique_key)
+                        is_checked = st.checkbox(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.9em;'>{item['unit_price']}</span> &nbsp;&nbsp;&nbsp;&nbsp; **{item['total_price']}**", key=unique_key)
                         if not is_checked:
                             all_checked = False
 
