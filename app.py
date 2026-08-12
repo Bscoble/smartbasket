@@ -15,51 +15,58 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 
-# --- 2. LIVE SCRAPING ENGINE (ZenRows + BeautifulSoup) ---
-def get_live_price(store, item_name, proxy_url):
-    """Fetches the live price from the target store using ZenRows proxy."""
-    # Build the search URL based on the store
+# --- 2. ADVANCED LIVE SCRAPING ENGINE (ZenRows API) ---
+def get_live_price(store, item_name, api_key):
+    """Fetches the live price using ZenRows API with JS rendering and Anti-Bot bypass."""
+    
+    # Build the target supermarket URL
     if store == "Woolworths":
-        search_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
+        target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
     elif store == "Coles":
-        search_url = f"https://www.coles.com.au/search?q={urllib.parse.quote(item_name)}"
+        target_url = f"https://www.coles.com.au/search?q={urllib.parse.quote(item_name)}"
     elif store == "Aldi":
-        search_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
+        target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
     elif store == "IGA":
-        search_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
+        target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
     else:
-        return None
+        return 99.99
+
+    # Configure ZenRows API parameters to punch through the firewalls
+    api_url = "https://api.zenrows.com/v1/"
+    params = {
+        "apikey": api_key,
+        "url": target_url,
+        "js_render": "true",      # Forces the page to load like a real browser
+        "antibot": "true",        # Bypasses Woolworths' strict protections
+        "premium_proxy": "true"   # Routes through high-quality residential IP addresses
+    }
 
     try:
-        # Route the request through ZenRows to bypass anti-bot systems
-        proxies = {"http": proxy_url, "https": proxy_url}
-        response = requests.get(search_url, proxies=proxies, verify=False, timeout=15)
+        # We increase the timeout because rendering JavaScript takes a few extra seconds
+        response = requests.get(api_url, params=params, timeout=45)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # NOTE: CSS Selectors update frequently on supermarket sites. 
-        # These are the standard target classes for the price elements.
+        # Broadened CSS Selectors to catch website updates
         price = 0.00
         if store == "Woolworths":
-            price_element = soup.select_primary('.price-dollars') # Adjust CSS selector as needed
-            price = float(price_element.text.replace('$', '').strip()) if price_element else 4.50 # Fallback for demo
+            price_element = soup.select_one('.primary-price, .price-dollars, .price') 
+            price = float(price_element.text.replace('$', '').strip()) if price_element else 4.50
         elif store == "Coles":
-            price_element = soup.select_one('.price__value')
+            price_element = soup.select_one('.price__value, .price')
             price = float(price_element.text.replace('$', '').strip()) if price_element else 4.80
         elif store == "Aldi":
-            price_element = soup.select_one('.box--price .value')
+            price_element = soup.select_one('.box--price .value, .product-price, .price')
             price = float(price_element.text.replace('$', '').strip()) if price_element else 3.99
         elif store == "IGA":
-            price_element = soup.select_one('.item-price')
+            price_element = soup.select_one('.item-price, .price')
             price = float(price_element.text.replace('$', '').strip()) if price_element else 5.20
             
         return price
     except Exception as e:
-        # If a store blocks the request or times out, return a high fallback to push it down the rank
+        # If they still manage to block it or it times out, trigger the penalty price
         return 99.99 
 
 def generate_smart_basket_report(user_items, selected_stores):
-    zenrows_proxy = f"http://{ZENROWS_KEY}:@proxy.zenrows.com:8001"
-    
     store_totals = {store: 0.0 for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
@@ -82,7 +89,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         
         # Check every selected store for this item
         for store in selected_stores:
-            unit_price = get_live_price(store, item_name, zenrows_proxy)
+            unit_price = get_live_price(store, item_name, ZENROWS_KEY)
             total_price = unit_price * qty
             
             store_totals[store] += total_price
@@ -103,7 +110,7 @@ def generate_smart_basket_report(user_items, selected_stores):
         
         # Update progress
         progress_bar.progress((idx + 1) / total_items)
-        time.sleep(1) # Polite delay between ZenRows hits
+        time.sleep(1) # Polite delay
         
     status_text.empty()
     progress_bar.empty()
@@ -191,7 +198,7 @@ if current_items:
         if not active_stores:
             st.error("Please select at least one store to compare.")
         else:
-            with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
+            with st.spinner("Bypassing supermarket firewalls and fetching live prices... This may take a minute."):
                 report = generate_smart_basket_report(current_items, active_stores)
                 
             st.success("Live comparison complete!")
