@@ -122,4 +122,4 @@ if current_items:
 else:
     st.info("Your shopping list is empty. Add an item above to get started.")
 else:
-    st.info("Your shopping list is empty. Add an item above to get started.")
+st.info("Your shopping list is empty. Add an item above to get started.")
