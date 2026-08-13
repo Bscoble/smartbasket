@@ -356,8 +356,16 @@ st.markdown(f"""
         border: none;
     }}
 
+    /* HIDE MARKER DIVS */
+    div:has(> .clear-all-marker),
+    div:has(> .qty-minus-marker),
+    div:has(> .qty-plus-marker),
+    div:has(> .qty-del-marker) {{
+        display: none !important;
+    }}
+
     /* CLEAR ALL BUTTON - FRAMELESS RED TEXT LINK */
-    button[data-testid="baseButton-secondary"]:has(div:contains("Clear all")) {{
+    div:has(> .clear-all-marker) + div[data-testid="element-container"] button {{
         background: none !important;
         border: none !important;
         padding: 0 !important;
@@ -369,48 +377,66 @@ st.markdown(f"""
         display: inline-block !important;
         margin-top: 2px !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("Clear all")):hover {{
+    div:has(> .clear-all-marker) + div[data-testid="element-container"] button:hover {{
         color: #B30000 !important;
         background: none !important;
         text-decoration: underline !important;
     }}
 
-    /* CENTERING & SHADING FOR QUANTITY & DELETE SYMBOLS */
+    /* BASE BUTTON CENTERING FOR QUANTITY / DELETE CONTROL FRAMES */
     button[data-testid="baseButton-secondary"] {{
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
         text-align: center !important;
         padding: 0 !important;
+        height: 38px !important;
         min-height: 38px !important;
+        width: 100% !important;
         border-radius: 8px !important;
         border: none !important;
     }}
 
-    /* MINUS BUTTON - LIGHT GREEN */
-    button[data-testid="baseButton-secondary"]:has(div:contains("➖")) {{
+    /* FORCE INTERNAL TEXT/MARKDOWN CONTAINER TO PERFECT CENTER */
+    button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"],
+    button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"] p {{
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+        font-size: 16px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+    }}
+
+    /* MINUS BUTTON - LIGHT GREEN FRAME */
+    div:has(> .qty-minus-marker) + div[data-testid="element-container"] button {{
         background-color: #E6F4EA !important;
         color: #137333 !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("➖")):hover {{
+    div:has(> .qty-minus-marker) + div[data-testid="element-container"] button:hover {{
         background-color: #CEEAD6 !important;
     }}
 
-    /* PLUS BUTTON - LIGHT GREEN */
-    button[data-testid="baseButton-secondary"]:has(div:contains("➕")) {{
+    /* PLUS BUTTON - LIGHT GREEN FRAME */
+    div:has(> .qty-plus-marker) + div[data-testid="element-container"] button {{
         background-color: #E6F4EA !important;
         color: #137333 !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("➕")):hover {{
+    div:has(> .qty-plus-marker) + div[data-testid="element-container"] button:hover {{
         background-color: #CEEAD6 !important;
     }}
 
-    /* DELETE (X) BUTTON - LIGHT RED */
-    button[data-testid="baseButton-secondary"]:has(div:contains("❌")) {{
+    /* DELETE (X) BUTTON - LIGHT RED FRAME */
+    div:has(> .qty-del-marker) + div[data-testid="element-container"] button {{
         background-color: #FCE8E6 !important;
         color: #C5221F !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("❌")):hover {{
+    div:has(> .qty-del-marker) + div[data-testid="element-container"] button:hover {{
         background-color: #FAD2CF !important;
     }}
 
@@ -852,6 +878,7 @@ else:
         with c_head2:
             if item_count > 0:
                 st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
+                st.markdown('<div class="clear-all-marker"></div>', unsafe_allow_html=True)
                 if st.button("Clear all", type="secondary"):
                     list_ws.clear()
                     list_ws.append_row(["Item", "Qty", "Unit"])
@@ -873,18 +900,21 @@ else:
                 with cols[2]:
                     sub_c1, sub_c2, sub_c3 = st.columns(3)
                     with sub_c1:
-                        if st.button("➖", key=f"sub_{sheet_idx}"):
+                        st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
+                        if st.button("−", key=f"sub_{sheet_idx}"):
                             if i_qty > 1:
                                 list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
                                 st.rerun()
                     with sub_c2:
                         st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight: bold;'>{i_qty}</div>", unsafe_allow_html=True)
                     with sub_c3:
-                        if st.button("➕", key=f"add_{sheet_idx}"):
+                        st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
+                        if st.button("+", key=f"add_{sheet_idx}"):
                             list_ws.update(f'B{sheet_idx}', [[i_qty + 1]])
                             st.rerun()
                 with cols[3]:
-                    if st.button("❌", key=f"del_{sheet_idx}"):
+                    st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
+                    if st.button("✕", key=f"del_{sheet_idx}"):
                         list_ws.delete_rows(sheet_idx)
                         st.rerun()
                         
