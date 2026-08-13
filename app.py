@@ -316,7 +316,7 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
 
-    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON - WIDER & DARK GREEN) */
+    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON) */
     button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")) {{
         background-color: #005A36 !important;
         color: white !important;
@@ -354,6 +354,25 @@ st.markdown(f"""
         border-radius: 12px;
         font-weight: 800;
         border: none;
+    }}
+
+    /* CLEAR ALL BUTTON - FRAMELESS RED TEXT LINK */
+    button[data-testid="baseButton-secondary"]:has(div:contains("Clear all")) {{
+        background: none !important;
+        border: none !important;
+        padding: 0 !important;
+        color: #E31837 !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        box-shadow: none !important;
+        min-height: unset !important;
+        display: inline-block !important;
+        margin-top: 2px !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("Clear all")):hover {{
+        color: #B30000 !important;
+        background: none !important;
+        text-decoration: underline !important;
     }}
 
     /* CENTERING & SHADING FOR QUANTITY & DELETE SYMBOLS */
@@ -415,26 +434,30 @@ st.markdown(f"""
         opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
     }}
 
-    /* FOOTER TEXT LINK BUTTONS (BORDERLESS & SMALLER) */
-    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")) {{
-        background: none !important; 
-        border: none !important; 
+    /* FOOTER BUTTONS - FRAMELESS SINGLE-LINE TEXT LINKS */
+    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button {{
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
         padding: 0 !important;
-        color: #777777 !important; 
-        font-size: 11.5px !important; 
-        font-weight: normal !important;
-        box-shadow: none !important; 
+        margin: 0 !important;
         min-height: unset !important;
-        display: inline-block !important;
+        height: auto !important;
+        width: 100% !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover {{
-        text-decoration: underline !important; 
-        color: #333333 !important; 
-        background: none !important;
+    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button p {{
+        font-size: 11px !important;
+        white-space: nowrap !important;
+        color: #666666 !important;
+        font-weight: 500 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        text-align: center !important;
+    }}
+    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button:hover p {{
+        color: #111111 !important;
+        text-decoration: underline !important;
     }}
 
     /* AUTH TEXT LINK BUTTONS */
@@ -1121,18 +1144,19 @@ else:
                     st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
 
         # --- MAIN APP GLOBAL FOOTER ---
-        st.markdown("<hr style='margin: 40px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         
-        fc1, fc2, fc3, fc4, fc5 = st.columns([0.4, 1.1, 1.3, 2.5, 0.4])
-        with fc2:
+        st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
+        fc1, fc2, fc3 = st.columns([1, 1.2, 1.8])
+        with fc1:
             if st.button("About Us", key="footer_about"):
                 st.session_state["current_page"] = "about"
                 st.rerun()
-        with fc3:
+        with fc2:
             if st.button("Privacy Policy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
-        with fc4:
+        with fc3:
             if st.button("Spot a Problem / Contact Us", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
                 st.rerun()
