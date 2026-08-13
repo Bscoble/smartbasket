@@ -260,7 +260,7 @@ st.markdown(f"""
     .app-header h1 {{ margin: 0; color: white; font-size: 26px; font-weight: 800; padding-top: 5px; }}
     .app-header p {{ margin: 0; font-size: 14px; opacity: 0.9; }}
 
-    /* DYNAMIC STORE PILLS (Hiding native checkboxes and styling the label) */
+    /* DYNAMIC STORE PILLS */
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label [data-baseweb="checkbox"] {{
         display: none !important;
     }}
@@ -269,7 +269,7 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
 
-    /* PRIMARY BUTTONS (Auth & Compare) */
+    /* PRIMARY BUTTONS */
     button[data-testid="baseButton-primary"] {{
         background-color: #005A36 !important;
         color: white !important;
@@ -726,6 +726,7 @@ else:
                         st.session_state["report"] = report
                         st.session_state["shopping_active"] = True
                         st.session_state["active_tab"] = "Overview"
+                        st.session_state["shop_mode"] = "overview"
                         st.rerun()
                     else:
                         st.error("No valid items found to compare.")
@@ -747,69 +748,180 @@ else:
                 st.session_state["active_tab"] = tab_choice
                 
                 if tab_choice == "Overview":
-                    st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
                     
-                    single_best = report["comparison_modes"]["single_store_best"]
-                    split_opt = report["comparison_modes"]["split_store_optimal"]
-                    
-                    single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
-                    
-                    c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
-                    c1_border_width = "2px" if single_is_recommended else "1px"
-                    c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
-
-                    html_single = f"""
-                    <div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
-                        {c1_badge}
-                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <div style="font-size: 26px;">🏪</div>
-                                <div style="line-height: 1.3;">
-                                    <div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>
-                                    <div style="font-size: 13px; color: #666;">Best of your stores: {single_best['store_name']}</div>
+                    # -----------------------------------------------
+                    # SUB-VIEW: SHOPPING SPLIT DETAILS
+                    # -----------------------------------------------
+                    if st.session_state.get("shop_mode") == "split":
+                        
+                        if st.button("← Back to Options", type="secondary", key="btn_back_options"):
+                            st.session_state["shop_mode"] = "overview"
+                            st.rerun()
+                            
+                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
+                        
+                        split_opt = report["comparison_modes"]["split_store_optimal"]
+                        
+                        html_combined = (
+                            f'<div style="background-color: #F6E7B9; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">'
+                            f'<div style="font-weight: 800; color: #333; font-size: 16px;">Combined total</div>'
+                            f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                            f'</div>'
+                        )
+                        st.markdown(html_combined, unsafe_allow_html=True)
+                        
+                        grouped_split = {}
+                        for item in report["item_breakdown"]:
+                            store = item["cheapest_store"]
+                            if store not in grouped_split:
+                                grouped_split[store] = []
+                            grouped_split[store].append(item)
+                            
+                        brand_colors = {
+                            "Woolworths": "#005A36",
+                            "Coles": "#E31837",
+                            "Aldi": "#002D62",
+                            "IGA": "#E31837"
+                        }
+                        
+                        for store_name, items in grouped_split.items():
+                            b_color = brand_colors.get(store_name, "#555")
+                            s_initial = store_name[0].upper()
+                            store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
+                            
+                            with st.container(border=True):
+                                st.markdown(f'''
+                                <div style="background-color: {b_color}; color: white; padding: 15px; margin: -16px -16px 15px -16px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <div style="background: rgba(255,255,255,0.2); width: 32px; height: 32px; display: flex; justify-content: center; align-items: center; border-radius: 6px; font-weight: 800; font-size: 16px;">{s_initial}</div>
+                                        <div>
+                                            <div style="font-weight: 800; font-size: 16px;">{store_name}</div>
+                                            <div style="font-size: 12px; opacity: 0.9;">0/{len(items)} items collected</div>
+                                        </div>
+                                    </div>
+                                    <div style="font-weight: 800; font-size: 18px;">${store_total:.2f}</div>
                                 </div>
-                            </div>
-                            <div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best['total_cost']:.2f}</div>
-                        </div>
-                    </div>
-                    """
-                    st.markdown(html_single, unsafe_allow_html=True)
-                    st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
-                    if st.button("Shop Single", key="btn_single", use_container_width=True):
-                        st.session_state["active_tab"] = "Breakdown"
-                        st.rerun()
+                                ''', unsafe_allow_html=True)
+                                
+                                for idx, item in enumerate(items):
+                                    c1, c2 = st.columns([3, 1])
+                                    with c1:
+                                        st.checkbox(f"**{item['item_name']}** <span style='color:#888; font-size:12px; font-weight:normal;'>{item['unit_price']}</span>", key=f"chk_{store_name}_{idx}")
+                                    with c2:
+                                        st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
+                                    
+                                    if idx < len(items) - 1:
+                                        st.markdown("<hr style='margin: 0px 0 10px 0; opacity: 0.1;'>", unsafe_allow_html=True)
                     
-                    c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
-                    c2_border_width = "2px" if not single_is_recommended else "1px"
-                    c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
+                    # -----------------------------------------------
+                    # SUB-VIEW: OVERVIEW (DEFAULT)
+                    # -----------------------------------------------
+                    else:
+                        st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
+                        
+                        single_best = report["comparison_modes"]["single_store_best"]
+                        split_opt = report["comparison_modes"]["split_store_optimal"]
+                        
+                        single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
+                        
+                        c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
+                        c1_border_width = "2px" if single_is_recommended else "1px"
+                        c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
 
-                    html_split = f"""
-                    <div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
-                        {c2_badge}
-                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <div style="font-size: 26px;">🛍️</div>
-                                <div style="line-height: 1.3;">
-                                    <div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>
-                                    <div style="font-size: 13px; color: #666;">Buy each item where it's cheapest</div>
-                                </div>
-                            </div>
-                            <div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt['total_cost']:.2f}</div>
-                        </div>
-                    </div>
-                    """
-                    st.markdown(html_split, unsafe_allow_html=True)
-                    st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
-                    if st.button("Shop Split", key="btn_split", use_container_width=True):
-                        st.session_state["active_tab"] = "Breakdown"
-                        st.rerun()
+                        html_single = (
+                            f'<div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">'
+                            f'{c1_badge}'
+                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">'
+                            f'<div style="display: flex; align-items: center; gap: 15px;">'
+                            f'<div style="font-size: 26px;">🏪</div>'
+                            f'<div style="line-height: 1.3;">'
+                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>'
+                            f'<div style="font-size: 13px; color: #666;">Best of your stores: {single_best["store_name"]}</div>'
+                            f'</div></div>'
+                            f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
+                            f'</div></div>'
+                        )
+                        st.markdown(html_single, unsafe_allow_html=True)
+                        st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
+                        if st.button("Shop Single", key="btn_single", use_container_width=True):
+                            st.session_state["active_tab"] = "Breakdown"
+                            st.rerun()
+                        
+                        c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
+                        c2_border_width = "2px" if not single_is_recommended else "1px"
+                        c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
 
-                    st.divider()
-                    st.markdown("#### STORE RANKING — FULL BASKET")
-                    for store in report["store_rankings"]:
-                        with st.container(border=True):
-                            badge_txt = f"[{store['badge']}]" if store['badge'] else ""
-                            st.markdown(f"**{store['store']}** {badge_txt} \n\n **${store['total_cost']:.2f}** *({store['difference_from_best']})*")
+                        html_split = (
+                            f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">'
+                            f'{c2_badge}'
+                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">'
+                            f'<div style="display: flex; align-items: center; gap: 15px;">'
+                            f'<div style="font-size: 26px;">🛍️</div>'
+                            f'<div style="line-height: 1.3;">'
+                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>'
+                            f'<div style="font-size: 13px; color: #666;">Buy each item where it\'s cheapest</div>'
+                            f'</div></div>'
+                            f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                            f'</div></div>'
+                        )
+                        st.markdown(html_split, unsafe_allow_html=True)
+                        st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
+                        if st.button("Shop Split", key="btn_split", use_container_width=True):
+                            st.session_state["shop_mode"] = "split"
+                            st.rerun()
+
+                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — FULL BASKET</p>", unsafe_allow_html=True)
+                        
+                        brand_colors = {
+                            "Woolworths": "#005A36",
+                            "Coles": "#E31837",
+                            "Aldi": "#002D62",
+                            "IGA": "#E31837"
+                        }
+                        
+                        max_cost = report["store_rankings"][-1]["total_cost"] if report["store_rankings"] else 1
+                        
+                        for store in report["store_rankings"]:
+                            s_name = store['store']
+                            s_rank = store['rank']
+                            s_cost = store['total_cost']
+                            b_color = brand_colors.get(s_name, "#555")
+                            s_initial = s_name[0].upper()
+
+                            is_best = (s_rank == 1)
+                            border_color = "#005A36" if is_best else "#E0E0E0"
+                            border_width = "2px" if is_best else "1px"
+
+                            if is_best:
+                                diff_html = "<div style='color: #666; font-size: 12px; margin-top: 2px;'>Best price ✓</div>"
+                                trophy = "🏆 "
+                            else:
+                                diff_val = s_cost - report["comparison_modes"]["single_store_best"]["total_cost"]
+                                diff_html = f"<div style='color: #E31837; font-size: 12px; font-weight: bold; margin-top: 2px;'>+${diff_val:.2f} more</div>"
+                                trophy = ""
+
+                            bar_width = min(100, int((s_cost / max_cost) * 100)) if max_cost > 0 else 100
+
+                            html_card = (
+                                f'<div style="border: {border_width} solid {border_color}; border-radius: 12px; padding: 15px; margin-bottom: 12px; background-color: #FFF;">'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">'
+                                f'<div style="display: flex; align-items: center; gap: 15px;">'
+                                f'<div style="background-color: {b_color}; color: white; width: 40px; height: 40px; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-weight: 900; font-size: 20px;">'
+                                f'{s_initial}'
+                                f'</div>'
+                                f'<div>'
+                                f'<div style="font-weight: 800; color: #111; font-size: 16px;">{trophy}{s_name}</div>'
+                                f'<div style="font-size: 13px; color: #888;">#{s_rank} cheapest</div>'
+                                f'</div></div>'
+                                f'<div style="text-align: right;">'
+                                f'<div style="font-size: 18px; font-weight: 800; color: #111;">${s_cost:.2f}</div>'
+                                f'{diff_html}'
+                                f'</div></div>'
+                                f'<div style="width: 100%; background-color: #F0F0F0; height: 4px; border-radius: 2px;">'
+                                f'<div style="width: {bar_width}%; background-color: {b_color}; height: 4px; border-radius: 2px;"></div>'
+                                f'</div></div>'
+                            )
+                            st.markdown(html_card, unsafe_allow_html=True)
                             
                 elif tab_choice == "Breakdown":
                     st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
@@ -824,16 +936,16 @@ else:
                                 
                                 best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
                                 
-                                html_row = f"""
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
-                                    <div><b>{store_initial}</b> &nbsp; {store_name}</div>
-                                    <div>
-                                        <span style="color: gray; font-size: 0.85em;">{store_data['unit_price']}</span> &nbsp;&nbsp; 
-                                        <b>${store_data['total_price']:.2f}</b>
-                                        {best_badge}
-                                    </div>
-                                </div>
-                                """
+                                html_row = (
+                                    f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">'
+                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}</div>'
+                                    f'<div>'
+                                    f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
+                                    f'<b>${store_data["total_price"]:.2f}</b>'
+                                    f'{best_badge}'
+                                    f'</div>'
+                                    f'</div>'
+                                )
                                 st.markdown(html_row, unsafe_allow_html=True)
 
                 elif tab_choice == "Discount Cycle":
