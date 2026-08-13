@@ -1110,4 +1110,3 @@ else:
                 st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
 
-Get Outlook for Android
