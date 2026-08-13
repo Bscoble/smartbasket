@@ -252,6 +252,11 @@ st.markdown(f"""
         max-width: 100% !important;
     }}
 
+    /* PREVENT CHECKBOX LABELS FROM WRAPPING (WOOLWORTHS SINGLE LINE) */
+    div[data-testid="stCheckbox"] label p {{
+        white-space: nowrap !important;
+    }}
+
     /* SPLASH GET STARTED BUTTON OVERRIDE */
     button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {{
         background-color: #ffffff !important;
@@ -779,11 +784,11 @@ else:
                     list_ws.append_row([item_name, qty, unit])
                     st.rerun()
 
-        st.markdown("<br><p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
 
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns([1.35, 0.85, 0.85, 0.85])
         with col1:
             sel_woolies = st.checkbox("Woolworths", value=prefs["Woolworths"])
         with col2:
