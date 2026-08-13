@@ -3,3 +3,6 @@ requests
 gspread
 google-auth
 beautifulsoup4
+pyzbar
+Pillow
+requests
