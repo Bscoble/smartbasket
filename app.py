@@ -197,7 +197,6 @@ def generate_smart_basket_report(user_items, selected_stores):
     }
 
 def send_secure_feedback(user_email, feedback_msg):
-    # This executes server-side. The email address is never exposed to the frontend HTML.
     target_inbox = "bscoble74@gmail.com" 
     url = f"https://formsubmit.co/ajax/{target_inbox}"
     payload = {
@@ -301,21 +300,25 @@ st.markdown(f"""
         opacity: 0 !important; height: 95px !important; width: 100% !important; z-index: 99 !important; cursor: pointer !important;
     }}
     
-    /* CONTACT PAGE BACK BUTTON INVISIBLE OVERLAY */
-    div[data-testid="element-container"]:has(#contact-back-anchor) {{ display: none; }}
-    div[data-testid="element-container"]:has(#contact-back-anchor) + div[data-testid="element-container"] {{
+    /* SUBPAGE BACK BUTTON INVISIBLE OVERLAY */
+    div[data-testid="element-container"]:has(#subpage-back-anchor) {{ display: none; }}
+    div[data-testid="element-container"]:has(#subpage-back-anchor) + div[data-testid="element-container"] {{
         margin-top: -65px !important; margin-bottom: 20px !important; margin-left: -5px !important; width: 40px !important;
     }}
-    div[data-testid="element-container"]:has(#contact-back-anchor) + div[data-testid="element-container"] button {{
+    div[data-testid="element-container"]:has(#subpage-back-anchor) + div[data-testid="element-container"] button {{
         opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
     }}
 
-    /* FOOTER TEXT LINK BUTTON */
+    /* FOOTER TEXT LINK BUTTONS */
+    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")),
+    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")),
     button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")) {{
         background: none !important; border: none !important; padding: 0 !important;
         color: #888 !important; font-size: 12px !important; font-weight: normal !important;
         box-shadow: none !important; margin-top: -5px !important;
     }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")):hover,
     button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover {{
         text-decoration: underline !important; color: #555 !important;
     }}
@@ -388,10 +391,79 @@ if not st.session_state["authenticated"]:
 else:
     
     # -----------------------------------------------------------
-    # VIEW: CONTACT PAGE
+    # VIEW: ABOUT US PAGE
     # -----------------------------------------------------------
-    if st.session_state["current_page"] == "contact":
+    if st.session_state["current_page"] == "about":
+        st.markdown("""
+        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
+            <div style="display: flex; align-items: center; gap: 15px; color: white;">
+                <div style="font-size: 20px;">←</div>
+                <h1 style="font-size: 18px; margin: 0; color: white;">About Us</h1>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_about_back"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="color: #444; font-size: 14px; line-height: 1.7; margin-top: 10px;">
+            <h3 style="color: #005A36; font-size: 18px; margin-bottom: 10px;">Welcome to SmartBasket</h3>
+            <p>SmartBasket is Australia's independent grocery price comparison companion, designed to help households cut through supermarket price hikes and make informed shopping choices.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Our Mission</h4>
+            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, Aldi, and IGA, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Built for Everyday Australians</h4>
+            <p>Created to simplify weekly budgeting, SmartBasket puts full transparency back into your hands. No hidden fees, no corporate bias—just real-time data comparing your preferred local stores.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------------------------------------
+    # VIEW: PRIVACY POLICY PAGE
+    # -----------------------------------------------------------
+    elif st.session_state["current_page"] == "privacy":
+        st.markdown("""
+        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
+            <div style="display: flex; align-items: center; gap: 15px; color: white;">
+                <div style="font-size: 20px;">←</div>
+                <h1 style="font-size: 18px; margin: 0; color: white;">Privacy Policy</h1>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_privacy_back"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="color: #444; font-size: 14px; line-height: 1.7; margin-top: 10px;">
+            <h3 style="color: #005A36; font-size: 18px; margin-bottom: 10px;">Privacy Policy & Data Protection</h3>
+            <p><i>Last updated: August 2026</i></p>
+            
+            <p>SmartBasket respects your privacy and is committed to protecting any personal data you share with us. This policy outlines how your information is handled.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">1. Information We Collect</h4>
+            <p>When you create an account or use SmartBasket, we collect your name, email address, postal location (postcode), store preferences, and custom shopping lists required to deliver accurate price comparisons.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">2. How We Use Your Data</h4>
+            <p>Your data is used solely to provide and improve your app experience, such as saving your preferred shopping lists and configuring store comparisons. Feedback or problem reports submitted through the app are securely routed directly to our administrative team.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">3. Data Security</h4>
+            <p>We implement secure authentication standards and encrypted database connections to ensure your personal information remains confidential and protected against unauthorized access.</p>
+            
+            <h4 style="color: #222; font-size: 15px; margin-top: 20px;">4. Contact Us</h4>
+            <p>If you have any questions regarding this privacy policy or how your data is managed, please reach out to us via the <b>Spot a Problem / Contact Us</b> section in the app footer.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------------------------------------
+    # VIEW: CONTACT / SPOT A PROBLEM PAGE
+    # -----------------------------------------------------------
+    elif st.session_state["current_page"] == "contact":
         st.markdown("""
         <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
             <div style="display: flex; align-items: center; gap: 15px; color: white;">
@@ -401,7 +473,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown('<div id="contact-back-anchor"></div>', unsafe_allow_html=True)
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
         if st.button("Back", key="btn_contact_back"):
             st.session_state["current_page"] = "home"
             st.rerun()
@@ -686,10 +758,16 @@ else:
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 40px 0 20px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         
-        fc1, fc2, fc3, fc4, fc5 = st.columns([1, 1.2, 0.1, 2, 1])
+        fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([0.5, 1, 1.2, 0.1, 1.8, 0.5])
         with fc2:
-            st.markdown("<div style='text-align: right; padding-top: 5px;'><a href='#' style='color: #888; text-decoration: none; font-size: 12px;'>About Us</a> &nbsp;|&nbsp; <a href='#' style='color: #888; text-decoration: none; font-size: 12px;'>Privacy Policy</a> &nbsp;|</div>", unsafe_allow_html=True)
-        with fc4:
+            if st.button("About Us", key="footer_about"):
+                st.session_state["current_page"] = "about"
+                st.rerun()
+        with fc3:
+            if st.button("Privacy Policy", key="footer_privacy"):
+                st.session_state["current_page"] = "privacy"
+                st.rerun()
+        with fc5:
             if st.button("Spot a Problem / Contact Us", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
                 st.rerun()
