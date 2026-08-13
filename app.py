@@ -7,7 +7,7 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 from pyzbar.pyzbar import decode
 
 # --- PAGE CONFIG ---
@@ -214,12 +214,44 @@ def send_secure_feedback(user_email, feedback_msg):
         return False
 
 def decode_barcode(image_file):
-    """Extracts numeric barcode string from camera photo."""
+    """Multi-pass enhanced barcode decoder for curved surfaces and camera glare."""
     try:
         img = Image.open(image_file)
-        decoded_objects = decode(img)
-        for obj in decoded_objects:
-            return obj.data.decode("utf-8")
+        
+        def check_image(img_variant):
+            decoded_objects = decode(img_variant)
+            for obj in decoded_objects:
+                return obj.data.decode("utf-8")
+            return None
+
+        # Pass 1: Raw image
+        res = check_image(img)
+        if res: return res
+
+        # Pass 2: Grayscale & High Contrast (cuts glare on shiny cans/jars)
+        gray = ImageOps.grayscale(img)
+        enhancer = ImageEnhance.Contrast(gray)
+        high_contrast = enhancer.enhance(2.0)
+        res = check_image(high_contrast)
+        if res: return res
+
+        # Pass 3: Sharpened High Contrast
+        sharpener = ImageEnhance.Sharpness(high_contrast)
+        sharp = sharpener.enhance(2.5)
+        res = check_image(sharp)
+        if res: return res
+
+        # Pass 4: Auto-rotations (handles orientation glitches on mobile cameras)
+        for angle in [90, 180, 270]:
+            rotated = high_contrast.rotate(angle, expand=True)
+            res = check_image(rotated)
+            if res: return res
+
+        # Pass 5: Black & White Binarization Threshold
+        bw = gray.point(lambda p: 255 if p > 120 else 0)
+        res = check_image(bw)
+        if res: return res
+
     except Exception:
         pass
     return None
