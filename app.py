@@ -212,6 +212,8 @@ def send_secure_feedback(user_email, feedback_msg):
         return False
 
 # --- 2. SESSION STATE INIT ---
+if "app_started" not in st.session_state:
+    st.session_state["app_started"] = False
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "auth_mode" not in st.session_state:
@@ -231,40 +233,33 @@ st.markdown(f"""
     /* IPHONE SILHOUETTE WRAPPER FOR DESKTOP VIEW */
     @media (min-width: 768px) {{
         .stApp {{
-            max-width: 410px !important;
+            max-width: 412px !important;
             height: 850px !important;
-            max-height: 90vh !important;
             margin: 30px auto !important;
             border: 14px solid #1c1c1e !important;
-            border-radius: 48px !important;
+            border-radius: 44px !important;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
             overflow-y: auto !important;
-            overflow-x: hidden !important;
             background-color: #ffffff !important;
-            position: relative !important;
         }}
-        .stApp::-webkit-scrollbar {{
-            width: 6px;
-        }}
-        .stApp::-webkit-scrollbar-thumb {{
-            background: #ccc;
-            border-radius: 3px;
-        }}
-        .stApp::before {{
-            content: '';
-            position: sticky;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 120px;
-            height: 25px;
-            background-color: #1c1c1e;
-            border-bottom-left-radius: 14px;
-            border-bottom-right-radius: 14px;
-            z-index: 999999;
-            display: block;
-            margin: 0 auto;
-        }}
+    }}
+
+    /* SPLIT GET STARTED BUTTON OVERRIDE */
+    button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {{
+        background-color: #ffffff !important;
+        color: #005A36 !important;
+        border-radius: 30px !important;
+        padding: 14px !important;
+        font-weight: 800 !important;
+        font-size: 16px !important;
+        width: 100% !important;
+        border: none !important;
+        margin-top: 40px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    }}
+    button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover {{
+        background-color: #f2f2f2 !important;
+        color: #004D2E !important;
     }}
 
     /* AUTH HEADER */
@@ -303,12 +298,28 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label [data-baseweb="checkbox"] {{
         display: none !important;
     }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
 
-    /* PRIMARY BUTTONS */
+    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON) */
+    button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")) {{
+        background-color: #005A36 !important;
+        color: white !important;
+        border-radius: 30px !important;
+        padding: 14px 20px !important;
+        font-weight: 800 !important;
+        font-size: 16px !important;
+        width: 100% !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    }}
+    button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")):hover {{
+        background-color: #004D2E !important;
+    }}
+
+    /* GENERAL PRIMARY BUTTONS */
     button[data-testid="baseButton-primary"] {{
         background-color: #005A36 !important;
         color: white !important;
@@ -328,6 +339,45 @@ st.markdown(f"""
         border-radius: 12px;
         font-weight: 800;
         border: none;
+    }}
+
+    /* CENTERING & SHADING FOR QUANTITY & DELETE SYMBOLS */
+    button[data-testid="baseButton-secondary"] {{
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        text-align: center !important;
+        padding: 0 !important;
+        min-height: 38px !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }}
+
+    /* MINUS BUTTON - LIGHT GREEN */
+    button[data-testid="baseButton-secondary"]:has(div:contains("➖")) {{
+        background-color: #E6F4EA !important;
+        color: #137333 !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("➖")):hover {{
+        background-color: #CEEAD6 !important;
+    }}
+
+    /* PLUS BUTTON - LIGHT GREEN */
+    button[data-testid="baseButton-secondary"]:has(div:contains("➕")) {{
+        background-color: #E6F4EA !important;
+        color: #137333 !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("➕")):hover {{
+        background-color: #CEEAD6 !important;
+    }}
+
+    /* DELETE (X) BUTTON - LIGHT RED */
+    button[data-testid="baseButton-secondary"]:has(div:contains("❌")) {{
+        background-color: #FCE8E6 !important;
+        color: #C5221F !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("❌")):hover {{
+        background-color: #FAD2CF !important;
     }}
 
     /* INVISIBLE OVERLAY BUTTONS (Results Screen) */
@@ -350,10 +400,29 @@ st.markdown(f"""
         opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
     }}
 
-    /* FOOTER & AUTH TEXT LINK BUTTONS */
+    /* FOOTER TEXT LINK BUTTONS (BORDERLESS & SMALLER) */
     button[data-testid="baseButton-secondary"]:has(div:contains("About Us")),
     button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")),
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")) {{
+        background: none !important; 
+        border: none !important; 
+        padding: 0 !important;
+        color: #777777 !important; 
+        font-size: 11.5px !important; 
+        font-weight: normal !important;
+        box-shadow: none !important; 
+        min-height: unset !important;
+        display: inline-block !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover {{
+        text-decoration: underline !important; 
+        color: #333333 !important; 
+        background: none !important;
+    }}
+
+    /* AUTH TEXT LINK BUTTONS */
     button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")),
     button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")),
     button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")) {{
@@ -361,9 +430,6 @@ st.markdown(f"""
         color: #888 !important; font-size: 13px !important; font-weight: normal !important;
         box-shadow: none !important; margin-top: -5px !important;
     }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("About Us")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover,
     button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")):hover,
     button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")):hover,
     button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")):hover {{
@@ -374,9 +440,27 @@ st.markdown(f"""
 
 
 # =====================================================================
-# --- 4. AUTHENTICATION & FORGOT PASSWORD ROUTING ---
+# --- 4. WELCOME SPLASH SCREEN ---
 # =====================================================================
-if not st.session_state["authenticated"]:
+if not st.session_state["app_started"]:
+    st.markdown("""
+    <div style="background-color: #005A36; min-height: 850px; margin: -60px -20px -20px -20px; padding: 140px 20px 40px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; box-sizing: border-box;">
+        <div style="background: rgba(255, 255, 255, 0.15); width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 25px auto; font-size: 38px; backdrop-filter: blur(5px);">
+            🛒
+        </div>
+        <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0 0 10px 0; color: white;">SmartBasket</h1>
+        <p style="font-size: 15px; opacity: 0.9; margin: 0; font-weight: 400;">Shop smarter. Save every week.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("Get Started", type="primary", use_container_width=True):
+        st.session_state["app_started"] = True
+        st.rerun()
+
+# =====================================================================
+# --- 5. AUTHENTICATION & FORGOT PASSWORD ROUTING ---
+# =====================================================================
+elif not st.session_state["authenticated"]:
     
     # -----------------------------------------------------------
     # VIEW: LOGIN
@@ -510,7 +594,7 @@ if not st.session_state["authenticated"]:
             st.rerun()
 
 # =====================================================================
-# --- 5. MAIN APP (Authenticated User) ---
+# --- 6. MAIN APP (Authenticated User) ---
 # =====================================================================
 else:
     
@@ -656,22 +740,23 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: -15px;'>ADD ITEM</p>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
 
-        with st.form("add_item_form", clear_on_submit=True):
-            item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L", label_visibility="collapsed")
-            c1, c2, c3 = st.columns([1.5, 2.5, 1])
-            with c1:
-                qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
-            with c2:
-                unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"], label_visibility="collapsed")
-            with c3:
-                submitted = st.form_submit_button("＋", help="Add to List")
-            
-            if submitted and item_name:
-                list_ws = sh.worksheet("Shopping List")
-                list_ws.append_row([item_name, qty, unit])
-                st.rerun()
+            with st.form("add_item_form", clear_on_submit=True):
+                item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L", label_visibility="collapsed")
+                c1, c2, c3 = st.columns([1.5, 2.5, 1])
+                with c1:
+                    qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
+                with c2:
+                    unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"], label_visibility="collapsed")
+                with c3:
+                    submitted = st.form_submit_button("＋", help="Add to List")
+                
+                if submitted and item_name:
+                    list_ws = sh.worksheet("Shopping List")
+                    list_ws.append_row([item_name, qty, unit])
+                    st.rerun()
 
         st.markdown("<br><p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
 
@@ -1008,9 +1093,9 @@ else:
                     st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
 
         # --- MAIN APP GLOBAL FOOTER ---
-        st.markdown("<hr style='margin: 40px 0 20px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 40px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         
-        fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([0.5, 1, 1.2, 0.1, 1.8, 0.5])
+        fc1, fc2, fc3, fc4, fc5 = st.columns([0.4, 1.1, 1.3, 2.5, 0.4])
         with fc2:
             if st.button("About Us", key="footer_about"):
                 st.session_state["current_page"] = "about"
@@ -1019,8 +1104,10 @@ else:
             if st.button("Privacy Policy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
-        with fc5:
+        with fc4:
             if st.button("Spot a Problem / Contact Us", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
                 st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
+
+Get Outlook for Android
