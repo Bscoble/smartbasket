@@ -244,17 +244,24 @@ st.markdown(f"""
         }}
     }}
 
-    /* SPLIT GET STARTED BUTTON OVERRIDE */
+    /* GET STARTED BUTTON OVERRIDE & SPLASH OVERLAY POSITIONING */
+    div[data-testid="element-container"]:has(button[data-testid="baseButton-primary"] div:contains("Get Started")) {{
+        margin-top: -340px !important;
+        margin-bottom: 240px !important;
+        padding: 0 30px !important;
+        position: relative !important;
+        z-index: 99 !important;
+    }}
+
     button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {{
         background-color: #ffffff !important;
         color: #005A36 !important;
         border-radius: 30px !important;
-        padding: 14px !important;
+        padding: 12px 24px !important;
         font-weight: 800 !important;
         font-size: 16px !important;
         width: 100% !important;
         border: none !important;
-        margin-top: 40px !important;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     }}
     button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover {{
@@ -444,7 +451,7 @@ st.markdown(f"""
 # =====================================================================
 if not st.session_state["app_started"]:
     st.markdown("""
-    <div style="background-color: #005A36; min-height: 850px; margin: -60px -20px -20px -20px; padding: 140px 20px 40px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; box-sizing: border-box;">
+    <div style="background-color: #005A36; min-height: 850px; margin: -60px -20px -20px -20px; padding: 220px 20px 40px 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; color: white; box-sizing: border-box;">
         <div style="background: rgba(255, 255, 255, 0.15); width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 25px auto; font-size: 38px; backdrop-filter: blur(5px);">
             🛒
         </div>
