@@ -196,11 +196,29 @@ def generate_smart_basket_report(user_items, selected_stores):
         "item_breakdown": item_breakdown
     }
 
+def send_secure_feedback(user_email, feedback_msg):
+    # This executes server-side. The email address is never exposed to the frontend HTML.
+    target_inbox = "bscoble74@gmail.com" 
+    url = f"https://formsubmit.co/ajax/{target_inbox}"
+    payload = {
+        "email": user_email,
+        "message": feedback_msg,
+        "_subject": "🚨 SmartBasket: New Problem Report"
+    }
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        return response.status_code == 200
+    except:
+        return False
+
 # --- 2. SESSION STATE INIT ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "auth_mode" not in st.session_state:
     st.session_state["auth_mode"] = "login"
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "home"
 if "prefs" not in st.session_state:
     st.session_state["prefs"] = load_store_preferences()
 
@@ -282,6 +300,25 @@ st.markdown(f"""
     div[data-testid="element-container"]:has(#split-card-anchor) + div[data-testid="element-container"] button {{
         opacity: 0 !important; height: 95px !important; width: 100% !important; z-index: 99 !important; cursor: pointer !important;
     }}
+    
+    /* CONTACT PAGE BACK BUTTON INVISIBLE OVERLAY */
+    div[data-testid="element-container"]:has(#contact-back-anchor) {{ display: none; }}
+    div[data-testid="element-container"]:has(#contact-back-anchor) + div[data-testid="element-container"] {{
+        margin-top: -65px !important; margin-bottom: 20px !important; margin-left: -5px !important; width: 40px !important;
+    }}
+    div[data-testid="element-container"]:has(#contact-back-anchor) + div[data-testid="element-container"] button {{
+        opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
+    }}
+
+    /* FOOTER TEXT LINK BUTTON */
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")) {{
+        background: none !important; border: none !important; padding: 0 !important;
+        color: #888 !important; font-size: 12px !important; font-weight: normal !important;
+        box-shadow: none !important; margin-top: -5px !important;
+    }}
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover {{
+        text-decoration: underline !important; color: #555 !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -310,7 +347,6 @@ if not st.session_state["authenticated"]:
                 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Center the toggle buttons
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
             st.button("Forgot password?", use_container_width=True)
@@ -346,266 +382,315 @@ if not st.session_state["authenticated"]:
                 st.session_state["auth_mode"] = "login"
                 st.rerun()
 
+# =====================================================================
+# --- 5. MAIN APP (Authenticated User) ---
+# =====================================================================
 else:
-    # =====================================================================
-    # --- 5. MAIN APP (Authenticated User) ---
-    # =====================================================================
-
-    # Determine dynamic greeting based on current time
-    current_hour = datetime.now().hour
-    if current_hour < 12:
-        greeting = "Good morning,"
-    elif current_hour < 18:
-        greeting = "Good afternoon,"
-    else:
-        greeting = "Good evening,"
-
-    st.markdown(f"""
-    <div class="app-header">
-        <div>
-            <p>{greeting}</p>
-            <h1>Brad</h1>
-        </div>
-        <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center;">
-            ↩
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: -15px;'>ADD ITEM</p>", unsafe_allow_html=True)
-
-    with st.form("add_item_form", clear_on_submit=True):
-        item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L", label_visibility="collapsed")
-        c1, c2, c3 = st.columns([1.5, 2.5, 1])
-        with c1:
-            qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
-        with c2:
-            unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"], label_visibility="collapsed")
-        with c3:
-            submitted = st.form_submit_button("＋", help="Add to List")
+    
+    # -----------------------------------------------------------
+    # VIEW: CONTACT PAGE
+    # -----------------------------------------------------------
+    if st.session_state["current_page"] == "contact":
         
-        if submitted and item_name:
-            list_ws = sh.worksheet("Shopping List")
-            list_ws.append_row([item_name, qty, unit])
+        st.markdown("""
+        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
+            <div style="display: flex; align-items: center; gap: 15px; color: white;">
+                <div style="font-size: 20px;">←</div>
+                <h1 style="font-size: 18px; margin: 0; color: white;">Spot a Problem / Contact Us</h1>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="contact-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_contact_back"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="border-left: 3px solid #005A36; padding-left: 15px; margin-bottom: 30px; margin-top: 10px; color: #444; font-size: 14px; line-height: 1.6;">
+            We're not perfect — <b>and that's okay.</b> Prices change, items get miscategorised, and occasionally things just don't work the way they should. Your reports are what help us fix it.<br><br>
+            Tell us what you found and we'll get straight onto it.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("contact_form"):
+            st.markdown("<b style='font-size: 13px;'>Your email address</b>", unsafe_allow_html=True)
+            email_input = st.text_input("Email", placeholder="so we can follow up when it's fixed", label_visibility="collapsed")
+            
+            st.markdown("<br><b style='font-size: 13px;'>What did you spot?</b>", unsafe_allow_html=True)
+            feedback_input = st.text_area("Feedback", placeholder="Describe the problem in as much detail as you can. The more context you give us, the faster we can fix it.", height=150, label_visibility="collapsed")
+            
+            submitted = st.form_submit_button("Submit Feedback", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not email_input or not feedback_input:
+                    st.error("Please fill in both fields so we can assist you properly.")
+                else:
+                    success = send_secure_feedback(email_input, feedback_input)
+                    if success:
+                        st.success("Thanks! Your feedback has been sent to our team.")
+                    else:
+                        st.error("Something went wrong sending the report. Please try again later.")
+
+    # -----------------------------------------------------------
+    # VIEW: HOME / LIST PAGE
+    # -----------------------------------------------------------
+    elif st.session_state["current_page"] == "home":
+
+        current_hour = datetime.now().hour
+        if current_hour < 12:
+            greeting = "Good morning,"
+        elif current_hour < 18:
+            greeting = "Good afternoon,"
+        else:
+            greeting = "Good evening,"
+
+        st.markdown(f"""
+        <div class="app-header">
+            <div>
+                <p>{greeting}</p>
+                <h1>Brad</h1>
+            </div>
+            <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center;">
+                ↩
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: -15px;'>ADD ITEM</p>", unsafe_allow_html=True)
+
+        with st.form("add_item_form", clear_on_submit=True):
+            item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L", label_visibility="collapsed")
+            c1, c2, c3 = st.columns([1.5, 2.5, 1])
+            with c1:
+                qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
+            with c2:
+                unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"], label_visibility="collapsed")
+            with c3:
+                submitted = st.form_submit_button("＋", help="Add to List")
+            
+            if submitted and item_name:
+                list_ws = sh.worksheet("Shopping List")
+                list_ws.append_row([item_name, qty, unit])
+                st.rerun()
+
+        st.markdown("<br><p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
+
+        st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            sel_woolies = st.checkbox("Woolworths", value=prefs["Woolworths"])
+        with col2:
+            sel_coles = st.checkbox("Coles", value=prefs["Coles"])
+        with col3:
+            sel_aldi = st.checkbox("Aldi", value=prefs["Aldi"])
+        with col4:
+            sel_iga = st.checkbox("IGA", value=prefs["IGA"])
+
+        new_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
+        if new_prefs != prefs:
+            save_store_preferences(new_prefs)
+            st.session_state["prefs"] = new_prefs
             st.rerun()
 
-    st.markdown("<br><p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
+        active_names = [name for name, active in new_prefs.items() if active]
+        st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
 
-    # Invisible marker to isolate pill CSS logic
-    st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        sel_woolies = st.checkbox("Woolworths", value=prefs["Woolworths"])
-    with col2:
-        sel_coles = st.checkbox("Coles", value=prefs["Coles"])
-    with col3:
-        sel_aldi = st.checkbox("Aldi", value=prefs["Aldi"])
-    with col4:
-        sel_iga = st.checkbox("IGA", value=prefs["IGA"])
+        try:
+            list_ws = sh.worksheet("Shopping List")
+            current_items = list_ws.get_all_values()
+        except Exception:
+            current_items = []
 
-    new_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
-    if new_prefs != prefs:
-        save_store_preferences(new_prefs)
-        st.session_state["prefs"] = new_prefs
-        st.rerun()
+        valid_rows_with_indices = []
+        if current_items:
+            for sheet_idx, row in enumerate(current_items, start=1):
+                if len(row) >= 3 and row[0].strip():
+                    valid_rows_with_indices.append((sheet_idx, row))
 
-    active_names = [name for name, active in new_prefs.items() if active]
-    st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
+        item_count = len(valid_rows_with_indices)
 
-    try:
-        list_ws = sh.worksheet("Shopping List")
-        current_items = list_ws.get_all_values()
-    except Exception:
-        current_items = []
+        c_head1, c_head2 = st.columns([3, 1])
+        with c_head1:
+            st.markdown(f"<p style='font-size: 13px; font-weight: 700; color: #666;'>MY LIST ({item_count} ITEMS)</p>", unsafe_allow_html=True)
+        with c_head2:
+            if item_count > 0:
+                st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
+                if st.button("Clear all", type="secondary"):
+                    list_ws.clear()
+                    list_ws.append_row(["Item", "Qty", "Unit"])
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    valid_rows_with_indices = []
-    if current_items:
-        for sheet_idx, row in enumerate(current_items, start=1):
-            if len(row) >= 3 and row[0].strip():
-                valid_rows_with_indices.append((sheet_idx, row))
+        if valid_rows_with_indices:
+            for sheet_idx, row in valid_rows_with_indices:
+                i_name = row[0]
+                try: i_qty = int(row[1])
+                except ValueError: i_qty = 1
+                i_unit = row[2]
 
-    item_count = len(valid_rows_with_indices)
-
-    c_head1, c_head2 = st.columns([3, 1])
-    with c_head1:
-        st.markdown(f"<p style='font-size: 13px; font-weight: 700; color: #666;'>MY LIST ({item_count} ITEMS)</p>", unsafe_allow_html=True)
-    with c_head2:
-        if item_count > 0:
-            st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
-            if st.button("Clear all", type="secondary"):
-                list_ws.clear()
-                list_ws.append_row(["Item", "Qty", "Unit"])
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    if valid_rows_with_indices:
-        for sheet_idx, row in valid_rows_with_indices:
-            i_name = row[0]
-            try: i_qty = int(row[1])
-            except ValueError: i_qty = 1
-            i_unit = row[2]
-
-            cols = st.columns([0.5, 2.2, 1.3, 0.5])
-            with cols[0]:
-                st.markdown("<div style='padding-top: 10px; opacity: 0.5;'>🛒</div>", unsafe_allow_html=True)
-            with cols[1]:
-                st.markdown(f"<div style='padding-top: 5px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
-            with cols[2]:
-                sub_c1, sub_c2, sub_c3 = st.columns(3)
-                with sub_c1:
-                    if st.button("➖", key=f"sub_{sheet_idx}"):
-                        if i_qty > 1:
-                            list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
+                cols = st.columns([0.5, 2.2, 1.3, 0.5])
+                with cols[0]:
+                    st.markdown("<div style='padding-top: 10px; opacity: 0.5;'>🛒</div>", unsafe_allow_html=True)
+                with cols[1]:
+                    st.markdown(f"<div style='padding-top: 5px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
+                with cols[2]:
+                    sub_c1, sub_c2, sub_c3 = st.columns(3)
+                    with sub_c1:
+                        if st.button("➖", key=f"sub_{sheet_idx}"):
+                            if i_qty > 1:
+                                list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
+                                st.rerun()
+                    with sub_c2:
+                        st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight: bold;'>{i_qty}</div>", unsafe_allow_html=True)
+                    with sub_c3:
+                        if st.button("➕", key=f"add_{sheet_idx}"):
+                            list_ws.update(f'B{sheet_idx}', [[i_qty + 1]])
                             st.rerun()
-                with sub_c2:
-                    st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight: bold;'>{i_qty}</div>", unsafe_allow_html=True)
-                with sub_c3:
-                    if st.button("➕", key=f"add_{sheet_idx}"):
-                        list_ws.update(f'B{sheet_idx}', [[i_qty + 1]])
+                with cols[3]:
+                    if st.button("❌", key=f"del_{sheet_idx}"):
+                        list_ws.delete_rows(sheet_idx)
                         st.rerun()
-            with cols[3]:
-                if st.button("❌", key=f"del_{sheet_idx}"):
-                    list_ws.delete_rows(sheet_idx)
-                    st.rerun()
-                    
-            st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
-        
-        store_count_label = len(active_names)
-        
-        if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary"):
-            if not active_names:
-                st.error("Please select at least one store to compare.")
-            else:
-                with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
-                    fresh_items = list_ws.get_all_values()
-                    report = generate_smart_basket_report(fresh_items, active_names)
-                    
-                if report:
-                    st.session_state["report"] = report
-                    st.session_state["shopping_active"] = True
-                    st.session_state["active_tab"] = "Overview"
-                    st.rerun()
+                        
+                st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+            
+            store_count_label = len(active_names)
+            
+            if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary"):
+                if not active_names:
+                    st.error("Please select at least one store to compare.")
                 else:
-                    st.error("No valid items found to compare.")
-
-        # --- RESULTS SCREEN ---
-        if "report" in st.session_state and st.session_state.get("shopping_active", False):
-            report = st.session_state["report"]
-            
-            st.markdown(f"### Price Comparison")
-            st.caption(f"{report['total_items']} items across {len(active_names)} stores")
-            
-            if "active_tab" not in st.session_state:
-                st.session_state["active_tab"] = "Overview"
-
-            tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], 
-                                  index=["Overview", "Breakdown", "Discount Cycle"].index(st.session_state["active_tab"]),
-                                  horizontal=True, label_visibility="collapsed", key="nav_radio")
-            
-            st.session_state["active_tab"] = tab_choice
-            
-            if tab_choice == "Overview":
-                st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
-                
-                single_best = report["comparison_modes"]["single_store_best"]
-                split_opt = report["comparison_modes"]["split_store_optimal"]
-                
-                single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
-                
-                c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
-                c1_border_width = "2px" if single_is_recommended else "1px"
-                c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
-
-                html_single = f"""
-                <div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
-                    {c1_badge}
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <div style="font-size: 26px;">🏪</div>
-                            <div style="line-height: 1.3;">
-                                <div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>
-                                <div style="font-size: 13px; color: #666;">Best of your stores: {single_best['store_name']}</div>
-                            </div>
-                        </div>
-                        <div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best['total_cost']:.2f}</div>
-                    </div>
-                </div>
-                """
-                st.markdown(html_single, unsafe_allow_html=True)
-                st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
-                if st.button("Shop Single", key="btn_single", use_container_width=True):
-                    st.session_state["active_tab"] = "Breakdown"
-                    st.rerun()
-                
-                c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
-                c2_border_width = "2px" if not single_is_recommended else "1px"
-                c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
-
-                html_split = f"""
-                <div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
-                    {c2_badge}
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <div style="font-size: 26px;">🛍️</div>
-                            <div style="line-height: 1.3;">
-                                <div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>
-                                <div style="font-size: 13px; color: #666;">Buy each item where it's cheapest</div>
-                            </div>
-                        </div>
-                        <div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt['total_cost']:.2f}</div>
-                    </div>
-                </div>
-                """
-                st.markdown(html_split, unsafe_allow_html=True)
-                st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
-                if st.button("Shop Split", key="btn_split", use_container_width=True):
-                    st.session_state["active_tab"] = "Breakdown"
-                    st.rerun()
-
-                st.divider()
-                st.markdown("#### STORE RANKING — FULL BASKET")
-                for store in report["store_rankings"]:
-                    with st.container(border=True):
-                        badge_txt = f"[{store['badge']}]" if store['badge'] else ""
-                        st.markdown(f"**{store['store']}** {badge_txt} \n\n **${store['total_cost']:.2f}** *({store['difference_from_best']})*")
+                    with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
+                        fresh_items = list_ws.get_all_values()
+                        report = generate_smart_basket_report(fresh_items, active_names)
                         
-            elif tab_choice == "Breakdown":
-                st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
+                    if report:
+                        st.session_state["report"] = report
+                        st.session_state["shopping_active"] = True
+                        st.session_state["active_tab"] = "Overview"
+                        st.rerun()
+                    else:
+                        st.error("No valid items found to compare.")
+
+            # --- RESULTS SCREEN ---
+            if "report" in st.session_state and st.session_state.get("shopping_active", False):
+                report = st.session_state["report"]
                 
-                for item in report["item_breakdown"]:
-                    with st.container(border=True):
-                        st.markdown(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.85em;'>× {item['quantity']}</span>", unsafe_allow_html=True)
-                        
-                        for store_idx, (store_name, store_data) in enumerate(item["all_stores"]):
-                            store_initial = store_name[0].upper()
-                            is_best = (store_idx == 0)
-                            
-                            best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
-                            
-                            html_row = f"""
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
-                                <div><b>{store_initial}</b> &nbsp; {store_name}</div>
-                                <div>
-                                    <span style="color: gray; font-size: 0.85em;">{store_data['unit_price']}</span> &nbsp;&nbsp; 
-                                    <b>${store_data['total_price']:.2f}</b>
-                                    {best_badge}
+                st.markdown(f"### Price Comparison")
+                st.caption(f"{report['total_items']} items across {len(active_names)} stores")
+                
+                if "active_tab" not in st.session_state:
+                    st.session_state["active_tab"] = "Overview"
+
+                tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], 
+                                      index=["Overview", "Breakdown", "Discount Cycle"].index(st.session_state["active_tab"]),
+                                      horizontal=True, label_visibility="collapsed", key="nav_radio")
+                
+                st.session_state["active_tab"] = tab_choice
+                
+                if tab_choice == "Overview":
+                    st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
+                    
+                    single_best = report["comparison_modes"]["single_store_best"]
+                    split_opt = report["comparison_modes"]["split_store_optimal"]
+                    
+                    single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
+                    
+                    c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
+                    c1_border_width = "2px" if single_is_recommended else "1px"
+                    c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
+
+                    html_single = f"""
+                    <div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
+                        {c1_badge}
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div style="font-size: 26px;">🏪</div>
+                                <div style="line-height: 1.3;">
+                                    <div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>
+                                    <div style="font-size: 13px; color: #666;">Best of your stores: {single_best['store_name']}</div>
                                 </div>
                             </div>
-                            """
-                            st.markdown(html_row, unsafe_allow_html=True)
+                            <div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best['total_cost']:.2f}</div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_single, unsafe_allow_html=True)
+                    st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
+                    if st.button("Shop Single", key="btn_single", use_container_width=True):
+                        st.session_state["active_tab"] = "Breakdown"
+                        st.rerun()
+                    
+                    c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
+                    c2_border_width = "2px" if not single_is_recommended else "1px"
+                    c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
 
-            elif tab_choice == "Discount Cycle":
-                st.markdown("#### DISCOUNT CYCLE")
-                st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
+                    html_split = f"""
+                    <div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">
+                        {c2_badge}
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div style="font-size: 26px;">🛍️</div>
+                                <div style="line-height: 1.3;">
+                                    <div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>
+                                    <div style="font-size: 13px; color: #666;">Buy each item where it's cheapest</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt['total_cost']:.2f}</div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_split, unsafe_allow_html=True)
+                    st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
+                    if st.button("Shop Split", key="btn_split", use_container_width=True):
+                        st.session_state["active_tab"] = "Breakdown"
+                        st.rerun()
 
-    # --- MAIN APP GLOBAL FOOTER ---
-    st.markdown("""
-    <hr style='margin: 40px 0 20px 0; opacity: 0.2;'>
-    <div style="text-align: center; font-size: 12px;">
-        <a href="#" style="color: #888; text-decoration: none;">About Us</a> &nbsp;|&nbsp; 
-        <a href="#" style="color: #888; text-decoration: none;">Privacy Policy</a> &nbsp;|&nbsp; 
-        <a href="#" style="color: #888; text-decoration: none;">Spot a Problem / Contact Us</a>
-    </div>
-    <br>
-    """, unsafe_allow_html=True)
+                    st.divider()
+                    st.markdown("#### STORE RANKING — FULL BASKET")
+                    for store in report["store_rankings"]:
+                        with st.container(border=True):
+                            badge_txt = f"[{store['badge']}]" if store['badge'] else ""
+                            st.markdown(f"**{store['store']}** {badge_txt} \n\n **${store['total_cost']:.2f}** *({store['difference_from_best']})*")
+                            
+                elif tab_choice == "Breakdown":
+                    st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
+                    
+                    for item in report["item_breakdown"]:
+                        with st.container(border=True):
+                            st.markdown(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.85em;'>× {item['quantity']}</span>", unsafe_allow_html=True)
+                            
+                            for store_idx, (store_name, store_data) in enumerate(item["all_stores"]):
+                                store_initial = store_name[0].upper()
+                                is_best = (store_idx == 0)
+                                
+                                best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
+                                
+                                html_row = f"""
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
+                                    <div><b>{store_initial}</b> &nbsp; {store_name}</div>
+                                    <div>
+                                        <span style="color: gray; font-size: 0.85em;">{store_data['unit_price']}</span> &nbsp;&nbsp; 
+                                        <b>${store_data['total_price']:.2f}</b>
+                                        {best_badge}
+                                    </div>
+                                </div>
+                                """
+                                st.markdown(html_row, unsafe_allow_html=True)
+
+                elif tab_choice == "Discount Cycle":
+                    st.markdown("#### DISCOUNT CYCLE")
+                    st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
+
+        # --- MAIN APP GLOBAL FOOTER ---
+        st.markdown("<hr style='margin: 40px 0 20px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        
+        fc1, fc2, fc3, fc4, fc5 = st.columns([1, 1.2, 0.1, 2, 1])
+        with fc2:
+            st.markdown("<div style='text-align: right; padding-top: 5px;'><a href='#' style='color: #888; text-decoration: none; font-size: 12px;'>About Us</a> &nbsp;|&nbsp; <a href='#' style='color: #888; text-decoration: none; font-size: 12px;'>Privacy Policy</a> &nbsp;|</div>", unsafe_allow_html=True)
+        with fc4:
+            if st.button("Spot a Problem / Contact Us", key="footer_contact"):
+                st.session_state["current_page"] = "contact"
+                st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
