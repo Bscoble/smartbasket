@@ -583,4 +583,13 @@ else:
                 st.markdown("#### DISCOUNT CYCLE")
                 st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
 
-
+    # --- MAIN APP GLOBAL FOOTER ---
+    st.markdown("""
+    <hr style='margin: 40px 0 20px 0; opacity: 0.2;'>
+    <div style="text-align: center; font-size: 12px;">
+        <a href="#" style="color: #888; text-decoration: none;">About Us</a> &nbsp;|&nbsp; 
+        <a href="#" style="color: #888; text-decoration: none;">Privacy Policy</a> &nbsp;|&nbsp; 
+        <a href="#" style="color: #888; text-decoration: none;">Spot a Problem / Contact Us</a>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
