@@ -240,29 +240,30 @@ st.markdown(f"""
             border-radius: 44px !important;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
             overflow-y: auto !important;
+            overflow-x: hidden !important;
             background-color: #ffffff !important;
         }}
     }}
 
-    /* GET STARTED BUTTON OVERRIDE & SPLASH OVERLAY POSITIONING */
-    div[data-testid="element-container"]:has(button[data-testid="baseButton-primary"] div:contains("Get Started")) {{
-        margin-top: -340px !important;
-        margin-bottom: 240px !important;
-        padding: 0 30px !important;
-        position: relative !important;
-        z-index: 99 !important;
+    /* REMOVE EDGE PADDING TO FIX RIGHT-SIDE WHITE STRIPE */
+    div[data-testid="stMainBlockContainer"], .main .block-container {{
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
     }}
 
+    /* SPLASH GET STARTED BUTTON OVERRIDE */
     button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {{
         background-color: #ffffff !important;
         color: #005A36 !important;
         border-radius: 30px !important;
-        padding: 12px 24px !important;
+        padding: 14px 20px !important;
         font-weight: 800 !important;
         font-size: 16px !important;
         width: 100% !important;
         border: none !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.25) !important;
+        margin-top: 20px !important;
     }}
     button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover {{
         background-color: #f2f2f2 !important;
@@ -451,18 +452,31 @@ st.markdown(f"""
 # =====================================================================
 if not st.session_state["app_started"]:
     st.markdown("""
-    <div style="background-color: #005A36; min-height: 850px; margin: -60px -20px -20px -20px; padding: 220px 20px 40px 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; color: white; box-sizing: border-box;">
+    <style>
+        .stApp {
+            background-color: #005A36 !important;
+        }
+        div[data-testid="stMainBlockContainer"], .main .block-container {
+            padding: 0 !important;
+        }
+        header[data-testid="stHeader"] {
+            display: none !important;
+        }
+    </style>
+    <div style="background-color: #005A36; padding: 180px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
         <div style="background: rgba(255, 255, 255, 0.15); width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 25px auto; font-size: 38px; backdrop-filter: blur(5px);">
             🛒
         </div>
         <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0 0 10px 0; color: white;">SmartBasket</h1>
-        <p style="font-size: 15px; opacity: 0.9; margin: 0; font-weight: 400;">Shop smarter. Save every week.</p>
+        <p style="font-size: 15px; opacity: 0.9; margin: 0 0 40px 0; font-weight: 400;">Shop smarter. Save every week.</p>
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("Get Started", type="primary", use_container_width=True):
-        st.session_state["app_started"] = True
-        st.rerun()
+    col_l, col_m, col_r = st.columns([0.1, 0.8, 0.1])
+    with col_m:
+        if st.button("Get Started", type="primary", use_container_width=True, key="splash_get_started"):
+            st.session_state["app_started"] = True
+            st.rerun()
 
 # =====================================================================
 # --- 5. AUTHENTICATION & FORGOT PASSWORD ROUTING ---
