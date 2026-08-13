@@ -6,6 +6,7 @@ import urllib.parse
 import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered")
@@ -240,11 +241,14 @@ st.markdown(f"""
     .app-header h1 {{ margin: 0; color: white; font-size: 26px; font-weight: 800; padding-top: 5px; }}
     .app-header p {{ margin: 0; font-size: 14px; opacity: 0.9; }}
 
-    /* DYNAMIC STORE PILLS */
-    div[data-testid="stHorizontalBlock"] div:nth-child(1) label span {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; }}
-    div[data-testid="stHorizontalBlock"] div:nth-child(2) label span {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; }}
-    div[data-testid="stHorizontalBlock"] div:nth-child(3) label span {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; }}
-    div[data-testid="stHorizontalBlock"] div:nth-child(4) label span {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; }}
+    /* DYNAMIC STORE PILLS (Hiding native checkboxes and styling the label) */
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label [data-baseweb="checkbox"] {{
+        display: none !important;
+    }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; display: inline-block; margin: 0; }}
 
     /* PRIMARY BUTTONS (Auth & Compare) */
     button[data-testid="baseButton-primary"] {{
@@ -347,10 +351,19 @@ else:
     # --- 5. MAIN APP (Authenticated User) ---
     # =====================================================================
 
-    st.markdown("""
+    # Determine dynamic greeting based on current time
+    current_hour = datetime.now().hour
+    if current_hour < 12:
+        greeting = "Good morning,"
+    elif current_hour < 18:
+        greeting = "Good afternoon,"
+    else:
+        greeting = "Good evening,"
+
+    st.markdown(f"""
     <div class="app-header">
         <div>
-            <p>Good morning,</p>
+            <p>{greeting}</p>
             <h1>Brad</h1>
         </div>
         <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center;">
@@ -378,6 +391,9 @@ else:
 
     st.markdown("<br><p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
 
+    # Invisible marker to isolate pill CSS logic
+    st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         sel_woolies = st.checkbox("Woolworths", value=prefs["Woolworths"])
