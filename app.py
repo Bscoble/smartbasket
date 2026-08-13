@@ -225,9 +225,36 @@ if "prefs" not in st.session_state:
 
 prefs = st.session_state["prefs"]
 
-# --- 3. CUSTOM FIGMA CSS ---
+# --- 3. CUSTOM FIGMA CSS & PHONE FRAME SILHOUETTE ---
 st.markdown(f"""
 <style>
+    /* IPHONE SILHOUETTE WRAPPER FOR DESKTOP VIEW */
+    @media (min-width: 768px) {{
+        .stApp {{
+            max-width: 410px !important;
+            margin: 30px auto !important;
+            border: 14px solid #1c1c1e !important;
+            border-radius: 48px !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+            overflow: hidden !important;
+            background-color: #ffffff !important;
+            position: relative !important;
+        }}
+        .stApp::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 25px;
+            background-color: #1c1c1e;
+            border-bottom-left-radius: 14px;
+            border-bottom-right-radius: 14px;
+            z-index: 999999;
+        }}
+    }}
+
     /* AUTH HEADER */
     .auth-header {{
         background-color: #005A36;
@@ -480,10 +507,11 @@ else:
     # -----------------------------------------------------------
     if st.session_state["current_page"] == "about":
         st.markdown("""
-        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
-            <div style="display: flex; align-items: center; gap: 15px; color: white;">
-                <div style="font-size: 20px;">←</div>
-                <h1 style="font-size: 18px; margin: 0; color: white;">About Us</h1>
+        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">←</div>
+            <div>
+                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">About Us</h1>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">SmartBasket Information</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -511,10 +539,11 @@ else:
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "privacy":
         st.markdown("""
-        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
-            <div style="display: flex; align-items: center; gap: 15px; color: white;">
-                <div style="font-size: 20px;">←</div>
-                <h1 style="font-size: 18px; margin: 0; color: white;">Privacy Policy</h1>
+        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">←</div>
+            <div>
+                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Privacy Policy</h1>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Data Protection & Terms</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -550,10 +579,11 @@ else:
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "contact":
         st.markdown("""
-        <div style="background-color: #005A36; margin: -60px -20px 20px -20px; padding: 20px; border-radius: 0 0 20px 20px;">
-            <div style="display: flex; align-items: center; gap: 15px; color: white;">
-                <div style="font-size: 20px;">←</div>
-                <h1 style="font-size: 18px; margin: 0; color: white;">Spot a Problem / Contact Us</h1>
+        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">←</div>
+            <div>
+                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Spot a Problem</h1>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Contact & Support</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -735,8 +765,15 @@ else:
             if "report" in st.session_state and st.session_state.get("shopping_active", False):
                 report = st.session_state["report"]
                 
-                st.markdown(f"### Price Comparison")
-                st.caption(f"{report['total_items']} items across {len(active_names)} stores")
+                st.markdown(f"""
+                <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+                    <div style="font-size: 20px;">←</div>
+                    <div>
+                        <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Price Comparison</h1>
+                        <p style="margin: 0; font-size: 13px; opacity: 0.9;">{report['total_items']} items across {len(active_names)} stores</p>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 if "active_tab" not in st.session_state:
                     st.session_state["active_tab"] = "Overview"
@@ -789,6 +826,12 @@ else:
                             s_initial = store_name[0].upper()
                             store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
                             
+                            # Dynamically calculate collected items count
+                            collected_count = 0
+                            for idx, item in enumerate(items):
+                                if st.session_state.get(f"chk_{store_name}_{idx}", False):
+                                    collected_count += 1
+                            
                             with st.container(border=True):
                                 st.markdown(f'''
                                 <div style="background-color: {b_color}; color: white; padding: 15px; margin: -16px -16px 15px -16px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center;">
@@ -796,7 +839,7 @@ else:
                                         <div style="background: rgba(255,255,255,0.2); width: 32px; height: 32px; display: flex; justify-content: center; align-items: center; border-radius: 6px; font-weight: 800; font-size: 16px;">{s_initial}</div>
                                         <div>
                                             <div style="font-weight: 800; font-size: 16px;">{store_name}</div>
-                                            <div style="font-size: 12px; opacity: 0.9;">0/{len(items)} items collected</div>
+                                            <div style="font-size: 12px; opacity: 0.9;">{collected_count}/{len(items)} items collected</div>
                                         </div>
                                     </div>
                                     <div style="font-weight: 800; font-size: 18px;">${store_total:.2f}</div>
@@ -806,7 +849,7 @@ else:
                                 for idx, item in enumerate(items):
                                     c1, c2 = st.columns([3, 1])
                                     with c1:
-                                        st.checkbox(f"**{item['item_name']}** <span style='color:#888; font-size:12px; font-weight:normal;'>{item['unit_price']}</span>", key=f"chk_{store_name}_{idx}")
+                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=f"chk_{store_name}_{idx}")
                                     with c2:
                                         st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
                                     
@@ -843,7 +886,7 @@ else:
                         )
                         st.markdown(html_single, unsafe_allow_html=True)
                         st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
-                        if st.button("Shop Single", key="btn_single", use_container_width=True):
+                        if st.button("", key="btn_single", use_container_width=True):
                             st.session_state["active_tab"] = "Breakdown"
                             st.rerun()
                         
@@ -866,7 +909,7 @@ else:
                         )
                         st.markdown(html_split, unsafe_allow_html=True)
                         st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
-                        if st.button("Shop Split", key="btn_split", use_container_width=True):
+                        if st.button("", key="btn_split", use_container_width=True):
                             st.session_state["shop_mode"] = "split"
                             st.rerun()
 
