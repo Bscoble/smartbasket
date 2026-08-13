@@ -218,6 +218,8 @@ if "auth_mode" not in st.session_state:
     st.session_state["auth_mode"] = "login"
 if "current_page" not in st.session_state:
     st.session_state["current_page"] = "home"
+if "reset_email" not in st.session_state:
+    st.session_state["reset_email"] = ""
 if "prefs" not in st.session_state:
     st.session_state["prefs"] = load_store_preferences()
 
@@ -309,17 +311,23 @@ st.markdown(f"""
         opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
     }}
 
-    /* FOOTER TEXT LINK BUTTONS */
+    /* FOOTER & AUTH TEXT LINK BUTTONS */
     button[data-testid="baseButton-secondary"]:has(div:contains("About Us")),
     button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")) {{
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")),
+    button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")),
+    button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")),
+    button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")) {{
         background: none !important; border: none !important; padding: 0 !important;
-        color: #888 !important; font-size: 12px !important; font-weight: normal !important;
+        color: #888 !important; font-size: 13px !important; font-weight: normal !important;
         box-shadow: none !important; margin-top: -5px !important;
     }}
     button[data-testid="baseButton-secondary"]:has(div:contains("About Us")):hover,
     button[data-testid="baseButton-secondary"]:has(div:contains("Privacy Policy")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover {{
+    button[data-testid="baseButton-secondary"]:has(div:contains("Spot a Problem")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")):hover,
+    button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")):hover {{
         text-decoration: underline !important; color: #555 !important;
     }}
 </style>
@@ -327,10 +335,13 @@ st.markdown(f"""
 
 
 # =====================================================================
-# --- 4. AUTHENTICATION ROUTING ---
+# --- 4. AUTHENTICATION & FORGOT PASSWORD ROUTING ---
 # =====================================================================
 if not st.session_state["authenticated"]:
     
+    # -----------------------------------------------------------
+    # VIEW: LOGIN
+    # -----------------------------------------------------------
     if st.session_state["auth_mode"] == "login":
         st.markdown("""
         <div class="auth-header">
@@ -352,12 +363,17 @@ if not st.session_state["authenticated"]:
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
-            st.button("Forgot password?", use_container_width=True)
+            if st.button("Forgot password?", use_container_width=True):
+                st.session_state["auth_mode"] = "forgot_password"
+                st.rerun()
             if st.button("Don't have an account? **Sign up**", use_container_width=True):
                 st.session_state["auth_mode"] = "signup"
                 st.rerun()
 
-    else:
+    # -----------------------------------------------------------
+    # VIEW: SIGN UP
+    # -----------------------------------------------------------
+    elif st.session_state["auth_mode"] == "signup":
         st.markdown("""
         <div class="auth-header">
             <div style="font-size: 40px; margin-bottom: -10px;">🛒</div>
@@ -384,6 +400,75 @@ if not st.session_state["authenticated"]:
             if st.button("Already have an account? **Sign in**", use_container_width=True):
                 st.session_state["auth_mode"] = "login"
                 st.rerun()
+
+    # -----------------------------------------------------------
+    # VIEW: FORGOT PASSWORD (STEP 1)
+    # -----------------------------------------------------------
+    elif st.session_state["auth_mode"] == "forgot_password":
+        st.markdown("""
+        <div class="auth-header">
+            <div style="font-size: 32px; margin-bottom: -5px;">🔑</div>
+            <h1>Reset password</h1>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_forgot_back"):
+            st.session_state["auth_mode"] = "login"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="color: #555; font-size: 14px; line-height: 1.5; margin-bottom: 20px;">
+            Enter the email address linked to your account and we'll send you a link to reset your password.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("forgot_form"):
+            reset_email_input = st.text_input("Email address", placeholder="Email address", label_visibility="collapsed")
+            
+            submitted = st.form_submit_button("Send Reset Link", type="primary", use_container_width=True)
+            if submitted:
+                if reset_email_input:
+                    st.session_state["reset_email"] = reset_email_input
+                else:
+                    st.session_state["reset_email"] = "bscoble74@gmail.com"
+                st.session_state["auth_mode"] = "forgot_success"
+                st.rerun()
+
+    # -----------------------------------------------------------
+    # VIEW: FORGOT PASSWORD SUCCESS (STEP 2)
+    # -----------------------------------------------------------
+    elif st.session_state["auth_mode"] == "forgot_success":
+        st.markdown("""
+        <div class="auth-header">
+            <div style="font-size: 32px; margin-bottom: -5px;">🔑</div>
+            <h1>Reset password</h1>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_success_back"):
+            st.session_state["auth_mode"] = "login"
+            st.rerun()
+            
+        target_email = st.session_state.get("reset_email", "bscoble74@gmail.com")
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin-top: 20px;">
+            <div style="font-size: 36px; margin-bottom: 10px;">📧</div>
+            <h3 style="font-family: 'Georgia', serif; font-size: 20px; color: #111; margin-bottom: 10px;">Check your email</h3>
+            <p style="color: #555; font-size: 14px; line-height: 1.5; margin-bottom: 25px;">
+                We've sent a password reset link to<br><b>{target_email}</b>
+            </p>
+            <p style="color: #888; font-size: 12px; margin-bottom: 30px;">
+                Didn't receive it? Check your spam folder or try again in a few minutes.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Back to Sign In", type="primary", use_container_width=True):
+            st.session_state["auth_mode"] = "login"
+            st.rerun()
 
 # =====================================================================
 # --- 5. MAIN APP (Authenticated User) ---
