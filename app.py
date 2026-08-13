@@ -232,17 +232,27 @@ st.markdown(f"""
     @media (min-width: 768px) {{
         .stApp {{
             max-width: 410px !important;
+            height: 850px !important;
+            max-height: 90vh !important;
             margin: 30px auto !important;
             border: 14px solid #1c1c1e !important;
             border-radius: 48px !important;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
-            overflow: hidden !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
             background-color: #ffffff !important;
             position: relative !important;
         }}
+        .stApp::-webkit-scrollbar {{
+            width: 6px;
+        }}
+        .stApp::-webkit-scrollbar-thumb {{
+            background: #ccc;
+            border-radius: 3px;
+        }}
         .stApp::before {{
             content: '';
-            position: absolute;
+            position: sticky;
             top: 0;
             left: 50%;
             transform: translateX(-50%);
@@ -252,6 +262,8 @@ st.markdown(f"""
             border-bottom-left-radius: 14px;
             border-bottom-right-radius: 14px;
             z-index: 999999;
+            display: block;
+            margin: 0 auto;
         }}
     }}
 
