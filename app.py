@@ -316,17 +316,19 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
 
-    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON) */
+    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON - WIDER & DARK GREEN) */
     button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")) {{
         background-color: #005A36 !important;
         color: white !important;
-        border-radius: 30px !important;
-        padding: 14px 20px !important;
+        border-radius: 35px !important;
+        padding: 16px 24px !important;
         font-weight: 800 !important;
-        font-size: 16px !important;
+        font-size: 16.5px !important;
         width: 100% !important;
         border: none !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.2) !important;
+        margin-top: 20px !important;
+        margin-bottom: 10px !important;
     }}
     button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")):hover {{
         background-color: #004D2E !important;
@@ -840,11 +842,11 @@ else:
                 except ValueError: i_qty = 1
                 i_unit = row[2]
 
-                cols = st.columns([0.5, 2.2, 1.3, 0.5])
+                cols = st.columns([0.6, 2.1, 1.3, 0.5])
                 with cols[0]:
-                    st.markdown("<div style='padding-top: 10px; opacity: 0.5;'>🛒</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;'>🛒</div>", unsafe_allow_html=True)
                 with cols[1]:
-                    st.markdown(f"<div style='padding-top: 5px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding-top: 2px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
                 with cols[2]:
                     sub_c1, sub_c2, sub_c3 = st.columns(3)
                     with sub_c1:
@@ -867,7 +869,7 @@ else:
             
             store_count_label = len(active_names)
             
-            if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary"):
+            if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary", use_container_width=True):
                 if not active_names:
                     st.error("Please select at least one store to compare.")
                 else:
