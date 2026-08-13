@@ -7,6 +7,8 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+from PIL import Image
+from pyzbar.pyzbar import decode
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered")
@@ -210,6 +212,36 @@ def send_secure_feedback(user_email, feedback_msg):
         return response.status_code == 200
     except:
         return False
+
+def decode_barcode(image_file):
+    """Extracts numeric barcode string from camera photo."""
+    try:
+        img = Image.open(image_file)
+        decoded_objects = decode(img)
+        for obj in decoded_objects:
+            return obj.data.decode("utf-8")
+    except Exception:
+        pass
+    return None
+
+def lookup_barcode_product(barcode):
+    """Fetches human-readable product title from Open Food Facts API."""
+    url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
+    headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == 1:
+                product = data.get("product", {})
+                name = product.get("product_name_en") or product.get("product_name")
+                brand = product.get("brands")
+                if name:
+                    return f"{brand} {name}".strip() if brand else name
+    except Exception:
+        pass
+    return None
 
 # --- 2. SESSION STATE INIT ---
 if "app_started" not in st.session_state:
@@ -834,6 +866,26 @@ else:
                     list_ws = sh.worksheet("Shopping List")
                     list_ws.append_row([item_name, qty, unit])
                     st.rerun()
+
+            with st.expander("📷 Scan Barcode from Pantry"):
+                camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
+                if camera_photo:
+                    with st.spinner("Reading barcode..."):
+                        barcode_number = decode_barcode(camera_photo)
+                        if barcode_number:
+                            st.success(f"Scanned Barcode: `{barcode_number}`")
+                            product_name = lookup_barcode_product(barcode_number)
+                            if product_name:
+                                st.info(f"Found: **{product_name}**")
+                                if st.button(f"➕ Add '{product_name}' to List", type="primary"):
+                                    list_ws = sh.worksheet("Shopping List")
+                                    list_ws.append_row([product_name, 1, "each"])
+                                    st.success(f"Added {product_name} to your list!")
+                                    st.rerun()
+                            else:
+                                st.warning("Product not found in database. Please enter the name manually.")
+                        else:
+                            st.error("No barcode detected in image. Try holding the camera closer and ensuring good lighting.")
 
         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
 
