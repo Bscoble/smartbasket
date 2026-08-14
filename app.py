@@ -116,9 +116,6 @@ run_input = {
     "proxy": {
         "useApifyProxy": True, 
         "apifyProxyGroups": ["RESIDENTIAL"] } } 
-
-
-                }
             }
             run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
             
