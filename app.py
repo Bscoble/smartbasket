@@ -257,7 +257,7 @@ def decode_barcode(image_file):
     return None
 
 def lookup_barcode_product(barcode):
-    """Fetches human-readable product title from Open Food Facts API."""
+    """Fetches human-readable product title and image URL from Open Food Facts API."""
     url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
     headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
     
@@ -269,11 +269,14 @@ def lookup_barcode_product(barcode):
                 product = data.get("product", {})
                 name = product.get("product_name_en") or product.get("product_name")
                 brand = product.get("brands")
-                if name:
-                    return f"{brand} {name}".strip() if brand else name
+                image_url = product.get("image_front_url") or product.get("image_url") or ""
+                
+                title = f"{brand} {name}".strip() if brand else name
+                if title:
+                    return title, image_url
     except Exception:
         pass
-    return None
+    return None, None
 
 # --- 2. SESSION STATE INIT ---
 if "app_started" not in st.session_state:
@@ -896,7 +899,7 @@ else:
                 
                 if submitted and item_name:
                     list_ws = sh.worksheet("Shopping List")
-                    list_ws.append_row([item_name, qty, unit])
+                    list_ws.append_row([item_name, qty, unit, ""])
                     st.rerun()
 
             with st.expander("📷 Scan Barcode from Pantry"):
@@ -906,12 +909,14 @@ else:
                         barcode_number = decode_barcode(camera_photo)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
-                            product_name = lookup_barcode_product(barcode_number)
+                            product_name, product_image = lookup_barcode_product(barcode_number)
                             if product_name:
                                 st.info(f"Found: **{product_name}**")
+                                if product_image:
+                                    st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
                                     list_ws = sh.worksheet("Shopping List")
-                                    list_ws.append_row([product_name, 1, "each"])
+                                    list_ws.append_row([product_name, 1, "each", product_image or ""])
                                     st.success(f"Added {product_name} to your list!")
                                     st.rerun()
                             else:
@@ -965,7 +970,7 @@ else:
                 st.markdown('<div class="clear-all-marker"></div>', unsafe_allow_html=True)
                 if st.button("Clear all", type="secondary"):
                     list_ws.clear()
-                    list_ws.append_row(["Item", "Qty", "Unit"])
+                    list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -975,10 +980,14 @@ else:
                 try: i_qty = int(row[1])
                 except ValueError: i_qty = 1
                 i_unit = row[2]
+                i_img = row[3].strip() if len(row) >= 4 and row[3] else ""
 
                 cols = st.columns([0.6, 2.1, 1.3, 0.5])
                 with cols[0]:
-                    st.markdown("<div style='background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;'>🛒</div>", unsafe_allow_html=True)
+                    if i_img:
+                        st.markdown(f"<img src='{i_img}' style='width: 38px; height: 38px; border-radius: 10px; object-fit: cover; margin-top: 2px;' />", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div style='background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;'>🛒</div>", unsafe_allow_html=True)
                 with cols[1]:
                     st.markdown(f"<div style='padding-top: 2px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
                 with cols[2]:
