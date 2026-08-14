@@ -49,6 +49,41 @@ def save_store_preferences(prefs):
     except Exception:
         pass
 
+def load_price_cache():
+    """Loads the entire price cache into memory for fast lookups."""
+    try:
+        ws = sh.worksheet("Price Cache")
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Price Cache", rows="1000", cols="4")
+        ws.append_row(["Store", "Item", "Price", "Timestamp"])
+        return {}
+    
+    data = ws.get_all_values()
+    cache = {}
+    if len(data) > 1:
+        for row in data[1:]:
+            if len(row) >= 4:
+                store, item, price_str, ts_str = row[0], row[1], row[2], row[3]
+                try:
+                    ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                    price = float(price_str)
+                    cache[(store, item.lower())] = {"price": price, "timestamp": ts}
+                except ValueError:
+                    pass
+    return cache
+
+def save_price_cache(cache):
+    """Bulk saves the updated cache back to Google Sheets."""
+    try:
+        ws = sh.worksheet("Price Cache")
+        rows = [["Store", "Item", "Price", "Timestamp"]]
+        for (store, item), data in cache.items():
+            rows.append([store, item, str(data["price"]), data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")])
+        ws.clear()
+        ws.append_rows(rows)
+    except Exception:
+        pass
+
 def get_live_price(store, item_name, api_key):
     if store == "Woolworths":
         target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
@@ -112,13 +147,15 @@ def generate_smart_basket_report(user_items, selected_stores):
     total_items = len(valid_items)
     if total_items == 0: return None
     
+    status_text.text("Loading price cache...")
+    price_cache = load_price_cache()
+    cache_updated = False
+    
     for idx, row in enumerate(valid_items):
         item_name = row[0]
         try: qty = int(row[1])
         except ValueError: qty = 1
         unit = row[2]
-        
-        status_text.text(f"Scraping prices for: {item_name}...")
         
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
@@ -131,7 +168,28 @@ def generate_smart_basket_report(user_items, selected_stores):
         item_store_data = {}
         for store in selected_stores:
             if store in stores_to_search:
-                unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+                cache_key = (store, item_lower)
+                cached_data = price_cache.get(cache_key)
+                
+                use_cache = False
+                if cached_data:
+                    # Keep successful scrapes for 24h. Retry errors (99.99) after 1h.
+                    expiry_hours = 24 if cached_data["price"] < 90.00 else 1
+                    if (datetime.now() - cached_data["timestamp"]) < timedelta(hours=expiry_hours):
+                        use_cache = True
+                
+                if use_cache:
+                    status_text.text(f"Using cached price for: {item_name} at {store}...")
+                    unit_price = cached_data["price"]
+                    time.sleep(0.1) # Small visual buffer so the UI updates smoothly
+                else:
+                    status_text.text(f"Scraping live price for: {item_name} at {store}...")
+                    unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+                    price_cache[cache_key] = {
+                        "price": unit_price,
+                        "timestamp": datetime.now()
+                    }
+                    cache_updated = True
             else:
                 unit_price = 99.99 
                 
@@ -158,7 +216,10 @@ def generate_smart_basket_report(user_items, selected_stores):
         })
         
         progress_bar.progress((idx + 1) / total_items)
-        time.sleep(1) 
+        
+    if cache_updated:
+        status_text.text("Saving updated prices to cache...")
+        save_price_cache(price_cache)
         
     status_text.empty()
     progress_bar.empty()
@@ -377,6 +438,8 @@ if "prefs" not in st.session_state:
     st.session_state["prefs"] = load_store_preferences()
 if "last_savings" not in st.session_state:
     st.session_state["last_savings"] = 0.0
+if "expander_toggle" not in st.session_state:
+    st.session_state["expander_toggle"] = False
 
 prefs = st.session_state["prefs"]
 
@@ -1087,12 +1150,14 @@ else:
                     list_ws.append_row([item_name, qty, unit, ""])
                     st.rerun()
             
-            with st.expander("🕒 Add from Recent Shops"):
+            # Dynamic label toggle hack to force the expander to reset/collapse upon state change
+            recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
+            with st.expander(recent_shops_label):
                 recent_items = get_recent_history()
                 if not recent_items:
                     st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
                 else:
-                    with st.form("recent_shops_form"):
+                    with st.form("recent_shops_form", clear_on_submit=True):
                         st.markdown("<div style='font-size: 13px; font-weight:600; color:#555; margin-bottom: 10px;'>Select items to re-add to your list:</div>", unsafe_allow_html=True)
                         selected_indices = []
                         for idx, r_item in enumerate(recent_items):
@@ -1117,6 +1182,9 @@ else:
                                 for i in selected_indices:
                                     sr = recent_items[i]
                                     list_ws.append_row([sr["name"], 1, sr["unit"], sr["img"]])
+                                
+                                # Toggle state to trick Streamlit into generating a "new" expander component that starts collapsed
+                                st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
                                 st.rerun()
 
             with st.expander("🔍 Search Database by Name"):
