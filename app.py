@@ -228,7 +228,7 @@ def decode_barcode(image_file):
         res = check_image(img)
         if res: return res
 
-        # Pass 2: Grayscale & High Contrast (cuts glare on shiny cans/jars)
+        # Pass 2: Grayscale & High Contrast
         gray = ImageOps.grayscale(img)
         enhancer = ImageEnhance.Contrast(gray)
         high_contrast = enhancer.enhance(2.0)
@@ -241,13 +241,13 @@ def decode_barcode(image_file):
         res = check_image(sharp)
         if res: return res
 
-        # Pass 4: Auto-rotations (handles orientation glitches on mobile cameras)
+        # Pass 4: Auto-rotations
         for angle in [90, 180, 270]:
             rotated = high_contrast.rotate(angle, expand=True)
             res = check_image(rotated)
             if res: return res
 
-        # Pass 5: Black & White Binarization Threshold
+        # Pass 5: Binarization
         bw = gray.point(lambda p: 255 if p > 120 else 0)
         res = check_image(bw)
         if res: return res
@@ -277,6 +277,28 @@ def lookup_barcode_product(barcode):
     except Exception:
         pass
     return None, None
+
+def search_product_by_name(query):
+    """Searches Open Food Facts database by text query."""
+    url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={urllib.parse.quote(query)}&search_simple=1&action=process&json=1&page_size=5"
+    headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            for p in data.get("products", []):
+                name = p.get("product_name_en") or p.get("product_name")
+                brand = p.get("brands")
+                image_url = p.get("image_front_url") or p.get("image_url") or ""
+                title = f"{brand} {name}".strip() if brand else name
+                
+                if title and title not in [r['title'] for r in results]:
+                    results.append({"title": title, "image_url": image_url})
+            return results
+    except Exception:
+        pass
+    return []
 
 # --- 2. SESSION STATE INIT ---
 if "app_started" not in st.session_state:
@@ -902,6 +924,37 @@ else:
                     list_ws.append_row([item_name, qty, unit, ""])
                     st.rerun()
 
+            with st.expander("🔍 Search Database by Name"):
+                search_query = st.text_input("Search Open Food Facts", placeholder="e.g., Hillcrest Bubble", label_visibility="collapsed")
+                if st.button("Search Database", use_container_width=True):
+                    if search_query:
+                        with st.spinner("Searching database..."):
+                            results = search_product_by_name(search_query)
+                            if results:
+                                st.session_state["search_results"] = results
+                            else:
+                                st.session_state["search_results"] = []
+                                st.warning("No products found matching that name.")
+                
+                if st.session_state.get("search_results"):
+                    st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                    for idx, res in enumerate(st.session_state["search_results"]):
+                        sc1, sc2, sc3 = st.columns([1, 3, 1.5])
+                        with sc1:
+                            if res["image_url"]:
+                                st.markdown(f'<img src="{res["image_url"]}" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover;" />', unsafe_allow_html=True)
+                            else:
+                                st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px;">🛒</div>', unsafe_allow_html=True)
+                        with sc2:
+                            st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
+                        with sc3:
+                            if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
+                                list_ws = sh.worksheet("Shopping List")
+                                list_ws.append_row([res['title'], 1, "each", res['image_url']])
+                                st.session_state["search_results"] = []
+                                st.rerun()
+                        st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
+
             with st.expander("📷 Scan Barcode from Pantry"):
                 camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
                 if camera_photo:
@@ -985,7 +1038,6 @@ else:
                 cols = st.columns([0.6, 2.1, 1.3, 0.5])
                 with cols[0]:
                     if i_img:
-                        # Now using highly strict double quotes for HTML to prevent breakage from URL characters
                         st.markdown(f'<img src="{i_img}" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover; margin-top: 2px;" />', unsafe_allow_html=True)
                     else:
                         st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;">🛒</div>', unsafe_allow_html=True)
