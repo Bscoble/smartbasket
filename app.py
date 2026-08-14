@@ -375,6 +375,8 @@ if "reset_email" not in st.session_state:
     st.session_state["reset_email"] = ""
 if "prefs" not in st.session_state:
     st.session_state["prefs"] = load_store_preferences()
+if "last_savings" not in st.session_state:
+    st.session_state["last_savings"] = 0.0
 
 prefs = st.session_state["prefs"]
 
@@ -846,9 +848,89 @@ elif not st.session_state["authenticated"]:
 else:
     
     # -----------------------------------------------------------
+    # VIEW: SHOP CELEBRATION (POST-FINISH)
+    # -----------------------------------------------------------
+    if st.session_state["current_page"] == "celebration":
+        st.markdown("""
+        <div style="background-color: #005A36; color: white; padding: 60px 20px 40px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 30px 30px; text-align: center;">
+            <div style="font-size: 50px; margin-bottom: 10px;">🎉</div>
+            <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 800;">Shop Complete!</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Your list is saved in history for next week.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        savings = st.session_state.get("last_savings", 0.0)
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin: 40px 0;">
+            <div style="font-size: 14px; color: #666; font-weight: bold; text-transform: uppercase;">Total Saved This Week</div>
+            <div style="font-size: 48px; font-weight: 900; color: #005A36;">${savings:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("💌 Refer a Friend", type="primary", use_container_width=True):
+            st.session_state["current_page"] = "refer"
+            st.rerun()
+            
+        if st.button("Back to Home", use_container_width=True):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+
+    # -----------------------------------------------------------
+    # VIEW: REFER A FRIEND
+    # -----------------------------------------------------------
+    elif st.session_state["current_page"] == "refer":
+        st.markdown("""
+        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">←</div>
+            <div>
+                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Refer a Friend</h1>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Share the savings</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_refer_back"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="color: #444; font-size: 14px; line-height: 1.6; margin: 15px 0 25px 0;">
+            Know someone who could use a hand beating supermarket prices? Send them a quick invite to try SmartBasket.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        savings = st.session_state.get("last_savings", 0.0)
+        
+        # Dynamically build the message body using the saved trip amount and dynamic signature 
+        if savings > 0:
+            default_msg = f"Hey you should give this a try. It saved me ${savings:.2f} on this weeks shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+        else:
+            default_msg = "Hey you should give this a try. It saves me money every week on my shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+            
+        with st.form("refer_form"):
+            recipient = st.text_input("Friend's Email Address", placeholder="e.g. friend@example.com")
+            msg = st.text_area("Message Preview", value=default_msg, height=140)
+            
+            st.markdown("""
+            <div style="display:flex; gap:10px; margin-bottom: 25px; justify-content: center;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" width="120" style="cursor: pointer;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" width="120" style="cursor: pointer;">
+            </div>
+            """, unsafe_allow_html=True)
+            
+            submit = st.form_submit_button("Send Invitation", type="primary", use_container_width=True)
+            if submit:
+                if recipient:
+                    st.success(f"Awesome! Invitation sent to {recipient}.")
+                else:
+                    st.error("Please enter an email address.")
+
+    # -----------------------------------------------------------
     # VIEW: ABOUT US PAGE
     # -----------------------------------------------------------
-    if st.session_state["current_page"] == "about":
+    elif st.session_state["current_page"] == "about":
         st.markdown("""
         <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
             <div style="font-size: 20px;">←</div>
@@ -1437,29 +1519,36 @@ else:
                 if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
                     with st.spinner("Archiving items to your recent shops database..."):
                         archive_shop_to_history()
-                    st.session_state["shopping_active"] = False
+                    
                     if "report" in st.session_state:
+                        st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
                         del st.session_state["report"]
-                    st.success("List successfully archived to history and cleared for next time!")
-                    time.sleep(1.5)
+                        
+                    st.session_state["shopping_active"] = False
+                    st.session_state["current_page"] = "celebration"
+                    time.sleep(0.5)
                     st.rerun()
 
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
-        fc1, fc2, fc3 = st.columns([1, 1.2, 1.8])
+        fc1, fc2, fc3, fc4 = st.columns([1, 1.2, 1.2, 1.4])
         with fc1:
-            if st.button("About Us", key="footer_about"):
+            if st.button("About", key="footer_about"):
                 st.session_state["current_page"] = "about"
                 st.rerun()
         with fc2:
-            if st.button("Privacy Policy", key="footer_privacy"):
+            if st.button("Privacy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
         with fc3:
-            if st.button("Spot a Problem / Contact Us", key="footer_contact"):
+            if st.button("Support", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
+                st.rerun()
+        with fc4:
+            if st.button("Refer a Friend", key="footer_refer"):
+                st.session_state["current_page"] = "refer"
                 st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
 
