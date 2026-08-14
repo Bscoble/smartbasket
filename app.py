@@ -341,9 +341,28 @@ st.markdown(f"""
         max-width: 100% !important;
     }}
 
-    /* PREVENT CHECKBOX LABELS FROM WRAPPING (WOOLWORTHS SINGLE LINE) */
+    /* PREVENT CHECKBOX LABELS FROM WRAPPING */
     div[data-testid="stCheckbox"] label p {{
         white-space: nowrap !important;
+    }}
+
+    /* THUMBNAIL HOVER TO ZOOM EFFECT */
+    .thumbnail-zoom {{
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        object-fit: cover;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        position: relative;
+        z-index: 1;
+        transform-origin: center left;
+        cursor: zoom-in;
+    }}
+    .thumbnail-zoom:hover {{
+        transform: scale(4);
+        z-index: 9999 !important;
+        box-shadow: 0px 8px 16px rgba(0,0,0,0.4);
+        border-radius: 6px;
     }}
 
     /* SPLASH GET STARTED BUTTON OVERRIDE */
@@ -942,7 +961,7 @@ else:
                         sc1, sc2, sc3 = st.columns([1, 3, 1.5])
                         with sc1:
                             if res["image_url"]:
-                                st.markdown(f'<img src="{res["image_url"]}" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover;" />', unsafe_allow_html=True)
+                                st.markdown(f'<img src="{res["image_url"]}" class="thumbnail-zoom" />', unsafe_allow_html=True)
                             else:
                                 st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px;">🛒</div>', unsafe_allow_html=True)
                         with sc2:
@@ -1038,7 +1057,7 @@ else:
                 cols = st.columns([0.6, 2.1, 1.3, 0.5])
                 with cols[0]:
                     if i_img:
-                        st.markdown(f'<img src="{i_img}" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover; margin-top: 2px;" />', unsafe_allow_html=True)
+                        st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
                     else:
                         st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;">🛒</div>', unsafe_allow_html=True)
                 with cols[1]:
