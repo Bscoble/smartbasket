@@ -85,56 +85,81 @@ def save_price_cache(cache):
         pass
 
 def get_live_price(store, item_name, api_key):
-    if store == "Woolworths":
-        target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
-    elif store == "Coles":
-        target_url = f"https://www.coles.com.au/search?q={urllib.parse.quote(item_name)}"
-    elif store == "Aldi":
-        target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
-    elif store == "IGA":
-        target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
-    else:
-        return 99.99
-
     api_url = "https://api.zenrows.com/v1/"
-    params = {
-        "apikey": api_key, 
-        "url": target_url, 
-        "js_render": "true", 
-        "antibot": "true", 
-        "premium_proxy": "true",
-        "block_resources": "image,media,stylesheet,font"
-    }
-
-    # Force ZenRows to wait until the dynamic price is physically injected into the DOM
-    if store == "Woolworths":
-        params["wait_for"] = ".primary-price"
-    elif store == "Coles":
-        params["wait_for"] = ".price__value"
-    elif store == "Aldi":
-        params["wait_for"] = ".box--price"
-    elif store == "IGA":
-        params["wait_for"] = ".item-price"
-
+    price = 0.00
+    
     try:
+        # --- 1. JSON API FETCHING (WOOLWORTHS & COLES) ---
+        if store == "Woolworths":
+            target_url = f"https://www.woolworths.com.au/apis/ui/Search/products?searchTerm={urllib.parse.quote(item_name)}"
+            params = {
+                "apikey": api_key, 
+                "url": target_url, 
+                "antibot": "true", 
+                "premium_proxy": "true"
+                # js_render is REMOVED for speed. We just want raw JSON data.
+            }
+            response = requests.get(api_url, params=params, timeout=30)
+            data = response.json()
+            
+            # Safely navigate Woolworths nested JSON structure
+            if data.get("Products") and len(data["Products"]) > 0:
+                first_group = data["Products"][0]
+                if first_group.get("Products") and len(first_group["Products"]) > 0:
+                    price = float(first_group["Products"][0].get("Price", 0.0))
+            
+            return price if price > 0 else 5.00
+
+        elif store == "Coles":
+            target_url = f"https://www.coles.com.au/api/bff/products/search?q={urllib.parse.quote(item_name)}"
+            params = {
+                "apikey": api_key, 
+                "url": target_url, 
+                "antibot": "true", 
+                "premium_proxy": "true"
+            }
+            response = requests.get(api_url, params=params, timeout=30)
+            data = response.json()
+            
+            # Safely navigate Coles nested JSON structure
+            if data.get("results") and len(data["results"]) > 0:
+                price = float(data["results"][0].get("pricing", {}).get("now", 0.0))
+                
+            return price if price > 0 else 5.00
+
+        # --- 2. HTML SCRAPING FALLBACK (ALDI & IGA) ---
+        elif store == "Aldi":
+            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
+            wait_for_element = ".box--price"
+        elif store == "IGA":
+            target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
+            wait_for_element = ".item-price"
+        else:
+            return 99.99
+
+        params = {
+            "apikey": api_key, 
+            "url": target_url, 
+            "js_render": "true", 
+            "antibot": "true", 
+            "premium_proxy": "true",
+            "block_resources": "image,media,stylesheet,font",
+            "wait_for": wait_for_element
+        }
+
         response = requests.get(api_url, params=params, timeout=45)
         soup = BeautifulSoup(response.text, 'html.parser')
-        price = 0.00
-        price_element = None
         
-        if store == "Woolworths":
-            price_element = soup.select_one('.primary-price, .price-dollars, .price, [data-testid="price"]') 
-        elif store == "Coles":
-            price_element = soup.select_one('.price__value, .price, [data-testid="product-pricing"]')
-        elif store == "Aldi":
+        if store == "Aldi":
             price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
-        elif store == "IGA":
+        else:
             price_element = soup.select_one('.item-price, .price')
 
         if price_element:
             clean_text = price_element.text.replace('$', '').strip()
             match = re.search(r'\d+\.\d{2}', clean_text)
-            if match: price = float(match.group())
+            if match: 
+                price = float(match.group())
             else:
                 try: price = float(clean_text)
                 except ValueError: price = 0.00
@@ -147,8 +172,9 @@ def get_live_price(store, item_name, api_key):
                 if valid_prices: price = valid_prices[0]
 
         return price if price > 0 else 5.00 
+        
     except Exception as e:
-        return 99.99 
+        return 99.99
 
 def generate_smart_basket_report(user_items, selected_stores):
     store_totals = {store: 0.0 for store in selected_stores}
