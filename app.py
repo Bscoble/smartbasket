@@ -6,8 +6,8 @@ import urllib.parse
 import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
-from datetime import datetime
-from PIL import Image
+from datetime import datetime, timedelta
+from PIL import Image, ImageEnhance, ImageOps
 from pyzbar.pyzbar import decode
 
 # --- PAGE CONFIG ---
@@ -49,42 +49,117 @@ def save_store_preferences(prefs):
     except Exception:
         pass
 
-def get_live_price(store, item_name, api_key):
-    if store == "Woolworths":
-        target_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"
-    elif store == "Coles":
-        target_url = f"https://www.coles.com.au/search?q={urllib.parse.quote(item_name)}"
-    elif store == "Aldi":
-        target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
-    elif store == "IGA":
-        target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
-    else:
-        return 99.99
-
-    api_url = "https://api.zenrows.com/v1/"
-    params = {
-        "apikey": api_key, "url": target_url, "js_render": "true", "antibot": "true", "premium_proxy": "true"
-    }
-
+def load_price_cache():
+    """Loads the entire price cache into memory for fast lookups."""
     try:
+        ws = sh.worksheet("Price Cache")
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Price Cache", rows="1000", cols="4")
+        ws.append_row(["Store", "Item", "Price", "Timestamp"])
+        return {}
+    
+    data = ws.get_all_values()
+    cache = {}
+    if len(data) > 1:
+        for row in data[1:]:
+            if len(row) >= 4:
+                store, item, price_str, ts_str = row[0], row[1], row[2], row[3]
+                try:
+                    ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                    price = float(price_str)
+                    cache[(store, item.lower())] = {"price": price, "timestamp": ts}
+                except ValueError:
+                    pass
+    return cache
+
+def save_price_cache(cache):
+    """Bulk saves the updated cache back to Google Sheets."""
+    try:
+        ws = sh.worksheet("Price Cache")
+        rows = [["Store", "Item", "Price", "Timestamp"]]
+        for (store, item), data in cache.items():
+            rows.append([store, item, str(data["price"]), data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")])
+        ws.clear()
+        ws.append_rows(rows)
+    except Exception:
+        pass
+
+def get_live_price(store, item_name, api_key):
+    api_url = "https://api.zenrows.com/v1/"
+    price = 0.00
+    
+    try:
+        # --- 1. JSON API FETCHING (WOOLWORTHS & COLES) ---
+        if store == "Woolworths":
+            target_url = f"https://www.woolworths.com.au/apis/ui/Search/products?searchTerm={urllib.parse.quote(item_name)}"
+            params = {
+                "apikey": api_key, 
+                "url": target_url, 
+                "antibot": "true", 
+                "premium_proxy": "true"
+                # js_render is REMOVED for speed. We just want raw JSON data.
+            }
+            response = requests.get(api_url, params=params, timeout=30)
+            data = response.json()
+            
+            # Safely navigate Woolworths nested JSON structure
+            if data.get("Products") and len(data["Products"]) > 0:
+                first_group = data["Products"][0]
+                if first_group.get("Products") and len(first_group["Products"]) > 0:
+                    price = float(first_group["Products"][0].get("Price", 0.0))
+            
+            return price if price > 0 else 5.00
+
+        elif store == "Coles":
+            target_url = f"https://www.coles.com.au/api/bff/products/search?q={urllib.parse.quote(item_name)}"
+            params = {
+                "apikey": api_key, 
+                "url": target_url, 
+                "antibot": "true", 
+                "premium_proxy": "true"
+            }
+            response = requests.get(api_url, params=params, timeout=30)
+            data = response.json()
+            
+            # Safely navigate Coles nested JSON structure
+            if data.get("results") and len(data["results"]) > 0:
+                price = float(data["results"][0].get("pricing", {}).get("now", 0.0))
+                
+            return price if price > 0 else 5.00
+
+        # --- 2. HTML SCRAPING FALLBACK (ALDI & IGA) ---
+        elif store == "Aldi":
+            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
+            wait_for_element = ".box--price"
+        elif store == "IGA":
+            target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
+            wait_for_element = ".item-price"
+        else:
+            return 99.99
+
+        params = {
+            "apikey": api_key, 
+            "url": target_url, 
+            "js_render": "true", 
+            "antibot": "true", 
+            "premium_proxy": "true",
+            "block_resources": "image,media,stylesheet,font",
+            "wait_for": wait_for_element
+        }
+
         response = requests.get(api_url, params=params, timeout=45)
         soup = BeautifulSoup(response.text, 'html.parser')
-        price = 0.00
-        price_element = None
         
-        if store == "Woolworths":
-            price_element = soup.select_one('.primary-price, .price-dollars, .price, [data-testid="price"]') 
-        elif store == "Coles":
-            price_element = soup.select_one('.price__value, .price, [data-testid="product-pricing"]')
-        elif store == "Aldi":
+        if store == "Aldi":
             price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
-        elif store == "IGA":
+        else:
             price_element = soup.select_one('.item-price, .price')
 
         if price_element:
             clean_text = price_element.text.replace('$', '').strip()
             match = re.search(r'\d+\.\d{2}', clean_text)
-            if match: price = float(match.group())
+            if match: 
+                price = float(match.group())
             else:
                 try: price = float(clean_text)
                 except ValueError: price = 0.00
@@ -97,8 +172,9 @@ def get_live_price(store, item_name, api_key):
                 if valid_prices: price = valid_prices[0]
 
         return price if price > 0 else 5.00 
+        
     except Exception as e:
-        return 99.99 
+        return 99.99
 
 def generate_smart_basket_report(user_items, selected_stores):
     store_totals = {store: 0.0 for store in selected_stores}
@@ -112,13 +188,15 @@ def generate_smart_basket_report(user_items, selected_stores):
     total_items = len(valid_items)
     if total_items == 0: return None
     
+    status_text.text("Loading price cache...")
+    price_cache = load_price_cache()
+    cache_updated = False
+    
     for idx, row in enumerate(valid_items):
         item_name = row[0]
         try: qty = int(row[1])
         except ValueError: qty = 1
         unit = row[2]
-        
-        status_text.text(f"Scraping prices for: {item_name}...")
         
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
@@ -131,7 +209,28 @@ def generate_smart_basket_report(user_items, selected_stores):
         item_store_data = {}
         for store in selected_stores:
             if store in stores_to_search:
-                unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+                cache_key = (store, item_lower)
+                cached_data = price_cache.get(cache_key)
+                
+                use_cache = False
+                if cached_data:
+                    # Keep successful scrapes for 24h. Retry errors (99.99) after 1h.
+                    expiry_hours = 24 if cached_data["price"] < 90.00 else 1
+                    if (datetime.now() - cached_data["timestamp"]) < timedelta(hours=expiry_hours):
+                        use_cache = True
+                
+                if use_cache:
+                    status_text.text(f"Using cached price for: {item_name} at {store}...")
+                    unit_price = cached_data["price"]
+                    time.sleep(0.1) # Small visual buffer so the UI updates smoothly
+                else:
+                    status_text.text(f"Scraping live price for: {item_name} at {store}...")
+                    unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+                    price_cache[cache_key] = {
+                        "price": unit_price,
+                        "timestamp": datetime.now()
+                    }
+                    cache_updated = True
             else:
                 unit_price = 99.99 
                 
@@ -158,7 +257,10 @@ def generate_smart_basket_report(user_items, selected_stores):
         })
         
         progress_bar.progress((idx + 1) / total_items)
-        time.sleep(1) 
+        
+    if cache_updated:
+        status_text.text("Saving updated prices to cache...")
+        save_price_cache(price_cache)
         
     status_text.empty()
     progress_bar.empty()
@@ -198,6 +300,68 @@ def generate_smart_basket_report(user_items, selected_stores):
         "item_breakdown": item_breakdown
     }
 
+def archive_shop_to_history():
+    """Saves the current shopping list to a 'Recent Shops' worksheet and clears the list."""
+    try:
+        list_ws = sh.worksheet("Shopping List")
+        items = list_ws.get_all_values()
+        if len(items) <= 1: return False
+        
+        try:
+            history_ws = sh.worksheet("Recent Shops")
+        except gspread.WorksheetNotFound:
+            history_ws = sh.add_worksheet(title="Recent Shops", rows="1000", cols="5")
+            history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date"])
+        
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        rows_to_add = []
+        
+        start_idx = 1 if items[0][0].lower() == "item" else 0
+        for row in items[start_idx:]:
+            if len(row) >= 3 and row[0].strip():
+                item_name = row[0].strip()
+                qty = row[1]
+                unit = row[2]
+                img = row[3].strip() if len(row) >= 4 else ""
+                rows_to_add.append([item_name, qty, unit, img, current_date])
+        
+        if rows_to_add:
+            history_ws.append_rows(rows_to_add)
+        
+        # Clear current list ready for next week
+        list_ws.clear()
+        list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
+        return True
+    except Exception:
+        return False
+
+def get_recent_history():
+    """Retrieves items from the last 21 days, removing duplicates."""
+    try:
+        history_ws = sh.worksheet("Recent Shops")
+        data = history_ws.get_all_values()
+        if len(data) <= 1: return []
+        
+        recent_items = {}
+        cutoff_date = datetime.now() - timedelta(days=21)
+        
+        start_idx = 1 if data[0][0].lower() == "item" else 0
+        for row in data[start_idx:]:
+            if len(row) >= 5:
+                item = row[0].strip()
+                if not item: continue
+                qty, unit, img, date_str = row[1], row[2], row[3], row[4]
+                try:
+                    row_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    if row_date >= cutoff_date:
+                        # Overwrites older entries, naturally deduplicating & keeping the most recent image/unit
+                        recent_items[item.lower()] = {"name": item, "qty": qty, "unit": unit, "img": img}
+                except ValueError:
+                    pass
+        return list(recent_items.values())
+    except Exception:
+        return []
+
 def send_secure_feedback(user_email, feedback_msg):
     target_inbox = "bscoble74@gmail.com" 
     url = f"https://formsubmit.co/ajax/{target_inbox}"
@@ -214,18 +378,50 @@ def send_secure_feedback(user_email, feedback_msg):
         return False
 
 def decode_barcode(image_file):
-    """Extracts numeric barcode string from camera photo."""
+    """Multi-pass enhanced barcode decoder for curved surfaces and camera glare."""
     try:
         img = Image.open(image_file)
-        decoded_objects = decode(img)
-        for obj in decoded_objects:
-            return obj.data.decode("utf-8")
+        
+        def check_image(img_variant):
+            decoded_objects = decode(img_variant)
+            for obj in decoded_objects:
+                return obj.data.decode("utf-8")
+            return None
+
+        # Pass 1: Raw image
+        res = check_image(img)
+        if res: return res
+
+        # Pass 2: Grayscale & High Contrast
+        gray = ImageOps.grayscale(img)
+        enhancer = ImageEnhance.Contrast(gray)
+        high_contrast = enhancer.enhance(2.0)
+        res = check_image(high_contrast)
+        if res: return res
+
+        # Pass 3: Sharpened High Contrast
+        sharpener = ImageEnhance.Sharpness(high_contrast)
+        sharp = sharpener.enhance(2.5)
+        res = check_image(sharp)
+        if res: return res
+
+        # Pass 4: Auto-rotations
+        for angle in [90, 180, 270]:
+            rotated = high_contrast.rotate(angle, expand=True)
+            res = check_image(rotated)
+            if res: return res
+
+        # Pass 5: Binarization
+        bw = gray.point(lambda p: 255 if p > 120 else 0)
+        res = check_image(bw)
+        if res: return res
+
     except Exception:
         pass
     return None
 
 def lookup_barcode_product(barcode):
-    """Fetches human-readable product title from Open Food Facts API."""
+    """Fetches human-readable product title and image URL from Open Food Facts API."""
     url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
     headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
     
@@ -237,11 +433,36 @@ def lookup_barcode_product(barcode):
                 product = data.get("product", {})
                 name = product.get("product_name_en") or product.get("product_name")
                 brand = product.get("brands")
-                if name:
-                    return f"{brand} {name}".strip() if brand else name
+                image_url = product.get("image_front_url") or product.get("image_url") or ""
+                
+                title = f"{brand} {name}".strip() if brand else name
+                if title:
+                    return title, image_url
     except Exception:
         pass
-    return None
+    return None, None
+
+def search_product_by_name(query):
+    """Searches Open Food Facts database by text query."""
+    url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={urllib.parse.quote(query)}&search_simple=1&action=process&json=1&page_size=5"
+    headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            for p in data.get("products", []):
+                name = p.get("product_name_en") or p.get("product_name")
+                brand = p.get("brands")
+                image_url = p.get("image_front_url") or p.get("image_url") or ""
+                title = f"{brand} {name}".strip() if brand else name
+                
+                if title and title not in [r['title'] for r in results]:
+                    results.append({"title": title, "image_url": image_url})
+            return results
+    except Exception:
+        pass
+    return []
 
 # --- 2. SESSION STATE INIT ---
 if "app_started" not in st.session_state:
@@ -256,6 +477,10 @@ if "reset_email" not in st.session_state:
     st.session_state["reset_email"] = ""
 if "prefs" not in st.session_state:
     st.session_state["prefs"] = load_store_preferences()
+if "last_savings" not in st.session_state:
+    st.session_state["last_savings"] = 0.0
+if "expander_toggle" not in st.session_state:
+    st.session_state["expander_toggle"] = False
 
 prefs = st.session_state["prefs"]
 
@@ -284,9 +509,28 @@ st.markdown(f"""
         max-width: 100% !important;
     }}
 
-    /* PREVENT CHECKBOX LABELS FROM WRAPPING (WOOLWORTHS SINGLE LINE) */
+    /* PREVENT CHECKBOX LABELS FROM WRAPPING */
     div[data-testid="stCheckbox"] label p {{
         white-space: nowrap !important;
+    }}
+
+    /* THUMBNAIL HOVER TO ZOOM EFFECT */
+    .thumbnail-zoom {{
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        object-fit: cover;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        position: relative;
+        z-index: 1;
+        transform-origin: center left;
+        cursor: zoom-in;
+    }}
+    .thumbnail-zoom:hover {{
+        transform: scale(4);
+        z-index: 9999 !important;
+        box-shadow: 0px 8px 16px rgba(0,0,0,0.4);
+        border-radius: 6px;
     }}
 
     /* SPLASH GET STARTED BUTTON OVERRIDE */
@@ -708,9 +952,89 @@ elif not st.session_state["authenticated"]:
 else:
     
     # -----------------------------------------------------------
+    # VIEW: SHOP CELEBRATION (POST-FINISH)
+    # -----------------------------------------------------------
+    if st.session_state["current_page"] == "celebration":
+        st.markdown("""
+        <div style="background-color: #005A36; color: white; padding: 60px 20px 40px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 30px 30px; text-align: center;">
+            <div style="font-size: 50px; margin-bottom: 10px;">🎉</div>
+            <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 800;">Shop Complete!</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Your list is saved in history for next week.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        savings = st.session_state.get("last_savings", 0.0)
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin: 40px 0;">
+            <div style="font-size: 14px; color: #666; font-weight: bold; text-transform: uppercase;">Total Saved This Week</div>
+            <div style="font-size: 48px; font-weight: 900; color: #005A36;">${savings:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("💌 Refer a Friend", type="primary", use_container_width=True):
+            st.session_state["current_page"] = "refer"
+            st.rerun()
+            
+        if st.button("Back to Home", use_container_width=True):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+
+    # -----------------------------------------------------------
+    # VIEW: REFER A FRIEND
+    # -----------------------------------------------------------
+    elif st.session_state["current_page"] == "refer":
+        st.markdown("""
+        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">←</div>
+            <div>
+                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Refer a Friend</h1>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Share the savings</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
+        if st.button("Back", key="btn_refer_back"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+            
+        st.markdown("""
+        <div style="color: #444; font-size: 14px; line-height: 1.6; margin: 15px 0 25px 0;">
+            Know someone who could use a hand beating supermarket prices? Send them a quick invite to try SmartBasket.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        savings = st.session_state.get("last_savings", 0.0)
+        
+        # Dynamically build the message body using the saved trip amount and dynamic signature 
+        if savings > 0:
+            default_msg = f"Hey you should give this a try. It saved me ${savings:.2f} on this weeks shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+        else:
+            default_msg = "Hey you should give this a try. It saves me money every week on my shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+            
+        with st.form("refer_form"):
+            recipient = st.text_input("Friend's Email Address", placeholder="e.g. friend@example.com")
+            msg = st.text_area("Message Preview", value=default_msg, height=140)
+            
+            st.markdown("""
+            <div style="display:flex; gap:10px; margin-bottom: 25px; justify-content: center;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" width="120" style="cursor: pointer;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" width="120" style="cursor: pointer;">
+            </div>
+            """, unsafe_allow_html=True)
+            
+            submit = st.form_submit_button("Send Invitation", type="primary", use_container_width=True)
+            if submit:
+                if recipient:
+                    st.success(f"Awesome! Invitation sent to {recipient}.")
+                else:
+                    st.error("Please enter an email address.")
+
+    # -----------------------------------------------------------
     # VIEW: ABOUT US PAGE
     # -----------------------------------------------------------
-    if st.session_state["current_page"] == "about":
+    elif st.session_state["current_page"] == "about":
         st.markdown("""
         <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
             <div style="font-size: 20px;">←</div>
@@ -864,8 +1188,76 @@ else:
                 
                 if submitted and item_name:
                     list_ws = sh.worksheet("Shopping List")
-                    list_ws.append_row([item_name, qty, unit])
+                    list_ws.append_row([item_name, qty, unit, ""])
                     st.rerun()
+            
+            # Dynamic label toggle hack to force the expander to reset/collapse upon state change
+            recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
+            with st.expander(recent_shops_label):
+                recent_items = get_recent_history()
+                if not recent_items:
+                    st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
+                else:
+                    with st.form("recent_shops_form", clear_on_submit=True):
+                        st.markdown("<div style='font-size: 13px; font-weight:600; color:#555; margin-bottom: 10px;'>Select items to re-add to your list:</div>", unsafe_allow_html=True)
+                        selected_indices = []
+                        for idx, r_item in enumerate(recent_items):
+                            cols = st.columns([0.15, 0.15, 0.7])
+                            with cols[0]:
+                                chk = st.checkbox("", key=f"rec_chk_{idx}", label_visibility="collapsed")
+                                if chk:
+                                    selected_indices.append(idx)
+                            with cols[1]:
+                                if r_item["img"]:
+                                    st.markdown(f'<img src="{r_item["img"]}" class="thumbnail-zoom" style="width:28px; height:28px; margin-top:-5px;" />', unsafe_allow_html=True)
+                                else:
+                                    st.markdown('<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 14px; margin-top:-5px;">🛒</div>', unsafe_allow_html=True)
+                            with cols[2]:
+                                st.markdown(f'<div style="font-size: 14px; font-weight: 500; margin-top:-2px;">{r_item["name"]}</div>', unsafe_allow_html=True)
+                            
+                            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+                        
+                        if st.form_submit_button("➕ Add Selected to List", use_container_width=True):
+                            if selected_indices:
+                                list_ws = sh.worksheet("Shopping List")
+                                for i in selected_indices:
+                                    sr = recent_items[i]
+                                    list_ws.append_row([sr["name"], 1, sr["unit"], sr["img"]])
+                                
+                                # Toggle state to trick Streamlit into generating a "new" expander component that starts collapsed
+                                st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
+                                st.rerun()
+
+            with st.expander("🔍 Search Database by Name"):
+                search_query = st.text_input("Search Open Food Facts", placeholder="e.g., Hillcrest Bubble", label_visibility="collapsed")
+                if st.button("Search Database", use_container_width=True):
+                    if search_query:
+                        with st.spinner("Searching database..."):
+                            results = search_product_by_name(search_query)
+                            if results:
+                                st.session_state["search_results"] = results
+                            else:
+                                st.session_state["search_results"] = []
+                                st.warning("No products found matching that name.")
+                
+                if st.session_state.get("search_results"):
+                    st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                    for idx, res in enumerate(st.session_state["search_results"]):
+                        sc1, sc2, sc3 = st.columns([1, 3, 1.5])
+                        with sc1:
+                            if res["image_url"]:
+                                st.markdown(f'<img src="{res["image_url"]}" class="thumbnail-zoom" />', unsafe_allow_html=True)
+                            else:
+                                st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px;">🛒</div>', unsafe_allow_html=True)
+                        with sc2:
+                            st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
+                        with sc3:
+                            if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
+                                list_ws = sh.worksheet("Shopping List")
+                                list_ws.append_row([res['title'], 1, "each", res['image_url']])
+                                st.session_state["search_results"] = []
+                                st.rerun()
+                        st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
 
             with st.expander("📷 Scan Barcode from Pantry"):
                 camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
@@ -874,12 +1266,14 @@ else:
                         barcode_number = decode_barcode(camera_photo)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
-                            product_name = lookup_barcode_product(barcode_number)
+                            product_name, product_image = lookup_barcode_product(barcode_number)
                             if product_name:
                                 st.info(f"Found: **{product_name}**")
+                                if product_image:
+                                    st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
                                     list_ws = sh.worksheet("Shopping List")
-                                    list_ws.append_row([product_name, 1, "each"])
+                                    list_ws.append_row([product_name, 1, "each", product_image or ""])
                                     st.success(f"Added {product_name} to your list!")
                                     st.rerun()
                             else:
@@ -933,7 +1327,7 @@ else:
                 st.markdown('<div class="clear-all-marker"></div>', unsafe_allow_html=True)
                 if st.button("Clear all", type="secondary"):
                     list_ws.clear()
-                    list_ws.append_row(["Item", "Qty", "Unit"])
+                    list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -943,12 +1337,16 @@ else:
                 try: i_qty = int(row[1])
                 except ValueError: i_qty = 1
                 i_unit = row[2]
+                i_img = row[3].strip() if len(row) >= 4 and row[3] else ""
 
                 cols = st.columns([0.6, 2.1, 1.3, 0.5])
                 with cols[0]:
-                    st.markdown("<div style='background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;'>🛒</div>", unsafe_allow_html=True)
+                    if i_img:
+                        st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;">🛒</div>', unsafe_allow_html=True)
                 with cols[1]:
-                    st.markdown(f"<div style='padding-top: 2px;'><b>{i_name}</b><br><span style='color:#888; font-size:0.85em;'>{i_qty} {i_unit}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_qty} {i_unit}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
                     sub_c1, sub_c2, sub_c3 = st.columns(3)
                     with sub_c1:
@@ -958,7 +1356,7 @@ else:
                                 list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
                                 st.rerun()
                     with sub_c2:
-                        st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight: bold;'>{i_qty}</div>", unsafe_allow_html=True)
+                        st.markdown(f'<div style="text-align:center; padding-top:10px; font-weight: bold;">{i_qty}</div>', unsafe_allow_html=True)
                     with sub_c3:
                         st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
                         if st.button("+", key=f"add_{sheet_idx}"):
@@ -1017,33 +1415,51 @@ else:
                 if tab_choice == "Overview":
                     
                     # -----------------------------------------------
-                    # SUB-VIEW: SHOPPING SPLIT DETAILS
+                    # SUB-VIEW: SHOPPING SPLIT DETAILS / SINGLE DETAILS
                     # -----------------------------------------------
-                    if st.session_state.get("shop_mode") == "split":
+                    if st.session_state.get("shop_mode") in ["split", "single"]:
                         
                         if st.button("← Back to Options", type="secondary", key="btn_back_options"):
                             st.session_state["shop_mode"] = "overview"
                             st.rerun()
                             
-                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
-                        
-                        split_opt = report["comparison_modes"]["split_store_optimal"]
-                        
+                        if st.session_state["shop_mode"] == "split":
+                            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
+                            active_cost = report["comparison_modes"]["split_store_optimal"]["total_cost"]
+                        else:
+                            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SINGLE STORE SHOP</p>", unsafe_allow_html=True)
+                            active_cost = report["comparison_modes"]["single_store_best"]["total_cost"]
+                            
                         html_combined = (
                             f'<div style="background-color: #F6E7B9; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">'
                             f'<div style="font-weight: 800; color: #333; font-size: 16px;">Combined total</div>'
-                            f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                            f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${active_cost:.2f}</div>'
                             f'</div>'
                         )
                         st.markdown(html_combined, unsafe_allow_html=True)
                         
-                        grouped_split = {}
-                        for item in report["item_breakdown"]:
-                            store = item["cheapest_store"]
-                            if store not in grouped_split:
-                                grouped_split[store] = []
-                            grouped_split[store].append(item)
-                            
+                        grouped_items = {}
+                        if st.session_state["shop_mode"] == "split":
+                            for item in report["item_breakdown"]:
+                                store = item["cheapest_store"]
+                                if store not in grouped_items: grouped_items[store] = []
+                                grouped_items[store].append({
+                                    "item_name": item["item_name"],
+                                    "unit_price": item["unit_price"],
+                                    "total_price": item["total_price"]
+                                })
+                        else:
+                            best_store = report["comparison_modes"]["single_store_best"]["store_name"]
+                            grouped_items[best_store] = []
+                            for item in report["item_breakdown"]:
+                                store_data = next((data for s_name, data in item["all_stores"] if s_name == best_store), None)
+                                if store_data:
+                                    grouped_items[best_store].append({
+                                        "item_name": item["item_name"],
+                                        "unit_price": store_data["unit_price"],
+                                        "total_price": f"${store_data['total_price']:.2f}"
+                                    })
+                                    
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
@@ -1051,7 +1467,7 @@ else:
                             "IGA": "#E31837"
                         }
                         
-                        for store_name, items in grouped_split.items():
+                        for store_name, items in grouped_items.items():
                             b_color = brand_colors.get(store_name, "#555")
                             s_initial = store_name[0].upper()
                             store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
@@ -1059,7 +1475,8 @@ else:
                             # Dynamically calculate collected items count
                             collected_count = 0
                             for idx, item in enumerate(items):
-                                if st.session_state.get(f"chk_{store_name}_{idx}", False):
+                                chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
+                                if st.session_state.get(chk_key, False):
                                     collected_count += 1
                             
                             with st.container(border=True):
@@ -1078,8 +1495,9 @@ else:
                                 
                                 for idx, item in enumerate(items):
                                     c1, c2 = st.columns([3, 1])
+                                    chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                     with c1:
-                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=f"chk_{store_name}_{idx}")
+                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=chk_key)
                                     with c2:
                                         st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
                                     
@@ -1117,7 +1535,7 @@ else:
                         st.markdown(html_single, unsafe_allow_html=True)
                         st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
                         if st.button("", key="btn_single", use_container_width=True):
-                            st.session_state["active_tab"] = "Breakdown"
+                            st.session_state["shop_mode"] = "single"
                             st.rerun()
                         
                         c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
@@ -1225,22 +1643,41 @@ else:
                     st.markdown("#### DISCOUNT CYCLE")
                     st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
 
+                # --- NEW FINISH SHOP BUTTON ---
+                st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
+                    with st.spinner("Archiving items to your recent shops database..."):
+                        archive_shop_to_history()
+                    
+                    if "report" in st.session_state:
+                        st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
+                        del st.session_state["report"]
+                        
+                    st.session_state["shopping_active"] = False
+                    st.session_state["current_page"] = "celebration"
+                    time.sleep(0.5)
+                    st.rerun()
+
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
         
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
-        fc1, fc2, fc3 = st.columns([1, 1.2, 1.8])
+        fc1, fc2, fc3, fc4 = st.columns([1, 1.2, 1.2, 1.4])
         with fc1:
-            if st.button("About Us", key="footer_about"):
+            if st.button("About", key="footer_about"):
                 st.session_state["current_page"] = "about"
                 st.rerun()
         with fc2:
-            if st.button("Privacy Policy", key="footer_privacy"):
+            if st.button("Privacy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
         with fc3:
-            if st.button("Spot a Problem / Contact Us", key="footer_contact"):
+            if st.button("Support", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
+                st.rerun()
+        with fc4:
+            if st.button("Refer a Friend", key="footer_refer"):
+                st.session_state["current_page"] = "refer"
                 st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
 
