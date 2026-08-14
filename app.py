@@ -178,8 +178,10 @@ def get_live_price(store, item_name, api_keys):
         return price if price > 0 else 5.00 
         
     except Exception as e:
-        # This will pop up a notification on your screen showing the exact error
-        st.toast(f"🚨 {store} error on {item_name}: {str(e)}", icon="⚠️")
+        # This prints the error permanently in your Codespaces terminal
+        print(f"\n🚨 DEBUG - {store} error on {item_name}: {str(e)}\n")
+        # This leaves a persistent red box on the app screen
+        st.error(f"🚨 {store} error on {item_name}: {str(e)}")
         return 99.99
 
 def generate_smart_basket_report(user_items, selected_stores):
