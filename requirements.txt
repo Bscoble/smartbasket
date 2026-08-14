@@ -6,3 +6,4 @@ beautifulsoup4
 pyzbar
 Pillow
 requests
+apify-client
