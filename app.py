@@ -9,12 +9,14 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 from PIL import Image, ImageEnhance, ImageOps
 from pyzbar.pyzbar import decode
+from apify_client import ApifyClient
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered")
 
 # --- 1. CONFIGURATION & SECURE AUTH ---
 ZENROWS_KEY = st.secrets["ZENROWS_KEY"]
+APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
 creds_dict = dict(st.secrets["gcp_service_account"])
 
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -84,50 +86,50 @@ def save_price_cache(cache):
     except Exception:
         pass
 
-def get_live_price(store, item_name, api_key):
-    api_url = "https://api.zenrows.com/v1/"
-    price = 0.00
-    
+def get_live_price(store, item_name, api_keys):
+    apify_key = api_keys.get("apify")
+    zenrows_key = api_keys.get("zenrows")
+
     try:
-        # --- 1. JSON API FETCHING (WOOLWORTHS & COLES) ---
+        # --- 1. APIFY SPECIALIZED SCRAPERS (WOOLWORTHS & COLES) ---
         if store == "Woolworths":
-            target_url = f"https://www.woolworths.com.au/apis/ui/Search/products?searchTerm={urllib.parse.quote(item_name)}"
-            params = {
-                "apikey": api_key, 
-                "url": target_url, 
-                "antibot": "true", 
-                "premium_proxy": "true"
-                # js_render is REMOVED for speed. We just want raw JSON data.
+            client = ApifyClient(apify_key)
+            run_input = {
+                "categoryProductsUrls": [{"url": f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"}],
+                "maxProductsPerUrl": 1,
             }
-            response = requests.get(api_url, params=params, timeout=30)
-            data = response.json()
+            run = client.actor("e-commerce/woolworths-product-details-scraper").call(run_input=run_input)
             
-            # Safely navigate Woolworths nested JSON structure
-            if data.get("Products") and len(data["Products"]) > 0:
-                first_group = data["Products"][0]
-                if first_group.get("Products") and len(first_group["Products"]) > 0:
-                    price = float(first_group["Products"][0].get("Price", 0.0))
-            
-            return price if price > 0 else 5.00
+            for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+                if "price" in item:
+                    return float(item["price"])
+                elif "Price" in item:
+                    return float(item["Price"])
+            return 5.00 # Default if item not found but scrape succeeded
 
         elif store == "Coles":
-            target_url = f"https://www.coles.com.au/api/bff/products/search?q={urllib.parse.quote(item_name)}"
-            params = {
-                "apikey": api_key, 
-                "url": target_url, 
-                "antibot": "true", 
-                "premium_proxy": "true"
+            client = ApifyClient(apify_key)
+            run_input = {
+                "urls": [f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"],
+                "ignore_url_failures": True,
+                "max_items_per_url": 1,
+                "proxy": {
+                    "useApifyProxy": True
+                }
             }
-            response = requests.get(api_url, params=params, timeout=30)
-            data = response.json()
+            run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
             
-            # Safely navigate Coles nested JSON structure
-            if data.get("results") and len(data["results"]) > 0:
-                price = float(data["results"][0].get("pricing", {}).get("now", 0.0))
-                
-            return price if price > 0 else 5.00
+            for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+                if "pricing" in item and "now" in item["pricing"]:
+                    return float(item["pricing"]["now"])
+                elif "price" in item:
+                    try:
+                        return float(str(item["price"]).replace("$", ""))
+                    except ValueError:
+                        pass
+            return 5.00
 
-        # --- 2. HTML SCRAPING FALLBACK (ALDI & IGA) ---
+        # --- 2. ZENROWS HTML FALLBACK (ALDI & IGA) ---
         elif store == "Aldi":
             target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
             wait_for_element = ".box--price"
@@ -137,8 +139,9 @@ def get_live_price(store, item_name, api_key):
         else:
             return 99.99
 
+        api_url = "https://api.zenrows.com/v1/"
         params = {
-            "apikey": api_key, 
+            "apikey": zenrows_key, 
             "url": target_url, 
             "js_render": "true", 
             "antibot": "true", 
@@ -155,6 +158,7 @@ def get_live_price(store, item_name, api_key):
         else:
             price_element = soup.select_one('.item-price, .price')
 
+        price = 0.00
         if price_element:
             clean_text = price_element.text.replace('$', '').strip()
             match = re.search(r'\d+\.\d{2}', clean_text)
@@ -174,6 +178,8 @@ def get_live_price(store, item_name, api_key):
         return price if price > 0 else 5.00 
         
     except Exception as e:
+        # This will pop up a notification on your screen showing the exact error
+        st.toast(f"🚨 {store} error on {item_name}: {str(e)}", icon="⚠️")
         return 99.99
 
 def generate_smart_basket_report(user_items, selected_stores):
@@ -225,7 +231,10 @@ def generate_smart_basket_report(user_items, selected_stores):
                     time.sleep(0.1) # Small visual buffer so the UI updates smoothly
                 else:
                     status_text.text(f"Scraping live price for: {item_name} at {store}...")
-                    unit_price = get_live_price(store, item_name, ZENROWS_KEY)
+                    # Pass both keys to the revised pricing function
+                    api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
+                    unit_price = get_live_price(store, item_name, api_keys)
+                    
                     price_cache[cache_key] = {
                         "price": unit_price,
                         "timestamp": datetime.now()
