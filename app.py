@@ -6,7 +6,7 @@ import urllib.parse
 import streamlit as st
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 from PIL import Image, ImageEnhance, ImageOps
 from pyzbar.pyzbar import decode
 
@@ -197,6 +197,68 @@ def generate_smart_basket_report(user_items, selected_stores):
         "store_rankings": store_rankings,
         "item_breakdown": item_breakdown
     }
+
+def archive_shop_to_history():
+    """Saves the current shopping list to a 'Recent Shops' worksheet and clears the list."""
+    try:
+        list_ws = sh.worksheet("Shopping List")
+        items = list_ws.get_all_values()
+        if len(items) <= 1: return False
+        
+        try:
+            history_ws = sh.worksheet("Recent Shops")
+        except gspread.WorksheetNotFound:
+            history_ws = sh.add_worksheet(title="Recent Shops", rows="1000", cols="5")
+            history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date"])
+        
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        rows_to_add = []
+        
+        start_idx = 1 if items[0][0].lower() == "item" else 0
+        for row in items[start_idx:]:
+            if len(row) >= 3 and row[0].strip():
+                item_name = row[0].strip()
+                qty = row[1]
+                unit = row[2]
+                img = row[3].strip() if len(row) >= 4 else ""
+                rows_to_add.append([item_name, qty, unit, img, current_date])
+        
+        if rows_to_add:
+            history_ws.append_rows(rows_to_add)
+        
+        # Clear current list ready for next week
+        list_ws.clear()
+        list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
+        return True
+    except Exception:
+        return False
+
+def get_recent_history():
+    """Retrieves items from the last 21 days, removing duplicates."""
+    try:
+        history_ws = sh.worksheet("Recent Shops")
+        data = history_ws.get_all_values()
+        if len(data) <= 1: return []
+        
+        recent_items = {}
+        cutoff_date = datetime.now() - timedelta(days=21)
+        
+        start_idx = 1 if data[0][0].lower() == "item" else 0
+        for row in data[start_idx:]:
+            if len(row) >= 5:
+                item = row[0].strip()
+                if not item: continue
+                qty, unit, img, date_str = row[1], row[2], row[3], row[4]
+                try:
+                    row_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    if row_date >= cutoff_date:
+                        # Overwrites older entries, naturally deduplicating & keeping the most recent image/unit
+                        recent_items[item.lower()] = {"name": item, "qty": qty, "unit": unit, "img": img}
+                except ValueError:
+                    pass
+        return list(recent_items.values())
+    except Exception:
+        return []
 
 def send_secure_feedback(user_email, feedback_msg):
     target_inbox = "bscoble74@gmail.com" 
@@ -942,6 +1004,38 @@ else:
                     list_ws = sh.worksheet("Shopping List")
                     list_ws.append_row([item_name, qty, unit, ""])
                     st.rerun()
+            
+            with st.expander("🕒 Add from Recent Shops"):
+                recent_items = get_recent_history()
+                if not recent_items:
+                    st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
+                else:
+                    with st.form("recent_shops_form"):
+                        st.markdown("<div style='font-size: 13px; font-weight:600; color:#555; margin-bottom: 10px;'>Select items to re-add to your list:</div>", unsafe_allow_html=True)
+                        selected_indices = []
+                        for idx, r_item in enumerate(recent_items):
+                            cols = st.columns([0.15, 0.15, 0.7])
+                            with cols[0]:
+                                chk = st.checkbox("", key=f"rec_chk_{idx}", label_visibility="collapsed")
+                                if chk:
+                                    selected_indices.append(idx)
+                            with cols[1]:
+                                if r_item["img"]:
+                                    st.markdown(f'<img src="{r_item["img"]}" class="thumbnail-zoom" style="width:28px; height:28px; margin-top:-5px;" />', unsafe_allow_html=True)
+                                else:
+                                    st.markdown('<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 14px; margin-top:-5px;">🛒</div>', unsafe_allow_html=True)
+                            with cols[2]:
+                                st.markdown(f'<div style="font-size: 14px; font-weight: 500; margin-top:-2px;">{r_item["name"]}</div>', unsafe_allow_html=True)
+                            
+                            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+                        
+                        if st.form_submit_button("➕ Add Selected to List", use_container_width=True):
+                            if selected_indices:
+                                list_ws = sh.worksheet("Shopping List")
+                                for i in selected_indices:
+                                    sr = recent_items[i]
+                                    list_ws.append_row([sr["name"], 1, sr["unit"], sr["img"]])
+                                st.rerun()
 
             with st.expander("🔍 Search Database by Name"):
                 search_query = st.text_input("Search Open Food Facts", placeholder="e.g., Hillcrest Bubble", label_visibility="collapsed")
@@ -1337,6 +1431,18 @@ else:
                 elif tab_choice == "Discount Cycle":
                     st.markdown("#### DISCOUNT CYCLE")
                     st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
+
+                # --- NEW FINISH SHOP BUTTON ---
+                st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
+                    with st.spinner("Archiving items to your recent shops database..."):
+                        archive_shop_to_history()
+                    st.session_state["shopping_active"] = False
+                    if "report" in st.session_state:
+                        del st.session_state["report"]
+                    st.success("List successfully archived to history and cleared for next time!")
+                    time.sleep(1.5)
+                    st.rerun()
 
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
