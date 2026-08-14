@@ -107,14 +107,17 @@ def get_live_price(store, item_name, api_keys):
                     return float(item["Price"])
             return 5.00 # Default if item not found but scrape succeeded
 
-        elif store == "Coles":
+elif store == "Coles":
             client = ApifyClient(apify_key)
-            run_input = {
-                "urls": [f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"],
-                "ignore_url_failures": True,
-                "max_items_per_url": 1,
-                "proxy": {
-                    "useApifyProxy": True
+run_input = {
+    "urls": [f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"], 
+    "ignore_url_failures": True, 
+    "max_items_per_url": 1, 
+    "proxy": {
+        "useApifyProxy": True, 
+        "apifyProxyGroups": ["RESIDENTIAL"] } } 
+
+
                 }
             }
             run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
