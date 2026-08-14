@@ -94,7 +94,6 @@ def get_live_price(store, item_name, api_keys):
         if store == "Woolworths":
             client = ApifyClient(apify_key)
             run_input = {
-<<<<<<< HEAD
                 "urls": [f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"],
                 "ignore_url_failures": True,
                 "max_items_per_url": 1,
@@ -117,18 +116,6 @@ def get_live_price(store, item_name, api_keys):
                         return float(str(item["price"]).replace("$", ""))
                     except ValueError:
                         pass
-=======
-                "categoryProductsUrls": [{"url": f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"}],
-                "maxProductsPerUrl": 1,
-            }
-            run = client.actor("e-commerce/woolworths-product-details-scraper").call(run_input=run_input)
-            
-            for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-                if "price" in item:
-                    return float(item["price"])
-                elif "Price" in item:
-                    return float(item["Price"])
->>>>>>> c8dfdacf2ff5512a0fe99331d7b2ca9a9f7401c6
             return 5.00 # Default if item not found but scrape succeeded
 
         elif store == "Coles":
@@ -229,10 +216,8 @@ def generate_smart_basket_report(user_items, selected_stores):
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
-        try: 
-            qty = int(row[1])
-        except ValueError: 
-            qty = 1
+        try: qty = int(row[1])
+        except ValueError: qty = 1
         unit = row[2]
         
         item_lower = item_name.lower()
@@ -262,11 +247,7 @@ def generate_smart_basket_report(user_items, selected_stores):
                     time.sleep(0.1) # Small visual buffer so the UI updates smoothly
                 else:
                     status_text.text(f"Scraping live price for: {item_name} at {store}...")
-<<<<<<< HEAD
                     
-=======
-                    # Pass both keys to the revised pricing function
->>>>>>> c8dfdacf2ff5512a0fe99331d7b2ca9a9f7401c6
                     api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
                     unit_price = get_live_price(store, item_name, api_keys)
                     
@@ -313,7 +294,6 @@ def generate_smart_basket_report(user_items, selected_stores):
     worst_store_cost = ranked_stores[-1][1]
     trip_savings = max(0.0, worst_store_cost - split_store_total)
     store_rankings = []
-    
     for rank, (store, cost) in enumerate(ranked_stores, 1):
         diff = cost - best_single_store_cost
         diff_str = "+$0.00" if diff == 0 else f"+${diff:.2f} more"
@@ -322,10 +302,6 @@ def generate_smart_basket_report(user_items, selected_stores):
             "store": store, "rank": rank, "total_cost": cost, 
             "badge": badge, "difference_from_best": diff_str
         })
-<<<<<<< HEAD
-=======
-        
->>>>>>> c8dfdacf2ff5512a0fe99331d7b2ca9a9f7401c6
     return {
         "total_items": total_items,
         "trip_savings": trip_savings,
@@ -487,7 +463,7 @@ def lookup_barcode_product(barcode):
 
 def search_product_by_name(query):
     """Searches Open Food Facts database by text query."""
-    url = f"https://au.openfoodfacts.org/cgi/search.pl?search_terms={urllib.parse.quote(query)}&search_simple=1&action=process&json=1&page_size=10"
+    url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={urllib.parse.quote(query)}&search_simple=1&action=process&json=1&page_size=5"
     headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
     try:
         response = requests.get(url, headers=headers, timeout=5)
