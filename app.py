@@ -1306,33 +1306,51 @@ else:
                 if tab_choice == "Overview":
                     
                     # -----------------------------------------------
-                    # SUB-VIEW: SHOPPING SPLIT DETAILS
+                    # SUB-VIEW: SHOPPING SPLIT DETAILS / SINGLE DETAILS
                     # -----------------------------------------------
-                    if st.session_state.get("shop_mode") == "split":
+                    if st.session_state.get("shop_mode") in ["split", "single"]:
                         
                         if st.button("← Back to Options", type="secondary", key="btn_back_options"):
                             st.session_state["shop_mode"] = "overview"
                             st.rerun()
                             
-                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
-                        
-                        split_opt = report["comparison_modes"]["split_store_optimal"]
-                        
+                        if st.session_state["shop_mode"] == "split":
+                            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
+                            active_cost = report["comparison_modes"]["split_store_optimal"]["total_cost"]
+                        else:
+                            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SINGLE STORE SHOP</p>", unsafe_allow_html=True)
+                            active_cost = report["comparison_modes"]["single_store_best"]["total_cost"]
+                            
                         html_combined = (
                             f'<div style="background-color: #F6E7B9; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">'
                             f'<div style="font-weight: 800; color: #333; font-size: 16px;">Combined total</div>'
-                            f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                            f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${active_cost:.2f}</div>'
                             f'</div>'
                         )
                         st.markdown(html_combined, unsafe_allow_html=True)
                         
-                        grouped_split = {}
-                        for item in report["item_breakdown"]:
-                            store = item["cheapest_store"]
-                            if store not in grouped_split:
-                                grouped_split[store] = []
-                            grouped_split[store].append(item)
-                            
+                        grouped_items = {}
+                        if st.session_state["shop_mode"] == "split":
+                            for item in report["item_breakdown"]:
+                                store = item["cheapest_store"]
+                                if store not in grouped_items: grouped_items[store] = []
+                                grouped_items[store].append({
+                                    "item_name": item["item_name"],
+                                    "unit_price": item["unit_price"],
+                                    "total_price": item["total_price"]
+                                })
+                        else:
+                            best_store = report["comparison_modes"]["single_store_best"]["store_name"]
+                            grouped_items[best_store] = []
+                            for item in report["item_breakdown"]:
+                                store_data = next((data for s_name, data in item["all_stores"] if s_name == best_store), None)
+                                if store_data:
+                                    grouped_items[best_store].append({
+                                        "item_name": item["item_name"],
+                                        "unit_price": store_data["unit_price"],
+                                        "total_price": f"${store_data['total_price']:.2f}"
+                                    })
+                                    
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
@@ -1340,7 +1358,7 @@ else:
                             "IGA": "#E31837"
                         }
                         
-                        for store_name, items in grouped_split.items():
+                        for store_name, items in grouped_items.items():
                             b_color = brand_colors.get(store_name, "#555")
                             s_initial = store_name[0].upper()
                             store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
@@ -1348,7 +1366,8 @@ else:
                             # Dynamically calculate collected items count
                             collected_count = 0
                             for idx, item in enumerate(items):
-                                if st.session_state.get(f"chk_{store_name}_{idx}", False):
+                                chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
+                                if st.session_state.get(chk_key, False):
                                     collected_count += 1
                             
                             with st.container(border=True):
@@ -1367,8 +1386,9 @@ else:
                                 
                                 for idx, item in enumerate(items):
                                     c1, c2 = st.columns([3, 1])
+                                    chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                     with c1:
-                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=f"chk_{store_name}_{idx}")
+                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=chk_key)
                                     with c2:
                                         st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
                                     
@@ -1406,7 +1426,7 @@ else:
                         st.markdown(html_single, unsafe_allow_html=True)
                         st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
                         if st.button("", key="btn_single", use_container_width=True):
-                            st.session_state["active_tab"] = "Breakdown"
+                            st.session_state["shop_mode"] = "single"
                             st.rerun()
                         
                         c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
