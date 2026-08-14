@@ -98,8 +98,23 @@ def get_live_price(store, item_name, api_key):
 
     api_url = "https://api.zenrows.com/v1/"
     params = {
-        "apikey": api_key, "url": target_url, "js_render": "true", "antibot": "true", "premium_proxy": "true"
+        "apikey": api_key, 
+        "url": target_url, 
+        "js_render": "true", 
+        "antibot": "true", 
+        "premium_proxy": "true",
+        "block_resources": "image,media,stylesheet,font"
     }
+
+    # Force ZenRows to wait until the dynamic price is physically injected into the DOM
+    if store == "Woolworths":
+        params["wait_for"] = ".primary-price"
+    elif store == "Coles":
+        params["wait_for"] = ".price__value"
+    elif store == "Aldi":
+        params["wait_for"] = ".box--price"
+    elif store == "IGA":
+        params["wait_for"] = ".item-price"
 
     try:
         response = requests.get(api_url, params=params, timeout=45)
