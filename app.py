@@ -104,7 +104,7 @@ def save_price_cache(cache):
         ws.clear()
         ws.append_rows(rows)
     except Exception:
-    pass
+        pass
 
 def get_live_price(store, item_name, api_keys):
     apify_key = api_keys.get("apify")
