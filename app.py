@@ -5,8 +5,8 @@ import gspread
 import urllib.parse
 import streamlit as st
 
-
-import requests import streamlit as st 
+import requests 
+import streamlit as st 
 def scrape_iga_zenrows(target_url): 
     zenrows_url = "https://api.zenrows.com/v1/" 
     params = { 
