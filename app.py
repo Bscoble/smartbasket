@@ -22,7 +22,8 @@ def scrape_iga_zenrows(target_url):
     except requests.exceptions.Timeout: 
         st.warning(f"Timeout: ZenRows took longer than 90s to scrape {target_url}.") 
         return None 
-    except requests.exceptions.RequestException as e: st.error(f"ZenRows API Error: {e}") 
+    except requests.exceptions.RequestException as e: 
+        st.error(f"ZenRows API Error: {e}") 
     return None 
 
 from bs4 import BeautifulSoup
