@@ -155,7 +155,7 @@ def get_live_price(store, item_name, api_keys):
     
             for item in client.dataset(run.default_dataset_id).list_items().items:
                 if "pricing" in item and "now" in item["pricing"]:
-                return float(item["pricing"]["now"])
+                    return float(item["pricing"]["now"])
                 elif "price" in item:
                     try:
                         return float(str(item["price"]).replace("$", ""))
