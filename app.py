@@ -183,7 +183,7 @@ def get_live_price(store, item_name, api_keys):
             "block_resources": "image,media,stylesheet,font",
             "wait_for": wait_for_element
         }
-        response = requests.get(api_url, params=params, timeout=45)
+        response = requests.get(api_url, params=params, timeout=90)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         if store == "Aldi":
