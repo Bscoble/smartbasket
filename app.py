@@ -103,8 +103,8 @@ def save_price_cache(cache):
             rows.append([store, item, str(data["price"]), data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")])
         ws.clear()
         ws.append_rows(rows)
-    except Exception:
-        pass
+        except Exception:
+            pass
 
 def get_live_price(store, item_name, api_keys):
     apify_key = api_keys.get("apify")
