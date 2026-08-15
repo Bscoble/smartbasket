@@ -4,6 +4,27 @@ import requests
 import gspread
 import urllib.parse
 import streamlit as st
+
+
+import requests import streamlit as st 
+def scrape_iga_zenrows(target_url): 
+    zenrows_url = "https://api.zenrows.com/v1/" 
+    params = { 
+        "apikey": st.secrets["ZENROWS_KEY"], 
+        "url": target_url, 
+        # "js_render": "true" # Note: JS rendering significantly increases load times. Only use if IGA requires it. 
+        } 
+    try: 
+        # Increased timeout to 90 seconds 
+        response = requests.get(zenrows_url, params=params, timeout=90) 
+        response.raise_for_status() 
+        return response.text 
+    except requests.exceptions.Timeout: 
+        st.warning(f"Timeout: ZenRows took longer than 90s to scrape {target_url}.") 
+        return None 
+    except requests.exceptions.RequestException as e: st.error(f"ZenRows API Error: {e}") 
+    return None 
+
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
