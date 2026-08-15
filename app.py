@@ -3,6 +3,7 @@ import re
 import requests
 import gspread
 import urllib.parse
+import concurrent.futures
 import streamlit as st
 
 import requests 
@@ -126,18 +127,16 @@ def get_live_price(store, item_name, api_keys):
             
             run = client.actor("stealth_mode/woolworths-product-search-scraper").call(run_input=run_input)
             
-            for item in client.dataset(run.defaultDatasetId).list_items().items:
-                if "Price" in item:
-                    try:
-                        return float(str(item["Price"]).replace("$", ""))
-                    except ValueError:
-                        pass
+            for item in client.dataset(run.default_dataset_id).list_items().items:
+                if "pricing" in item and "now" in item["pricing"]:
+            return float(item["pricing"]["now"])
                 elif "price" in item:
                     try:
                         return float(str(item["price"]).replace("$", ""))
                     except ValueError:
                         pass
-            return 5.00 # Default if item not found but scrape succeeded
+    
+            return 5.00
 
         elif store == "Coles":
             client = ApifyClient(apify_key)
@@ -151,18 +150,19 @@ def get_live_price(store, item_name, api_keys):
                 } 
             } 
             
-            run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
-            
-            for item in client.dataset(run.defaultDatasetId).list_items().items:
+                run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
+    
+            for item in client.dataset(run.default_dataset_id).list_items().items:
                 if "pricing" in item and "now" in item["pricing"]:
-                    return float(item["pricing"]["now"])
+            return float(item["pricing"]["now"])
                 elif "price" in item:
                     try:
                         return float(str(item["price"]).replace("$", ""))
                     except ValueError:
                         pass
+    
             return 5.00
-            
+
         # --- 2. ZENROWS HTML FALLBACK (ALDI & IGA) ---
         elif store == "Aldi":
             target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
@@ -183,7 +183,7 @@ def get_live_price(store, item_name, api_keys):
             "block_resources": "image,media,stylesheet,font",
             "wait_for": wait_for_element
         }
-        response = requests.get(api_url, params=params, timeout=90)
+        response = requests.get(api_url, params=params, timeout=120)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         if store == "Aldi":
@@ -967,11 +967,52 @@ elif not st.session_state["authenticated"]:
             st.session_state["auth_mode"] = "login"
             st.rerun()
 
+def fetch_all_prices_concurrently(item_name, api_keys):
+    stores = ["Woolworths", "Coles", "Aldi", "IGA"]
+    results = {}
+    
+    # Open a pool of 4 workers (one for each store)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        
+        # Launch all 4 scrapers at the exact same millisecond
+        future_to_store = {
+            executor.submit(get_live_price, store, item_name, api_keys): store 
+            for store in stores
+        }
+        
+        # As each store finishes scraping, save its result immediately
+        for future in concurrent.futures.as_completed(future_to_store):
+            store = future_to_store[future]
+            try:
+                price = future.result()
+                results[store] = price
+            except Exception as e:
+                st.error(f"Failed to fetch {store}: {e}")
+                results[store] = None
+                
+    return results
+
+
+
+
+
 # =====================================================================
 # --- 6. MAIN APP (Authenticated User) ---
 # =====================================================================
 else:
     
+
+    if st.button("Compare Prices at 4 Stores"):
+        with st.spinner(f"Bypassing firewalls and fetching live prices for {item_name}..."):
+        
+        # This will now take only as long as the SLOWEST store (e.g., 20-30 seconds), 
+        # instead of the COMBINED time of all stores (3+ minutes).
+        live_prices = fetch_all_prices_concurrently(item_name, api_keys)
+        
+        st.write(live_prices)
+
+
+
     # -----------------------------------------------------------
     # VIEW: SHOP CELEBRATION (POST-FINISH)
     # -----------------------------------------------------------
