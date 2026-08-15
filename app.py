@@ -151,7 +151,7 @@ def get_live_price(store, item_name, api_keys):
                 } 
             } 
             
-                run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
+            run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
     
             for item in client.dataset(run.default_dataset_id).list_items().items:
                 if "pricing" in item and "now" in item["pricing"]:
