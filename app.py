@@ -126,7 +126,7 @@ def get_live_price(store, item_name, api_keys):
             
             run = client.actor("stealth_mode/woolworths-product-search-scraper").call(run_input=run_input)
             
-            for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+            for item in client.dataset(run."defaultDatasetId").list_items().items
                 if "Price" in item:
                     try:
                         return float(str(item["Price"]).replace("$", ""))
@@ -153,7 +153,7 @@ def get_live_price(store, item_name, api_keys):
             
             run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
             
-            for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+            for item in client.dataset(run."defaultDatasetId").list_items().items
                 if "pricing" in item and "now" in item["pricing"]:
                     return float(item["pricing"]["now"])
                 elif "price" in item:
