@@ -208,8 +208,8 @@ def get_live_price(store, item_name, api_keys):
             "js_render": "true", 
             "antibot": "true", 
             "premium_proxy": "true",
-            "block_resources": "image,media,stylesheet,font",
-            "wait_for": wait_for_element
+            "block_resources": "image,media,stylesheet,font"
+            
         }
         response = requests.get(api_url, params=params, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
