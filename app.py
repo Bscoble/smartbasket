@@ -13,7 +13,9 @@ def scrape_iga_zenrows(target_url):
     params = { 
         "apikey": st.secrets["ZENROWS_KEY"], 
         "url": target_url, 
-        # "js_render": "true" # Note: JS rendering significantly increases load times. Only use if IGA requires it. 
+        # "js_render": "true", 
+        "premium_proxy": "true",
+        "antibot": "true"
         } 
     try: 
         # Increased timeout to 90 seconds 
