@@ -3,28 +3,8 @@ import re
 import requests
 import gspread
 import urllib.parse
+import concurrent.futures
 import streamlit as st
-
-import requests 
-import streamlit as st 
-def scrape_iga_zenrows(target_url): 
-    zenrows_url = "https://api.zenrows.com/v1/" 
-    params = { 
-        "apikey": st.secrets["ZENROWS_KEY"], 
-        "url": target_url, 
-        # "js_render": "true" # Note: JS rendering significantly increases load times. Only use if IGA requires it. 
-        } 
-    try: 
-        # Increased timeout to 90 seconds 
-        response = requests.get(zenrows_url, params=params, timeout=90) 
-        response.raise_for_status() 
-        return response.text 
-    except requests.exceptions.Timeout: 
-        st.warning(f"Timeout: ZenRows took longer than 90s to scrape {target_url}.") 
-        return None 
-    except requests.exceptions.RequestException as e: st.error(f"ZenRows API Error: {e}") 
-    return None 
-
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
@@ -111,49 +91,22 @@ def get_live_price(store, item_name, api_keys):
     zenrows_key = api_keys.get("zenrows")
     
     try:
-        # --- 1. APIFY SPECIALIZED SCRAPERS (WOOLWORTHS & COLES) ---
-        if store == "Woolworths":
+        # --- 1. APIFY SCRAPERS (WOOLWORTHS & COLES) ---
+        if store in ["Woolworths", "Coles"]:
             client = ApifyClient(apify_key)
+            actor = "stealth_mode/woolworths-product-search-scraper" if store == "Woolworths" else "stealth_mode/coles-product-search-scraper"
+            search_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}" if store == "Woolworths" else f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"
+            
             run_input = {
-                "urls": [f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}"],
+                "urls": [search_url],
                 "ignore_url_failures": True,
                 "max_items_per_url": 1,
-                "proxy": {
-                    "useApifyProxy": True,
-                    "apifyProxyGroups": ["RESIDENTIAL"]
-                }
+                "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]}
             }
             
-            run = client.actor("stealth_mode/woolworths-product-search-scraper").call(run_input=run_input)
+            run = client.actor(actor).call(run_input=run_input)
             
-            for item in client.dataset(run.defaultDatasetId).list_items().items:
-                if "Price" in item:
-                    try:
-                        return float(str(item["Price"]).replace("$", ""))
-                    except ValueError:
-                        pass
-                elif "price" in item:
-                    try:
-                        return float(str(item["price"]).replace("$", ""))
-                    except ValueError:
-                        pass
-            return 5.00 # Default if item not found but scrape succeeded
-
-        elif store == "Coles":
-            client = ApifyClient(apify_key)
-            run_input = {
-                "urls": [f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"], 
-                "ignore_url_failures": True, 
-                "max_items_per_url": 1, 
-                "proxy": {
-                    "useApifyProxy": True, 
-                    "apifyProxyGroups": ["RESIDENTIAL"] 
-                } 
-            } 
-            
-            run = client.actor("stealth_mode/coles-product-search-scraper").call(run_input=run_input)
-            
-            for item in client.dataset(run.defaultDatasetId).list_items().items:
+            for item in client.dataset(run.default_dataset_id).list_items().items:
                 if "pricing" in item and "now" in item["pricing"]:
                     return float(item["pricing"]["now"])
                 elif "price" in item:
@@ -162,62 +115,58 @@ def get_live_price(store, item_name, api_keys):
                     except ValueError:
                         pass
             return 5.00
+
+        # --- 2. ZENROWS SCRAPERS (ALDI & IGA) ---
+        elif store in ["Aldi", "IGA"]:
+            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}" if store == "Aldi" else f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
             
-        # --- 2. ZENROWS HTML FALLBACK (ALDI & IGA) ---
-        elif store == "Aldi":
-            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
-            wait_for_element = ".box--price"
-        elif store == "IGA":
-            target_url = f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
-            wait_for_element = ".item-price"
+            api_url = "https://api.zenrows.com/v1/"
+            params = {
+                "apikey": zenrows_key, 
+                "url": target_url, 
+                "js_render": "true", 
+                "antibot": "true", 
+                "premium_proxy": "true",
+                "block_resources": "image,media,stylesheet,font"
+            }
+            
+            response = requests.get(api_url, params=params, timeout=15)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            if store == "Aldi":
+                print(f"\n--- ALDI PAGE TEXT FOR {item_name} ---")
+                print(soup.text[:800])
+                price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
+            else:
+                price_element = soup.select_one('.item-price, .price')
+                
+            price = 0.00
+            if price_element:
+                clean_text = price_element.text.replace('$', '').strip()
+                match = re.search(r'\d+\.\d{2}', clean_text)
+                if match: 
+                    price = float(match.group())
+                else:
+                    try: 
+                        price = float(clean_text)
+                    except ValueError: 
+                        price = 0.00
+                        
+            if price == 0.00:
+                page_text = soup.get_text()
+                prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
+                if prices_found:
+                    valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
+                    if valid_prices: 
+                        price = valid_prices[0]
+                        
+            return price if price > 0 else 5.00 
+            
         else:
             return 99.99
             
-        api_url = "https://api.zenrows.com/v1/"
-        params = {
-            "apikey": zenrows_key, 
-            "url": target_url, 
-            "js_render": "true", 
-            "antibot": "true", 
-            "premium_proxy": "true",
-            "block_resources": "image,media,stylesheet,font",
-            "wait_for": wait_for_element
-        }
-        response = requests.get(api_url, params=params, timeout=90)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        if store == "Aldi":
-            price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
-        else:
-            price_element = soup.select_one('.item-price, .price')
-            
-        price = 0.00
-        if price_element:
-            clean_text = price_element.text.replace('$', '').strip()
-            match = re.search(r'\d+\.\d{2}', clean_text)
-            if match: 
-                price = float(match.group())
-            else:
-                try: 
-                    price = float(clean_text)
-                except ValueError: 
-                    price = 0.00
-                    
-        if price == 0.00:
-            page_text = soup.get_text()
-            prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
-            if prices_found:
-                valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
-                if valid_prices: 
-                    price = valid_prices[0]
-                    
-        return price if price > 0 else 5.00 
-        
     except Exception as e:
-        # This prints the error permanently in your Codespaces terminal
         print(f"\n🚨 DEBUG - {store} error on {item_name}: {str(e)}\n")
-        # This leaves a persistent red box on the app screen
-        st.error(f"🚨 {store} error on {item_name}: {str(e)}")
         return 99.99
 
 def generate_smart_basket_report(user_items, selected_stores):
@@ -234,6 +183,7 @@ def generate_smart_basket_report(user_items, selected_stores):
     status_text.text("Loading price cache...")
     price_cache = load_price_cache()
     cache_updated = False
+    api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
@@ -249,7 +199,9 @@ def generate_smart_basket_report(user_items, selected_stores):
         elif "aldi" in item_lower and "Aldi" in selected_stores: stores_to_search = ["Aldi"]
         elif "iga" in item_lower and "IGA" in selected_stores: stores_to_search = ["IGA"]
         
-        item_store_data = {}
+        item_store_prices = {}
+        stores_needing_scrape = []
+        
         for store in selected_stores:
             if store in stores_to_search:
                 cache_key = (store, item_lower)
@@ -257,35 +209,47 @@ def generate_smart_basket_report(user_items, selected_stores):
                 
                 use_cache = False
                 if cached_data:
-                    # Keep successful scrapes for 24h. Retry errors (99.99) after 1h.
                     expiry_hours = 24 if cached_data["price"] < 90.00 else 1
                     if (datetime.now() - cached_data["timestamp"]) < timedelta(hours=expiry_hours):
                         use_cache = True
                 
                 if use_cache:
-                    status_text.text(f"Using cached price for: {item_name} at {store}...")
-                    unit_price = cached_data["price"]
-                    time.sleep(0.1) # Small visual buffer so the UI updates smoothly
+                    item_store_prices[store] = cached_data["price"]
                 else:
-                    status_text.text(f"Scraping live price for: {item_name} at {store}...")
+                    stores_needing_scrape.append(store)
+            else:
+                item_store_prices[store] = 99.99
+
+        if stores_needing_scrape:
+            status_text.text(f"Fetching live prices for: {item_name}...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(stores_needing_scrape)) as executor:
+                future_to_store = {
+                    executor.submit(get_live_price, store, item_name, api_keys): store 
+                    for store in stores_needing_scrape
+                }
+                for future in concurrent.futures.as_completed(future_to_store):
+                    store = future_to_store[future]
+                    try:
+                        price = future.result()
+                    except Exception:
+                        price = 99.99
                     
-                    api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
-                    unit_price = get_live_price(store, item_name, api_keys)
-                    
-                    price_cache[cache_key] = {
-                        "price": unit_price,
+                    item_store_prices[store] = price
+                    price_cache[(store, item_lower)] = {
+                        "price": price,
                         "timestamp": datetime.now()
                     }
                     cache_updated = True
-            else:
-                unit_price = 99.99 
-                
+
+        item_store_data = {}
+        for store, unit_price in item_store_prices.items():
             total_price = unit_price * qty
             store_totals[store] += total_price
             item_store_data[store] = {
                 "unit_price": f"${unit_price:.2f}/{unit}",
                 "total_price": total_price
             }
+            
         sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]['total_price'])
         cheapest_store = sorted_item_stores[0][0]
         best_price = sorted_item_stores[0][1]['total_price']
@@ -309,11 +273,13 @@ def generate_smart_basket_report(user_items, selected_stores):
         
     status_text.empty()
     progress_bar.empty()
+    
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
     worst_store_cost = ranked_stores[-1][1]
     trip_savings = max(0.0, worst_store_cost - split_store_total)
+    
     store_rankings = []
     for rank, (store, cost) in enumerate(ranked_stores, 1):
         diff = cost - best_single_store_cost
@@ -323,6 +289,7 @@ def generate_smart_basket_report(user_items, selected_stores):
             "store": store, "rank": rank, "total_cost": cost, 
             "badge": badge, "difference_from_best": diff_str
         })
+        
     return {
         "total_items": total_items,
         "trip_savings": trip_savings,
@@ -617,6 +584,16 @@ st.markdown(f"""
     }}
     .app-header h1 {{ margin: 0; color: white; font-size: 26px; font-weight: 800; padding-top: 5px; }}
     .app-header p {{ margin: 0; font-size: 14px; opacity: 0.9; }}
+    
+    /* LOGOUT BUTTON INVISIBLE OVERLAY */
+    div[data-testid="element-container"]:has(#logout-anchor) {{ display: none; }}
+    div[data-testid="element-container"]:has(#logout-anchor) + div[data-testid="element-container"] {{
+        margin-top: -65px !important; margin-bottom: 25px !important; margin-left: auto !important; margin-right: 0px !important; width: 40px !important; z-index: 99 !important;
+    }}
+    div[data-testid="element-container"]:has(#logout-anchor) + div[data-testid="element-container"] button {{
+        opacity: 0 !important; height: 40px !important; width: 40px !important; cursor: pointer !important;
+    }}
+
     /* DYNAMIC STORE PILLS */
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label [data-baseweb="checkbox"] {{
         display: none !important;
@@ -971,7 +948,6 @@ elif not st.session_state["authenticated"]:
 # --- 6. MAIN APP (Authenticated User) ---
 # =====================================================================
 else:
-    
     # -----------------------------------------------------------
     # VIEW: SHOP CELEBRATION (POST-FINISH)
     # -----------------------------------------------------------
@@ -1187,11 +1163,15 @@ else:
                 <p>{greeting}</p>
                 <h1>Brad</h1>
             </div>
-            <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center;">
+            <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; position: relative;">
                 ↩
             </div>
         </div>
+        <div id="logout-anchor"></div>
         """, unsafe_allow_html=True)
+        if st.button("Logout", key="btn_logout"):
+            st.session_state["authenticated"] = False
+            st.rerun()
         
         with st.container(border=True):
             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
@@ -1223,7 +1203,7 @@ else:
                         for idx, r_item in enumerate(recent_items):
                             cols = st.columns([0.15, 0.15, 0.7])
                             with cols[0]:
-                                chk = st.checkbox("", key=f"rec_chk_{idx}", label_visibility="collapsed")
+                                chk = st.checkbox("Select Item", key=f"rec_chk_{idx}", label_visibility="collapsed")
                                 if chk:
                                     selected_indices.append(idx)
                             with cols[1]:
