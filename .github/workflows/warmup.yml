@@ -1,0 +1,31 @@
+name: Overnight Cache Warmer
+
+on:
+  schedule:
+    # This runs at 18:00 UTC every day (which is 4:00 AM AEST)
+    - cron: '0 18 * * *'
+  workflow_dispatch: # Allows you to run it manually from the GitHub dashboard
+
+jobs:
+  warm_cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11' 
+
+      - name: Install Dependencies
+        run: |
+          pip install requests beautifulsoup4 gspread google-auth apify-client Pillow pyzbar
+
+      - name: Run Cache Warmer Script
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python cache_warmer.py
