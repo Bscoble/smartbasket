@@ -17,7 +17,7 @@ def scrape_iga_zenrows(target_url):
         } 
     try: 
         # Increased timeout to 90 seconds 
-        response = requests.get(zenrows_url, params=params, timeout=90) 
+        response = requests.get(zenrows_url, params=params, timeout=15) 
         response.raise_for_status() 
         return response.text 
     except requests.exceptions.Timeout: 
@@ -209,7 +209,7 @@ def get_live_price(store, item_name, api_keys):
             "block_resources": "image,media,stylesheet,font",
             "wait_for": wait_for_element
         }
-        response = requests.get(api_url, params=params, timeout=120)
+        response = requests.get(api_url, params=params, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         if store == "Aldi":
