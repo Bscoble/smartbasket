@@ -201,6 +201,18 @@ def get_live_price(store, item_name, api_keys):
         else:
             return 99.99
             
+response = requests.get(api_url, params=params, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # --- ADD THESE TWO LINES TO DEBUG ALDI ---
+        if store == "Aldi":
+            print(f"\n--- ALDI PAGE TEXT FOR {item_name} ---")
+            print(soup.text[:800]) # Prints the first 800 characters of the page to your terminal
+        # -----------------------------------------
+        
+        if store == "Aldi":
+            price_element = soup.select_one('.box--price .value, .product-price, .price, .item-price')
+
         api_url = "https://api.zenrows.com/v1/"
         params = {
             "apikey": zenrows_key, 
@@ -214,6 +226,10 @@ def get_live_price(store, item_name, api_keys):
         response = requests.get(api_url, params=params, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
+        if store == "aldi":
+            print(f"\n--- ALDI PAGE TEXT FOR {item_name} ---")
+            print(soup.tect[:800]) #Prints the first 800 charactes of the page to your terminal
+
         if store == "Aldi":
             price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
         else:
