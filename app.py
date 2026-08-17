@@ -27,6 +27,31 @@ def scrape_iga_zenrows(target_url):
         st.error(f"ZenRows API Error: {e}") 
     return None 
 
+def fetch_all_prices_concurrently(item_name, api_keys):
+    stores = ["Woolworths", "Coles", "Aldi", "IGA"]
+    results = {}
+    
+    # Open a pool of 4 workers (one for each store)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        
+        # Launch all 4 scrapers at the exact same millisecond
+        future_to_store = {
+            executor.submit(get_live_price, store, item_name, api_keys): store 
+            for store in stores
+        }
+        
+        # As each store finishes scraping, save its result immediately
+        for future in concurrent.futures.as_completed(future_to_store):
+            store = future_to_store[future]
+            try:
+                price = future.result()
+                results[store] = price
+            except Exception as e:
+                st.error(f"Failed to fetch {store}: {e}")
+                results[store] = None
+                
+    return results
+
 from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
@@ -968,40 +993,11 @@ elif not st.session_state["authenticated"]:
             st.session_state["auth_mode"] = "login"
             st.rerun()
 
-def fetch_all_prices_concurrently(item_name, api_keys):
-    stores = ["Woolworths", "Coles", "Aldi", "IGA"]
-    results = {}
-    
-    # Open a pool of 4 workers (one for each store)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        
-        # Launch all 4 scrapers at the exact same millisecond
-        future_to_store = {
-            executor.submit(get_live_price, store, item_name, api_keys): store 
-            for store in stores
-        }
-        
-        # As each store finishes scraping, save its result immediately
-        for future in concurrent.futures.as_completed(future_to_store):
-            store = future_to_store[future]
-            try:
-                price = future.result()
-                results[store] = price
-            except Exception as e:
-                st.error(f"Failed to fetch {store}: {e}")
-                results[store] = None
-                
-    return results
-
-
-
-
 
 # =====================================================================
 # --- 6. MAIN APP (Authenticated User) ---
 # =====================================================================
 else:
-    
 
     if st.button("Compare Prices at 4 Stores"):
         with st.spinner(f"Bypassing firewalls and fetching live prices for {item_name}..."):
@@ -1011,8 +1007,6 @@ else:
         live_prices = fetch_all_prices_concurrently(item_name, api_keys)
         
         st.write(live_prices)
-
-
 
     # -----------------------------------------------------------
     # VIEW: SHOP CELEBRATION (POST-FINISH)
