@@ -1004,9 +1004,9 @@ else:
         
         # This will now take only as long as the SLOWEST store (e.g., 20-30 seconds), 
         # instead of the COMBINED time of all stores (3+ minutes).
-        live_prices = fetch_all_prices_concurrently(item_name, api_keys)
+            live_prices = fetch_all_prices_concurrently(item_name, api_keys)
         
-        st.write(live_prices)
+            st.write(live_prices)
 
     # -----------------------------------------------------------
     # VIEW: SHOP CELEBRATION (POST-FINISH)
