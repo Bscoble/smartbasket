@@ -201,7 +201,7 @@ def get_live_price(store, item_name, api_keys):
         else:
             return 99.99
             
-response = requests.get(api_url, params=params, timeout=15)
+        response = requests.get(api_url, params=params, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # --- ADD THESE TWO LINES TO DEBUG ALDI ---
