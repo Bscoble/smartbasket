@@ -24,8 +24,6 @@ sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
 cache_ws = sh.worksheet("Price Cache")
 
 # --- THE STAPLES LIST ---
-# Add items here that you buy almost every week. 
-# The script will ensure these always have fresh prices.
 COMMON_STAPLES = [
     "Full Cream Milk 2L",
     "Bananas",
@@ -38,9 +36,87 @@ COMMON_STAPLES = [
 STORES = ["Woolworths", "Coles", "Aldi", "IGA"]
 api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
 
-# [PASTE YOUR EXACT get_live_price FUNCTION HERE]
-# Copy the get_live_price function from your app.py 
-# Just change any st.error() calls to print()
+def get_live_price(store, item_name, api_keys):
+    apify_key = api_keys.get("apify")
+    zenrows_key = api_keys.get("zenrows")
+    
+    try:
+        # --- 1. APIFY SCRAPERS (WOOLWORTHS & COLES) ---
+        if store in ["Woolworths", "Coles"]:
+            client = ApifyClient(apify_key)
+            actor = "stealth_mode/woolworths-product-search-scraper" if store == "Woolworths" else "stealth_mode/coles-product-search-scraper"
+            search_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}" if store == "Woolworths" else f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"
+            
+            run_input = {
+                "urls": [search_url],
+                "ignore_url_failures": True,
+                "max_items_per_url": 1,
+                "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]}
+            }
+            
+            run = client.actor(actor).call(run_input=run_input)
+            
+            for item in client.dataset(run.default_dataset_id).list_items().items:
+                if "pricing" in item and "now" in item["pricing"]:
+                    return float(item["pricing"]["now"])
+                elif "price" in item:
+                    try:
+                        return float(str(item["price"]).replace("$", ""))
+                    except ValueError:
+                        pass
+            return 5.00
+
+        # --- 2. ZENROWS SCRAPERS (ALDI & IGA) ---
+        elif store in ["Aldi", "IGA"]:
+            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}" if store == "Aldi" else f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
+            
+            api_url = "https://api.zenrows.com/v1/"
+            params = {
+                "apikey": zenrows_key, 
+                "url": target_url, 
+                "js_render": "true", 
+                "antibot": "true", 
+                "premium_proxy": "true",
+                "block_resources": "image,media,stylesheet,font"
+            }
+            
+            response = requests.get(api_url, params=params, timeout=15)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            if store == "Aldi":
+                # We skip printing the 800 characters here to keep the cloud logs clean!
+                price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
+            else:
+                price_element = soup.select_one('.item-price, .price')
+                
+            price = 0.00
+            if price_element:
+                clean_text = price_element.text.replace('$', '').strip()
+                match = re.search(r'\d+\.\d{2}', clean_text)
+                if match: 
+                    price = float(match.group())
+                else:
+                    try: 
+                        price = float(clean_text)
+                    except ValueError: 
+                        price = 0.00
+                        
+            if price == 0.00:
+                page_text = soup.get_text()
+                prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
+                if prices_found:
+                    valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
+                    if valid_prices: 
+                        price = valid_prices[0]
+                        
+            return price if price > 0 else 5.00 
+            
+        else:
+            return 99.99
+            
+    except Exception as e:
+        print(f"\n🚨 DEBUG - {store} error on {item_name}: {str(e)}\n")
+        return 99.99
 
 def warm_the_cache():
     print(f"Starting overnight cache warmup at {datetime.now()}...")
