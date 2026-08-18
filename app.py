@@ -858,7 +858,7 @@ else:
         </div>
         <div id="logout-anchor"></div>
         """, unsafe_allow_html=True)
-        if st.button("Logout", key="btn_logout"):
+        if st.button("↩", key="btn_logout", help="Log out"):
             auth_token = st.query_params.get("auth_token", "")
             if auth_token:
                 auth_manager.revoke_session(auth_token)
