@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from config import WORKSHEET_CONFIG, WORKSHEET_NAMES
+from config import SUPPORTED_COUNTRIES
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class AuthManager:
     def _user_from_row(row: list) -> Optional[Dict[str, str]]:
         if len(row) < 7 or not row[0].strip():
             return None
-        has_country_column = len(row) >= 8
+        has_country_column = len(row) >= 8 and row[3].strip() in SUPPORTED_COUNTRIES
         return {
             "email": row[0].strip().lower(),
             "name": row[1].strip(),
@@ -88,6 +89,14 @@ class AuthManager:
             "session_token_hash": row[5] if has_country_column else row[4],
             "has_country_column": has_country_column,
         }
+
+    @staticmethod
+    def _normalize_postcode(postcode: str) -> str:
+        """Normalize common Google Sheets numeric formatting for postcode matching."""
+        normalized = str(postcode).strip()
+        if normalized.endswith(".0"):
+            normalized = normalized[:-2]
+        return normalized
 
     def _find_user(self, email: str) -> Optional[Dict[str, str]]:
         worksheet = self._worksheet()
@@ -138,7 +147,11 @@ class AuthManager:
     def reset_password(self, email: str, postcode: str, new_password: str) -> bool:
         """Reset a password after verifying the account email and postcode."""
         user = self._find_user(email)
-        if not user or not hmac.compare_digest(user["postcode"], postcode.strip()):
+        if not user:
+            return False
+        stored_postcode = self._normalize_postcode(user["postcode"])
+        entered_postcode = self._normalize_postcode(postcode)
+        if not hmac.compare_digest(stored_postcode, entered_postcode):
             return False
 
         worksheet = self._worksheet()
