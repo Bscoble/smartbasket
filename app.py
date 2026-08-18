@@ -123,6 +123,17 @@ if "search_performed" not in st.session_state:
 if "recent_shops_available" not in st.session_state:
     st.session_state["recent_shops_available"] = False
 
+if st.query_params.get("logout") == "1":
+    logout_token = st.query_params.get("auth_token", "")
+    if logout_token:
+        auth_manager.revoke_session(logout_token)
+    st.query_params.pop("logout", None)
+    st.query_params.pop("auth_token", None)
+    st.session_state["authenticated"] = False
+    st.session_state["current_user"] = None
+    st.session_state["auth_mode"] = "login"
+    st.rerun()
+
 prefs = st.session_state["prefs"]
 
 # ============================================================================
@@ -852,18 +863,9 @@ else:
                 <p>{greeting}</p>
                 <h1>{display_name}</h1>
             </div>
+            <a class="header-logout-link" href="?logout=1&auth_token={st.query_params.get('auth_token', '')}" title="Log out" aria-label="Log out">⏻</a>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown('<div class="logout-button-marker"></div>', unsafe_allow_html=True)
-        if st.button("⏻", key="btn_logout", help="Log out"):
-            auth_token = st.query_params.get("auth_token", "")
-            if auth_token:
-                auth_manager.revoke_session(auth_token)
-            st.query_params.pop("auth_token", None)
-            st.session_state["authenticated"] = False
-            st.session_state["current_user"] = None
-            st.session_state["auth_mode"] = "login"
-            st.rerun()
         
         with st.container(border=True):
             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)

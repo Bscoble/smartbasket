@@ -276,6 +276,28 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     opacity: 0.9;
 }
 
+.header-logout-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF !important;
+    font-size: 17px;
+    font-weight: 700;
+    text-decoration: none !important;
+    transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.header-logout-link:hover {
+    background: rgba(255, 255, 255, 0.32);
+    color: #FFFFFF !important;
+    transform: translateY(-1px);
+}
+
 /* ========================================================================
    LOGOUT BUTTON - INVISIBLE OVERLAY
    ======================================================================== */
