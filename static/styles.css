@@ -141,11 +141,12 @@ div:has(> .login-screen-marker) + div[data-testid="stForm"] input:focus {
 }
 
 div:has(> .login-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
-    margin-top: 10px !important;
-    min-height: 44px !important;
-    border-radius: 10px !important;
+    margin-top: 12px !important;
+    min-height: 46px !important;
+    border-radius: 11px !important;
     background: #FF4B4B !important;
-    box-shadow: 0 5px 12px rgba(255, 75, 75, 0.22) !important;
+    box-shadow: 0 6px 14px rgba(255, 75, 75, 0.24) !important;
+    letter-spacing: 0.1px !important;
 }
 
 div:has(> .login-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"]:hover {
@@ -153,25 +154,34 @@ div:has(> .login-screen-marker) + div[data-testid="stForm"] button[kind="primary
 }
 
 div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] {
-    gap: 8px !important;
-    margin-top: 2px !important;
+    gap: 10px !important;
+    margin-top: 6px !important;
 }
 
 div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] button {
-    min-height: 38px !important;
-    padding: 6px 10px !important;
+    min-height: 40px !important;
+    padding: 7px 12px !important;
     border: 1px solid #D9DEE5 !important;
-    border-radius: 9px !important;
+    border-radius: 10px !important;
     background: #FFFFFF !important;
     color: #334155 !important;
     font-size: 12px !important;
     font-weight: 600 !important;
+    box-shadow: 0 2px 5px rgba(28, 33, 40, 0.04) !important;
+    transition: border-color 0.18s ease, background-color 0.18s ease,
+        color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] button:hover {
     border-color: #005A36 !important;
     color: #005A36 !important;
     background: #F5FAF7 !important;
+    box-shadow: 0 4px 10px rgba(0, 90, 54, 0.1) !important;
+}
+
+div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] button:focus-visible {
+    outline: 3px solid rgba(0, 90, 54, 0.18) !important;
+    outline-offset: 2px !important;
 }
 
 div:has(> .signup-screen-marker) + div[data-testid="stForm"] {

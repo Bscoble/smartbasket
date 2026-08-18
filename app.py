@@ -71,7 +71,7 @@ try:
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
 except Exception as e:
-    logger.error(f"Failed to initialize price : {e}", exc_info=True)
+    logger.error(f"Failed to initialize price: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -526,7 +526,10 @@ elif not st.session_state["authenticated"]:
                     st.session_state["auth_notice"] = "Your password has been reset. You can now sign in."
                     st.rerun()
                 else:
-                    st.error("We could not verify that email and postcode combination.")
+                    st.error(
+                        f"We could not verify {target_email or 'that email'} and postcode combination. "
+                        "Please go back and confirm the email address on your account."
+                    )
 
 # =====================================================================
 # --- 6. MAIN APP (Authenticated User) ---

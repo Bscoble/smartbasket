@@ -96,6 +96,8 @@ class AuthManager:
         normalized = str(postcode).strip()
         if normalized.endswith(".0"):
             normalized = normalized[:-2]
+        if normalized.isdigit() and len(normalized) < 4:
+            normalized = normalized.zfill(4)
         return normalized
 
     def _find_user(self, email: str) -> Optional[Dict[str, str]]:
