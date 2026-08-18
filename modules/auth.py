@@ -86,6 +86,7 @@ class AuthManager:
             "country": row[3].strip() if has_country_column else "Australia",
             "password_hash": row[4] if has_country_column else row[3],
             "session_token_hash": row[5] if has_country_column else row[4],
+            "has_country_column": has_country_column,
         }
 
     def _find_user(self, email: str) -> Optional[Dict[str, str]]:
@@ -133,6 +134,22 @@ class AuthManager:
         worksheet.update_cell(row_number, 6, datetime.now().isoformat(timespec="seconds"))
         user["token"] = token
         return user
+
+    def reset_password(self, email: str, postcode: str, new_password: str) -> bool:
+        """Reset a password after verifying the account email and postcode."""
+        user = self._find_user(email)
+        if not user or not hmac.compare_digest(user["postcode"], postcode.strip()):
+            return False
+
+        worksheet = self._worksheet()
+        password_column = 5 if user["has_country_column"] else 4
+        session_column = 6 if user["has_country_column"] else 5
+        token_created_column = 7 if user["has_country_column"] else 6
+        worksheet.update_cell(int(user["row_number"]), password_column, self._hash_password(new_password))
+        # Invalidate any existing browser session after a password reset.
+        worksheet.update_cell(int(user["row_number"]), session_column, "")
+        worksheet.update_cell(int(user["row_number"]), token_created_column, "")
+        return True
 
     def validate_session(self, token: str) -> Optional[Dict[str, str]]:
         if not token:

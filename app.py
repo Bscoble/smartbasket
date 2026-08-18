@@ -103,6 +103,8 @@ if "current_page" not in st.session_state:
     st.session_state["current_page"] = "home"
 if "reset_email" not in st.session_state:
     st.session_state["reset_email"] = ""
+if "auth_notice" not in st.session_state:
+    st.session_state["auth_notice"] = ""
 if "prefs" not in st.session_state:
     try:
         st.session_state["prefs"] = sheets_manager.load_store_preferences()
@@ -358,6 +360,9 @@ elif not st.session_state["authenticated"]:
             <p class="auth-subtitle">Sign in to pick up your shopping list.</p>
         </div>
         """, unsafe_allow_html=True)
+
+        if st.session_state.get("auth_notice"):
+            st.success(st.session_state.pop("auth_notice"))
         
         st.markdown('<div class="login-screen-marker"></div>', unsafe_allow_html=True)
         with st.form("login_form"):
@@ -459,7 +464,7 @@ elif not st.session_state["authenticated"]:
             
         st.markdown("""
         <div style="color: #555; font-size: 14px; line-height: 1.5; margin-bottom: 20px;">
-            Enter the email address linked to your account and we'll send you a link to reset your password.
+            Reset your password using the email address and postcode saved on your account.
         </div>
         """, unsafe_allow_html=True)
         
@@ -471,18 +476,18 @@ elif not st.session_state["authenticated"]:
                 label_visibility="collapsed",
             )
             
-            submitted = st.form_submit_button("Send Reset Link", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Continue", type="primary", use_container_width=True)
             if submitted:
                 if reset_email_input and validate_email(reset_email_input):
                     st.session_state["reset_email"] = reset_email_input.strip()
-                    st.session_state["auth_mode"] = "forgot_success"
+                    st.session_state["auth_mode"] = "forgot_reset"
                     st.rerun()
                 st.error("Please enter a valid email address.")
                 
     # -----------------------------------------------------------
-    # VIEW: FORGOT PASSWORD SUCCESS (STEP 2)
+    # VIEW: RESET PASSWORD (STEP 2)
     # -----------------------------------------------------------
-    elif st.session_state["auth_mode"] == "forgot_success":
+    elif st.session_state["auth_mode"] == "forgot_reset":
         st.markdown("""
         <div class="auth-header">
             <div style="font-size: 32px; margin-bottom: -5px;">🔑</div>
@@ -491,28 +496,37 @@ elif not st.session_state["authenticated"]:
         """, unsafe_allow_html=True)
         
         st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
-        if st.button("Back", key="btn_success_back"):
+        if st.button("Back", key="btn_reset_back"):
             st.session_state["auth_mode"] = "login"
             st.rerun()
             
-        target_email = st.session_state.get("reset_email", "bscoble74@gmail.com")
-        
         st.markdown(f"""
-        <div style="text-align: center; margin-top: 20px;">
-            <div style="font-size: 36px; margin-bottom: 10px;">📧</div>
-            <h3 style="font-family: 'Georgia', serif; font-size: 20px; color: #111; margin-bottom: 10px;">Check your email</h3>
-            <p style="color: #555; font-size: 14px; line-height: 1.5; margin-bottom: 25px;">
-                We've sent a password reset link to<br><b>{target_email}</b>
-            </p>
-            <p style="color: #888; font-size: 12px; margin-bottom: 30px;">
-                Didn't receive it? Check your spam folder or try again in a few minutes.
-            </p>
+        <div style="color: #555; font-size: 14px; line-height: 1.5; margin: 20px 0 20px 0;">
+            Enter the postcode on your account, then choose a new password.
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button("Back to Sign In", type="primary", use_container_width=True):
-            st.session_state["auth_mode"] = "login"
-            st.rerun()
+
+        with st.form("reset_password_form"):
+            reset_postcode = st.text_input("Postcode", placeholder="Postcode", label_visibility="collapsed")
+            new_password = st.text_input("New password", type="password", placeholder="New password (8+ characters)", label_visibility="collapsed")
+            confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm new password", label_visibility="collapsed")
+
+            submitted = st.form_submit_button("Reset Password", type="primary", use_container_width=True)
+            if submitted:
+                target_email = st.session_state.get("reset_email", "")
+                if not reset_postcode.isdigit() or len(reset_postcode) != 4:
+                    st.error("Please enter your 4-digit postcode.")
+                elif len(new_password) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif new_password != confirm_password:
+                    st.error("The passwords do not match.")
+                elif auth_manager.reset_password(target_email, reset_postcode, new_password):
+                    st.session_state["auth_mode"] = "login"
+                    st.session_state["reset_email"] = target_email
+                    st.session_state["auth_notice"] = "Your password has been reset. You can now sign in."
+                    st.rerun()
+                else:
+                    st.error("We could not verify that email and postcode combination.")
 
 # =====================================================================
 # --- 6. MAIN APP (Authenticated User) ---
