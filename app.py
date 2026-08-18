@@ -155,6 +155,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     store_has_complete_prices = {store: True for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
+    unavailable_reasons = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -293,6 +294,12 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         for store, unit_price in item_store_prices.items():
             if unit_price is None:
                 store_has_complete_prices[store] = False
+                unavailable_reasons.append({
+                    "item": item_name,
+                    "store": store,
+                    "status": item_store_status.get(store, {}).get("status", "unavailable"),
+                    "message": item_store_status.get(store, {}).get("message", "Price unavailable"),
+                })
                 item_store_data[store] = {
                     "unit_price": "Unavailable",
                     "total_price": None,
@@ -357,6 +364,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     )
     if not ranked_stores:
         logger.warning("No stores returned complete prices for this comparison")
+        st.session_state["comparison_diagnostics"] = unavailable_reasons
         return None
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
@@ -1139,7 +1147,21 @@ else:
                         st.session_state["shop_mode"] = "overview"
                         st.rerun()
                     else:
-                        st.error("No valid items found to compare.")
+                        diagnostics = st.session_state.pop("comparison_diagnostics", [])
+                        if diagnostics:
+                            reason_summary = {}
+                            for detail in diagnostics:
+                                key = f"{detail['store']}: {detail['message']}"
+                                reason_summary[key] = reason_summary.get(key, 0) + 1
+                            st.error(
+                                "The items were loaded, but no supermarket prices were returned. "
+                                + " | ".join(
+                                    f"{reason} ({count} item{'s' if count != 1 else ''})"
+                                    for reason, count in reason_summary.items()
+                                )
+                            )
+                        else:
+                            st.error("No valid shopping-list items were found to compare.")
                         
             # --- RESULTS SCREEN ---
             if "report" in st.session_state and st.session_state.get("shopping_active", False):
