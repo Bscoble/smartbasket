@@ -112,6 +112,20 @@ def parse_quantity(qty_str: str, default: int = 1) -> int:
         return default
 
 
+def infer_unit(item_name: str) -> str:
+    """Infer a stored unit from common product-size and packaging terms."""
+    text = item_name.lower().strip()
+    if re.search(r"\b\d+(?:\.\d+)?\s*(?:litre|litres|liter|liters|l)\b", text):
+        return "L"
+    if re.search(r"\b\d+(?:\.\d+)?\s*(?:kilogram|kilograms|kilo|kilos|kg)\b", text):
+        return "kg"
+    if re.search(r"\b\d+(?:\.\d+)?\s*(?:gram|grams|g)\b", text):
+        return "g"
+    if re.search(r"\b\d+\s*(?:pack|packs|packet|packets|pk)\b", text):
+        return "Pk"
+    return "each"
+
+
 def item_key(store: str, item_name: str) -> Tuple[str, str]:
     """
     Create a cache key tuple for store/item combinations.

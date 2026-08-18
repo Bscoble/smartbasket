@@ -162,7 +162,15 @@ DATETIME_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 # UNIT OPTIONS
 # ============================================================================
 
-UNIT_OPTIONS = ["each", "L", "kg", "g", "Pk"]
+UNIT_OPTIONS = ["Auto", "Each", "Litre", "Kilogram", "Gram", "Packet"]
+UNIT_VALUES = {
+    "Auto": "auto",
+    "Each": "each",
+    "Litre": "L",
+    "Kilogram": "kg",
+    "Gram": "g",
+    "Packet": "Pk",
+}
 
 # ============================================================================
 # REGEX PATTERNS

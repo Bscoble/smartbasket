@@ -30,6 +30,7 @@ from helpers import (
     get_store_initial,
     get_greeting,
     validate_email,
+    infer_unit,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 
@@ -883,8 +884,11 @@ else:
                 find_submitted = st.form_submit_button("🔍 Find matches", use_container_width=True)
                 
                 if add_submitted and item_name:
+                    stored_unit = config.UNIT_VALUES[unit]
+                    if stored_unit == "auto":
+                        stored_unit = infer_unit(item_name)
                     sheets_manager.save_product(user_id, item_name)
-                    if sheets_manager.add_item_to_list(item_name, int(qty), unit, user_id=user_id):
+                    if sheets_manager.add_item_to_list(item_name, int(qty), stored_unit, user_id=user_id):
                         st.rerun()
                     else:
                         st.error("Failed to add item. Please try again.")
