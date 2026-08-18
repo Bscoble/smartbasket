@@ -664,6 +664,10 @@ div:has(> .recent-shops-hidden-marker) + div[data-testid="stExpander"] {
     display: none !important;
 }
 
+div:has(> .search-results-hidden-marker) + div[data-testid="stExpander"] {
+    display: none !important;
+}
+
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     button {
     background: #FAFAFA !important;

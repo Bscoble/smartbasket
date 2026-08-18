@@ -118,6 +118,8 @@ if "expander_toggle" not in st.session_state:
     st.session_state["expander_toggle"] = False
 if "search_results" not in st.session_state:
     st.session_state["search_results"] = []
+if "search_performed" not in st.session_state:
+    st.session_state["search_performed"] = False
 if "recent_shops_available" not in st.session_state:
     st.session_state["recent_shops_available"] = False
 
@@ -896,6 +898,7 @@ else:
                     st.warning("Enter a product description first.")
 
                 if find_submitted:
+                    st.session_state["search_performed"] = True
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             local_results = sheets_manager.search_saved_products(user_id, item_name)
@@ -964,7 +967,13 @@ else:
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
                                 st.rerun()
                                 
-            with st.expander("🔍 Product matches", expanded=bool(st.session_state.get("search_results"))):
+            search_marker = (
+                "search-results-visible-marker"
+                if st.session_state.get("search_performed", False)
+                else "search-results-hidden-marker"
+            )
+            st.markdown(f'<div class="{search_marker}"></div>', unsafe_allow_html=True)
+            with st.expander("🔍 Matching products", expanded=bool(st.session_state.get("search_results"))):
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                     for idx, res in enumerate(st.session_state["search_results"]):
