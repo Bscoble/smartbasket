@@ -698,6 +698,33 @@ div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     text-align: center !important;
 }
 
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button::before {
+    display: block !important;
+    margin-bottom: 3px !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="column"]:nth-child(1) button::before {
+    content: "ℹ️";
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="column"]:nth-child(2) button::before {
+    content: "🔒";
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="column"]:nth-child(3) button::before {
+    content: "💬";
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="column"]:nth-child(4) button::before {
+    content: "👥";
+}
+
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     button [data-testid="stMarkdownContainer"] {
     width: 100% !important;

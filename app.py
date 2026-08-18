@@ -868,21 +868,46 @@ else:
         with st.container(border=True):
             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
             with st.form("add_item_form", clear_on_submit=True):
-                item_name = st.text_input("What do you need?", placeholder="e.g., Full Cream Milk 2L", label_visibility="collapsed")
+                item_name = st.text_input(
+                    "What do you need?",
+                    placeholder="e.g., Helga's white bread 700g",
+                    label_visibility="collapsed",
+                )
                 c1, c2, c3 = st.columns([1.5, 2.5, 1])
                 with c1:
                     qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
                 with c2:
                     unit = st.selectbox("Unit", config.UNIT_OPTIONS, label_visibility="collapsed")
                 with c3:
-                    submitted = st.form_submit_button("＋", help="Add to List")
+                    add_submitted = st.form_submit_button("＋", help="Add to List")
+                find_submitted = st.form_submit_button("🔍 Find matches", use_container_width=True)
                 
-                if submitted and item_name:
+                if add_submitted and item_name:
                     sheets_manager.save_product(user_id, item_name)
                     if sheets_manager.add_item_to_list(item_name, int(qty), unit, user_id=user_id):
                         st.rerun()
                     else:
                         st.error("Failed to add item. Please try again.")
+                elif add_submitted:
+                    st.warning("Enter a product description first.")
+
+                if find_submitted:
+                    if item_name.strip():
+                        with st.spinner("Finding the closest product matches..."):
+                            local_results = sheets_manager.search_saved_products(user_id, item_name)
+                            remote_results = (
+                                ProductLookup.search_product_by_name(item_name)
+                                if len(local_results) < 5
+                                else []
+                            )
+                            local_titles = {result["title"].lower() for result in local_results}
+                            st.session_state["search_results"] = (
+                                local_results
+                                + [result for result in remote_results if result["title"].lower() not in local_titles]
+                            )[:5]
+                    else:
+                        st.session_state["search_results"] = []
+                        st.warning("Enter a product description first.")
             
             # Dynamic label toggle hack to force the expander to reset/collapse upon state change
             if not st.session_state.get("recent_shops_available", False):
@@ -935,28 +960,7 @@ else:
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
                                 st.rerun()
                                 
-            with st.expander("🔍 Search Database by Name"):
-                search_query = st.text_input("Search Open Food Facts", placeholder="e.g., Hillcrest Bubble", label_visibility="collapsed")
-                if st.button("Search Database", use_container_width=True):
-                    if search_query:
-                        with st.spinner("Searching database..."):
-                            local_results = sheets_manager.search_saved_products(user_id, search_query)
-                            remote_results = (
-                                ProductLookup.search_product_by_name(search_query)
-                                if len(local_results) < 5
-                                else []
-                            )
-                            results = local_results + [
-                                result for result in remote_results
-                                if result["title"].lower() not in {item["title"].lower() for item in local_results}
-                            ]
-                            results = results[:5]
-                            if results:
-                                st.session_state["search_results"] = results
-                            else:
-                                st.session_state["search_results"] = []
-                                st.warning("No products found matching that name.")
-                
+            with st.expander("🔍 Product matches", expanded=bool(st.session_state.get("search_results"))):
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                     for idx, res in enumerate(st.session_state["search_results"]):
@@ -979,6 +983,8 @@ else:
                                 else:
                                     st.error("Failed to add item. Please try again.")
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
+                elif st.session_state.get("search_results") == []:
+                    st.info("Enter a description above and choose Find matches.")
                         
             with st.expander("📷 Scan Barcode from Pantry"):
                 camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
@@ -1434,19 +1440,19 @@ else:
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns(4, gap="small")
         with fc1:
-            if st.button("ℹ️ About", key="footer_about"):
+            if st.button("About", key="footer_about"):
                 st.session_state["current_page"] = "about"
                 st.rerun()
         with fc2:
-            if st.button("🔒 Privacy", key="footer_privacy"):
+            if st.button("Privacy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
         with fc3:
-            if st.button("💬 Support", key="footer_contact"):
+            if st.button("Support", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
                 st.rerun()
         with fc4:
-            if st.button("👥 Refer", key="footer_refer"):
+            if st.button("Refer", key="footer_refer"):
                 st.session_state["current_page"] = "refer"
                 st.rerun()
         st.markdown(
