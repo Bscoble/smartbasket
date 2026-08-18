@@ -71,7 +71,7 @@ try:
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
 except Exception as e:
-    loerror(f"Failed to initialize price scraper: {e}", exc_info=True)
+    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -117,6 +117,8 @@ if "expander_toggle" not in st.session_state:
     st.session_state["expander_toggle"] = False
 if "search_results" not in st.session_state:
     st.session_state["search_results"] = []
+if "recent_shops_available" not in st.session_state:
+    st.session_state["recent_shops_available"] = False
 
 prefs = st.session_state["prefs"]
 
@@ -883,6 +885,16 @@ else:
                         st.error("Failed to add item. Please try again.")
             
             # Dynamic label toggle hack to force the expander to reset/collapse upon state change
+            if not st.session_state.get("recent_shops_available", False):
+                st.session_state["recent_shops_available"] = bool(
+                    sheets_manager.get_recent_history(user_id)
+                )
+            recent_marker = (
+                "recent-shops-visible-marker"
+                if st.session_state["recent_shops_available"]
+                else "recent-shops-hidden-marker"
+            )
+            st.markdown(f'<div class="{recent_marker}"></div>', unsafe_allow_html=True)
             recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
             with st.expander(recent_shops_label):
                 recent_items = sheets_manager.get_recent_history(
@@ -998,20 +1010,27 @@ else:
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
         col1, col2, col3, col4 = st.columns([1.35, 0.85, 0.85, 0.85])
-        with col1:
-            sel_woolies = st.checkbox("Woolworths", value=prefs["Woolworths"])
-        with col2:
-            sel_coles = st.checkbox("Coles", value=prefs["Coles"])
-        with col3:
-            sel_aldi = st.checkbox("Aldi", value=prefs["Aldi"])
-        with col4:
-            sel_iga = st.checkbox("IGA", value=prefs["IGA"])
-            
-        new_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
-        if new_prefs != prefs:
-            sheets_manager.save_store_preferences(new_prefs)
-            st.session_state["prefs"] = new_prefs
-            st.rerun()
+        store_columns = [
+            (col1, "Woolworths", "woolworths"),
+            (col2, "Coles", "coles"),
+            (col3, "Aldi", "aldi"),
+            (col4, "IGA", "iga"),
+        ]
+        for store_column, store_name, store_key in store_columns:
+            with store_column:
+                st.markdown(f'<div class="{store_key}-store-button-marker"></div>', unsafe_allow_html=True)
+                if st.button(
+                    store_name,
+                    key=f"store_toggle_{store_key}",
+                    type="primary" if prefs[store_name] else "secondary",
+                ):
+                    updated_prefs = prefs.copy()
+                    updated_prefs[store_name] = not prefs[store_name]
+                    if sheets_manager.save_store_preferences(updated_prefs):
+                        st.session_state["prefs"] = updated_prefs
+                    st.rerun()
+
+        new_prefs = st.session_state["prefs"]
             
         active_names = [name for name, active in new_prefs.items() if active]
         st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
@@ -1366,21 +1385,48 @@ else:
                 # --- NEW FINISH SHOP BUTTON ---
                 st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                 if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
-                    with st.spinner("Archiving items to your recent shops database..."):
-                        fresh_items = sheets_manager.get_shopping_list(user_id)
-                        sheets_manager.archive_shop_to_history(
-                            fresh_items,
-                            st.session_state["current_user"]["email"],
+                    selected_purchase_names = set()
+                    grouped_item_names = {}
+                    if st.session_state.get("shop_mode") == "split":
+                        for item in report["item_breakdown"]:
+                            grouped_item_names.setdefault(item["cheapest_store"], []).append(item["item_name"])
+                    else:
+                        best_store = report["comparison_modes"]["single_store_best"]["store_name"]
+                        grouped_item_names[best_store] = [
+                            item["item_name"] for item in report["item_breakdown"]
+                        ]
+
+                    for store_name, item_names in grouped_item_names.items():
+                        for item_index, item_name in enumerate(item_names):
+                            check_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{item_index}"
+                            if st.session_state.get(check_key, False):
+                                selected_purchase_names.add(item_name.strip().lower())
+
+                    if not selected_purchase_names:
+                        st.warning(
+                            "Select at least one item you purchased before finishing your shop."
                         )
-                    
-                    if "report" in st.session_state:
-                        st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
-                        del st.session_state["report"]
-                        
-                    st.session_state["shopping_active"] = False
-                    st.session_state["current_page"] = "celebration"
-                    time.sleep(0.5)
-                    st.rerun()
+                    else:
+                        with st.spinner("Archiving items to your recent shops database..."):
+                            fresh_items = sheets_manager.get_shopping_list(user_id)
+                            purchased_items = [
+                                row for row in fresh_items
+                                if row and row[0].strip().lower() in selected_purchase_names
+                            ]
+                            sheets_manager.archive_shop_to_history(
+                                purchased_items,
+                                st.session_state["current_user"]["email"],
+                            )
+                        st.session_state["recent_shops_available"] = True
+
+                        if "report" in st.session_state:
+                            st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
+                            del st.session_state["report"]
+
+                        st.session_state["shopping_active"] = False
+                        st.session_state["current_page"] = "celebration"
+                        time.sleep(0.5)
+                        st.rerun()
                     
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 30px 0 20px 0; opacity: 0.1;'>", unsafe_allow_html=True)

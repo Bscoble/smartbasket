@@ -393,6 +393,68 @@ div:has(> .clear-all-marker) + div[data-testid="element-container"] button:hover
     text-decoration: underline !important;
 }
 
+/* ========================================================================
+   SUPERMARKET TOGGLE BUTTONS
+   ======================================================================== */
+div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button,
+div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button,
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button,
+div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button {
+    min-height: 38px !important;
+    padding: 8px 14px !important;
+    border-radius: 22px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    box-shadow: none !important;
+    width: auto !important;
+}
+
+div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button {
+    background: #005A36 !important;
+    border: 1px solid #005A36 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button,
+div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button {
+    background: #E31837 !important;
+    border: 1px solid #E31837 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button {
+    background: #002D62 !important;
+    border: 1px solid #002D62 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"] {
+    background: #FFFFFF !important;
+    border: 2px solid #C7E9D5 !important;
+    color: #1F2937 !important;
+}
+
+div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"],
+div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"] {
+    background: #FFFFFF !important;
+    border: 2px solid #C7E9D5 !important;
+    color: #1F2937 !important;
+}
+
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"] {
+    background: #FFFFFF !important;
+    border: 2px solid #C7E9D5 !important;
+    color: #1F2937 !important;
+}
+
+div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button:hover,
+div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button:hover,
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button:hover,
+div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button:hover {
+    filter: brightness(0.9) !important;
+    transform: translateY(-1px) !important;
+}
+
 /* The marker and button share the list-heading row, so this selector remains
    stable when Streamlit changes the nested element-container structure. */
 div[data-testid="stHorizontalBlock"]:has(.clear-all-marker) {
@@ -583,6 +645,10 @@ div[data-testid="element-container"]:has(#subpage-back-anchor)
     font-size: 10px;
     font-weight: 500;
     text-align: center;
+}
+
+div:has(> .recent-shops-hidden-marker) + div[data-testid="stExpander"] {
+    display: none !important;
 }
 
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
