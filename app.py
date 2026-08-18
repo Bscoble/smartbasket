@@ -70,7 +70,8 @@ try:
     APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
-except Exception as e:    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+except Exception as e:
+    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
