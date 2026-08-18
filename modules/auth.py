@@ -18,7 +18,8 @@ class AuthManager:
 
     _HEADERS = [
         "Email",
-        "Name",
+        "First Name",
+        "Surname",
         "Postcode",
         "Country",
         "Password Hash",
@@ -48,7 +49,12 @@ class AuthManager:
             "Email", "Name", "Postcode", "Password Hash",
             "Session Token Hash", "Token Created", "Created At",
         ]:
-            worksheet.update("A1:H1", [self._HEADERS])
+            worksheet.update("A1:I1", [self._HEADERS])
+        elif worksheet_data[0][:8] == [
+            "Email", "Name", "Postcode", "Country", "Password Hash",
+            "Session Token Hash", "Token Created", "Created At",
+        ]:
+            worksheet.update("A1:I1", [self._HEADERS])
         return worksheet
 
     @staticmethod
@@ -90,21 +96,34 @@ class AuthManager:
         if AuthManager._is_header_row(row):
             return None
 
+        has_split_name = len(row) >= 9 and row[4].strip() in SUPPORTED_COUNTRIES
         has_country_column = len(row) >= 8 and row[3].strip() in SUPPORTED_COUNTRIES
-        password_hash = row[4] if has_country_column else row[3]
-        session_token_hash = row[5] if has_country_column and len(row) > 5 else (row[4] if len(row) > 4 else "")
-        password_column = 5 if has_country_column else 4
-        session_token_column = 6 if has_country_column else 5
-        token_created_column = 7 if has_country_column else 6
+
+        if has_split_name:
+            first_name, surname, postcode, country = row[1], row[2], row[3], row[4]
+            password_hash, session_token_hash = row[5], row[6]
+            password_column, session_token_column, token_created_column = 6, 7, 8
+        elif has_country_column:
+            first_name, surname, postcode, country = row[1].split(" ", 1)[0], "", row[2], row[3]
+            password_hash, session_token_hash = row[4], row[5] if len(row) > 5 else ""
+            password_column, session_token_column, token_created_column = 5, 6, 7
+        else:
+            first_name = row[1].strip().split(" ", 1)[0]
+            surname = row[1].strip()[len(first_name):].strip()
+            postcode, country = row[2], "Australia"
+            password_hash = row[3]
+            session_token_hash = row[4] if len(row) > 4 else ""
+            password_column, session_token_column, token_created_column = 4, 5, 6
 
         return {
             "email": row[0].strip().lower(),
-            "name": row[1].strip(),
-            "postcode": row[2].strip(),
-            "country": row[3].strip() if has_country_column else "Australia",
+            "name": f"{first_name.strip()} {surname.strip()}".strip(),
+            "first_name": first_name.strip(),
+            "surname": surname.strip(),
+            "postcode": postcode.strip(),
+            "country": country.strip(),
             "password_hash": password_hash,
             "session_token_hash": session_token_hash,
-            "has_country_column": has_country_column,
             "password_column": password_column,
             "session_token_column": session_token_column,
             "token_created_column": token_created_column,
@@ -131,7 +150,8 @@ class AuthManager:
 
     def create_user(
         self,
-        name: str,
+        first_name: str,
+        surname: str,
         email: str,
         password: str,
         postcode: str,
@@ -143,7 +163,8 @@ class AuthManager:
 
         self._worksheet().append_row([
             email,
-            name.strip(),
+            first_name.strip(),
+            surname.strip(),
             postcode.strip(),
             country.strip(),
             self._hash_password(password),

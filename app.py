@@ -71,7 +71,7 @@ try:
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
 except Exception as e:
-    loggeerror(f"Failed to initialize price scraper: {e}", exc_info=True)
+    loerror(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -508,7 +508,8 @@ elif not st.session_state["authenticated"]:
         
         st.markdown('<div class="signup-screen-marker"></div>', unsafe_allow_html=True)
         with st.form("signup_form"):
-            name = st.text_input("Full name", placeholder="Full name", label_visibility="collapsed")
+            first_name = st.text_input("First name", placeholder="First name", label_visibility="collapsed")
+            surname = st.text_input("Surname", placeholder="Surname", label_visibility="collapsed")
             email = st.text_input("Email address", placeholder="Email address", label_visibility="collapsed")
             pwd = st.text_input("Password", type="password", placeholder="Password", label_visibility="collapsed")
             country = st.selectbox("Country", config.SUPPORTED_COUNTRIES, index=config.SUPPORTED_COUNTRIES.index(config.DEFAULT_COUNTRY), label_visibility="collapsed")
@@ -517,16 +518,18 @@ elif not st.session_state["authenticated"]:
             
             submitted = st.form_submit_button("Create Account", type="primary", use_container_width=True)
             if submitted:
-                if not name.strip():
-                    st.error("Please enter your name.")
+                if not first_name.strip():
+                    st.error("Please enter your first name.")
+                elif not surname.strip():
+                    st.error("Please enter your surname.")
                 elif not validate_email(email):
                     st.error("Please enter a valid email address.")
                 elif len(pwd) < 8:
                     st.error("Password must be at least 8 characters.")
                 elif not postcode.isdigit() or len(postcode) != 4:
-                    st.error("Please enter a valid 4-digit Australian postcode.")
+                    st.error(f"Please enter a valid 4-digit {country} postcode.")
                 else:
-                    user = auth_manager.create_user(name, email, pwd, postcode, country)
+                    user = auth_manager.create_user(first_name, surname, email, pwd, postcode, country)
                     if user:
                         st.session_state["authenticated"] = True
                         st.session_state["current_user"] = user
@@ -834,7 +837,7 @@ else:
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "home":
         current_user = st.session_state.get("current_user") or {}
-        display_name = current_user.get("name", "there")
+        display_name = current_user.get("first_name") or current_user.get("name", "there").split()[0]
         user_id = current_user.get("email", "")
         greeting = get_greeting(current_user.get("country", config.DEFAULT_COUNTRY))
             
