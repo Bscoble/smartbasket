@@ -5,5 +5,5 @@ google-auth
 beautifulsoup4
 pyzbar
 Pillow
-requests
 apify-client
+schedule
