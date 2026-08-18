@@ -11,6 +11,7 @@ import concurrent.futures
 
 import streamlit as st
 import gspread
+from gspread.exceptions import APIError, SpreadsheetNotFound
 from google.oauth2.service_account import Credentials
 
 # Import configuration and modules
@@ -49,6 +50,59 @@ logger.info("SmartBasket application starting")
 # ============================================================================
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
 
+
+def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
+    """Return a user-facing error summary and troubleshooting steps."""
+    error_text = str(error).lower()
+
+    if isinstance(error, KeyError) or "gcp_service_account" in error_text:
+        return (
+            "Database configuration is missing.",
+            [
+                "Add the 'gcp_service_account' secret to Streamlit secrets.",
+                "If running locally, create .streamlit/secrets.toml with the service account fields.",
+                "If running on Streamlit Cloud, open App Settings > Secrets and paste the same values.",
+            ],
+        )
+
+    if isinstance(error, SpreadsheetNotFound):
+        return (
+            "Database spreadsheet could not be opened.",
+            [
+                "Confirm SPREADSHEET_ID is correct in config.py.",
+                "Share the spreadsheet with the service-account client_email as Editor.",
+                "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
+            ],
+        )
+
+    if isinstance(error, APIError):
+        return (
+            "Google Sheets API rejected the request.",
+            [
+                "Enable Google Sheets API and Google Drive API for the service account project.",
+                "Check whether quota limits or permissions are blocking requests.",
+                "Verify the service account JSON is valid and active.",
+            ],
+        )
+
+    if "private_key" in error_text or "service account" in error_text:
+        return (
+            "Service account credentials look invalid.",
+            [
+                "Re-copy the full service account JSON fields into Streamlit secrets.",
+                "Ensure private_key contains newline escapes exactly as provided by Google.",
+                "Regenerate a new key in Google Cloud if the current key was revoked.",
+            ],
+        )
+
+    return (
+        "Failed to connect to database.",
+        [
+            "Refresh and try again.",
+            "If it keeps failing, verify secrets and Google Sheets access settings.",
+        ],
+    )
+
 # ============================================================================
 # AUTHENTICATION & SHEETS INITIALIZATION
 # ============================================================================
@@ -62,7 +116,15 @@ try:
     logger.info("Google Sheets authenticated successfully")
 except Exception as e:
     logger.error(f"Failed to authenticate with Google Sheets: {e}", exc_info=True)
-    st.error("Failed to connect to database. Please refresh and try again.")
+    summary, steps = _build_sheets_connection_error(e)
+    st.error(summary)
+    st.markdown("**How to fix this**")
+    for step in steps:
+        st.write(f"- {step}")
+    with st.expander("Technical details"):
+        st.write(f"Error type: {type(e).__name__}")
+        st.write(f"Message: {e}")
+        st.write(f"Spreadsheet ID: {SPREADSHEET_ID}")
     st.stop()
 
 # Initialize API credentials for price scraping
