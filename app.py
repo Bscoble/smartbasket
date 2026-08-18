@@ -1,279 +1,253 @@
+"""
+SmartBasket - Australian Grocery Price Comparison Application
+A Streamlit-based app that helps users compare prices across major supermarkets.
+"""
+
+import logging
 import time
-import re
-import requests
-import gspread
-import urllib.parse
-import concurrent.futures
-import streamlit as st
-from bs4 import BeautifulSoup
-from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
-from PIL import Image, ImageEnhance, ImageOps
-from pyzbar.pyzbar import decode
-from apify_client import ApifyClient
+from urllib.parse import quote
+import concurrent.futures
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="SmartBasket", page_icon="🛒", layout="centered")
+import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 
-# --- 1. CONFIGURATION & SECURE AUTH ---
-ZENROWS_KEY = st.secrets["ZENROWS_KEY"]
-APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
-creds_dict = dict(st.secrets["gcp_service_account"])
-scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-gc = gspread.authorize(creds)
-sh = gc.open_by_key("1e_ZARwsDg0LTYfVkgFjybUDXluycHW79lz2ntwRxoaw")
+# Import configuration and modules
+import config
+from config import (
+    APP_TITLE,
+    APP_ICON,
+    APP_LAYOUT,
+    GOOGLE_SCOPES,
+    SPREADSHEET_ID,
+    THREAD_POOL_MAX_WORKERS,
+    THREAD_POOL_TIMEOUT,
+)
+from helpers import (
+    format_price,
+    get_store_color,
+    get_store_initial,
+    get_greeting,
+    validate_email,
+)
+from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 
-# --- FUNCTIONS ---
-def load_store_preferences():
-    default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True, "IGA": True}
+# ============================================================================
+# LOGGING SETUP
+# ============================================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+logger.info("SmartBasket application starting")
+
+# ============================================================================
+# PAGE CONFIGURATION
+# ============================================================================
+st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
+
+# ============================================================================
+# AUTHENTICATION & SHEETS INITIALIZATION
+# ============================================================================
+try:
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=GOOGLE_SCOPES)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    sheets_manager = SheetsManager(sh)
+    auth_manager = AuthManager(sh)
+    logger.info("Google Sheets authenticated successfully")
+except Exception as e:
+    logger.error(f"Failed to authenticate with Google Sheets: {e}", exc_info=True)
+    st.error("Failed to connect to database. Please refresh and try again.")
+    st.stop()
+
+# Initialize API credentials for price scraping
+try:
+    ZENROWS_KEY = st.secrets.get("ZENROWS_KEY", "")
+    APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
+    price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
+    logger.info("Price scraper initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+    price_scraper = None
+
+# ============================================================================
+# EXTERNAL FUNCTIONS - Moved to Modules
+# ============================================================================
+# Core business logic has been refactored into separate modules:
+# - modules/sheets.py: Google Sheets operations via SheetsManager
+# - modules/pricing.py: Price scraping via PriceScraper
+# - modules/barcode.py: Barcode scanning via BarcodeScanner, ProductLookup
+# - modules/feedback.py: Feedback submission via FeedbackManager
+# See respective modules for implementation details and documentation.
+
+
+
+# ============================================================================
+# SESSION STATE INITIALIZATION
+# ============================================================================
+if "app_started" not in st.session_state:
+    # Query parameters persist the welcome-screen decision across Streamlit sessions.
+    st.session_state["app_started"] = st.query_params.get("welcome_seen") == "1"
+if "authenticated" not in st.session_state:
+    auth_token = st.query_params.get("auth_token", "")
+    restored_user = auth_manager.validate_session(auth_token) if auth_token else None
+    st.session_state["authenticated"] = restored_user is not None
+    st.session_state["current_user"] = restored_user
+if "auth_mode" not in st.session_state:
+    st.session_state["auth_mode"] = "login"
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "home"
+if "reset_email" not in st.session_state:
+    st.session_state["reset_email"] = ""
+if "prefs" not in st.session_state:
     try:
-        pref_ws = sh.worksheet("Preferences")
-        data = pref_ws.get_all_values()
-        if len(data) >= 2:
-            return {
-                "Woolworths": data[1][0] == "True",
-                "Coles": data[1][1] == "True",
-                "Aldi": data[1][2] == "True",
-                "IGA": data[1][3] == "True"
-            }
-    except Exception:
-        pass
-    return default_prefs
-
-def save_store_preferences(prefs):
-    try:
-        pref_ws = sh.worksheet("Preferences")
-        pref_ws.update('A1:D2', [
-            ["Woolworths", "Coles", "Aldi", "IGA"],
-            [str(prefs["Woolworths"]), str(prefs["Coles"]), str(prefs["Aldi"]), str(prefs["IGA"])]
-        ])
-    except Exception:
-        pass
-
-def load_price_cache():
-    """Loads the entire price cache into memory for fast lookups."""
-    try:
-        ws = sh.worksheet("Price Cache")
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Price Cache", rows="1000", cols="4")
-        ws.append_row(["Store", "Item", "Price", "Timestamp"])
-        return {}
-    
-    data = ws.get_all_values()
-    cache = {}
-    if len(data) > 1:
-        for row in data[1:]:
-            if len(row) >= 4:
-                store, item, price_str, ts_str = row[0], row[1], row[2], row[3]
-                try:
-                    ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                    price = float(price_str)
-                    cache[(store, item.lower())] = {"price": price, "timestamp": ts}
-                except ValueError:
-                    pass
-    return cache
-
-def save_price_cache(cache):
-    """Bulk saves the updated cache back to Google Sheets."""
-    try:
-        ws = sh.worksheet("Price Cache")
-        rows = [["Store", "Item", "Price", "Timestamp"]]
-        for (store, item), data in cache.items():
-            rows.append([store, item, str(data["price"]), data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")])
-        ws.clear()
-        ws.append_rows(rows)
-    except Exception:
-        pass
-
-def get_live_price(store, item_name, api_keys):
-    apify_key = api_keys.get("apify")
-    zenrows_key = api_keys.get("zenrows")
-    
-    try:
-        # --- 1. APIFY SCRAPERS (WOOLWORTHS & COLES) ---
-        if store in ["Woolworths", "Coles"]:
-            client = ApifyClient(apify_key)
-            actor = "stealth_mode/woolworths-product-search-scraper" if store == "Woolworths" else "stealth_mode/coles-product-search-scraper"
-            search_url = f"https://www.woolworths.com.au/shop/search/products?searchTerm={urllib.parse.quote(item_name)}" if store == "Woolworths" else f"https://www.coles.com.au/search/products?q={urllib.parse.quote(item_name)}"
-            
-            run_input = {
-                "urls": [search_url],
-                "ignore_url_failures": True,
-                "max_items_per_url": 1,
-                "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]}
-            }
-            
-            run = client.actor(actor).call(run_input=run_input)
-            
-            for item in client.dataset(run.default_dataset_id).list_items().items:
-                if "pricing" in item and "now" in item["pricing"]:
-                    return float(item["pricing"]["now"])
-                elif "price" in item:
-                    try:
-                        return float(str(item["price"]).replace("$", ""))
-                    except ValueError:
-                        pass
-            return 5.00
-
-        # --- 2. ZENROWS SCRAPERS (ALDI & IGA) ---
-        elif store in ["Aldi", "IGA"]:
-            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}" if store == "Aldi" else f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
-            
-            api_url = "https://api.zenrows.com/v1/"
-            params = {
-                "apikey": zenrows_key, 
-                "url": target_url, 
-                "js_render": "true", 
-                "antibot": "true", 
-                "premium_proxy": "true",
-                "block_resources": "image,media,stylesheet,font"
-            }
-            
-            response = requests.get(api_url, params=params, timeout=15)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            if store == "Aldi":
-                print(f"\n--- ALDI PAGE TEXT FOR {item_name} ---")
-                print(soup.text[:800])
-                price_element = soup.select_one('.box--price .value, .product-price, .price, span.price')
-            else:
-                price_element = soup.select_one('.item-price, .price')
-                
-            price = 0.00
-            if price_element:
-                clean_text = price_element.text.replace('$', '').strip()
-                match = re.search(r'\d+\.\d{2}', clean_text)
-                if match: 
-                    price = float(match.group())
-                else:
-                    try: 
-                        price = float(clean_text)
-                    except ValueError: 
-                        price = 0.00
-                        
-            if price == 0.00:
-                page_text = soup.get_text()
-                prices_found = re.findall(r'\$(\d+\.\d{2})', page_text)
-                if prices_found:
-                    valid_prices = [float(p) for p in prices_found if 0.50 <= float(p) <= 150.0]
-                    if valid_prices: 
-                        price = valid_prices[0]
-                        
-            return price if price > 0 else 5.00 
-            
-        else:
-            return 99.99
-            
+        st.session_state["prefs"] = sheets_manager.load_store_preferences()
     except Exception as e:
-        print(f"\n🚨 DEBUG - {store} error on {item_name}: {str(e)}\n")
-        return 99.99
+        logger.error(f"Error loading store preferences: {e}")
+        st.session_state["prefs"] = config.DEFAULT_STORE_PREFS
+if "last_savings" not in st.session_state:
+    st.session_state["last_savings"] = 0.0
+if "expander_toggle" not in st.session_state:
+    st.session_state["expander_toggle"] = False
+if "search_results" not in st.session_state:
+    st.session_state["search_results"] = []
 
-def generate_smart_basket_report(user_items, selected_stores):
+prefs = st.session_state["prefs"]
+
+# ============================================================================
+# HELPER FUNCTIONS FOR REPORT GENERATION
+# ============================================================================
+
+def generate_smart_basket_report(user_items: list, selected_stores: list) -> Optional[dict]:
+    """
+    Generate a comprehensive price comparison report for shopping items.
+    
+    Args:
+        user_items: List of items from shopping list
+        selected_stores: List of selected stores for comparison
+        
+    Returns:
+        Dictionary with comparison results or None if no valid items
+    """
     store_totals = {store: 0.0 for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
     
     progress_bar = st.progress(0)
     status_text = st.empty()
+    
+    # Filter valid items
     valid_items = [row for row in user_items if len(row) >= 3 and row[0].strip()]
     total_items = len(valid_items)
-    if total_items == 0: return None
+    if total_items == 0:
+        return None
     
+    # Load price cache
     status_text.text("Loading price cache...")
-    price_cache = load_price_cache()
+    price_cache = sheets_manager.load_price_cache()
     cache_updated = False
-    api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
-        try: qty = int(row[1])
-        except ValueError: qty = 1
+        try:
+            qty = int(row[1])
+        except ValueError:
+            qty = 1
         unit = row[2]
         
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
         
-        if "woolworths" in item_lower and "Woolworths" in selected_stores: stores_to_search = ["Woolworths"]
-        elif "coles" in item_lower and "Coles" in selected_stores: stores_to_search = ["Coles"]
-        elif "aldi" in item_lower and "Aldi" in selected_stores: stores_to_search = ["Aldi"]
-        elif "iga" in item_lower and "IGA" in selected_stores: stores_to_search = ["IGA"]
+        # Check if item mentions a specific store
+        if "woolworths" in item_lower and "Woolworths" in selected_stores:
+            stores_to_search = ["Woolworths"]
+        elif "coles" in item_lower and "Coles" in selected_stores:
+            stores_to_search = ["Coles"]
+        elif "aldi" in item_lower and "Aldi" in selected_stores:
+            stores_to_search = ["Aldi"]
+        elif "iga" in item_lower and "IGA" in selected_stores:
+            stores_to_search = ["IGA"]
         
         item_store_prices = {}
         stores_needing_scrape = []
         
+        # Check cache and determine which stores need fresh prices
         for store in selected_stores:
             if store in stores_to_search:
                 cache_key = (store, item_lower)
                 cached_data = price_cache.get(cache_key)
                 
-                use_cache = False
-                if cached_data:
-                    expiry_hours = 24 if cached_data["price"] < 90.00 else 1
-                    if (datetime.now() - cached_data["timestamp"]) < timedelta(hours=expiry_hours):
-                        use_cache = True
-                
-                if use_cache:
+                if cached_data and sheets_manager.is_cache_valid(cached_data):
                     item_store_prices[store] = cached_data["price"]
+                    logger.debug(f"Using cached price for {item_name} at {store}")
                 else:
                     stores_needing_scrape.append(store)
             else:
                 item_store_prices[store] = 99.99
-
+        
+        # Fetch live prices for uncached items
         if stores_needing_scrape:
             status_text.text(f"Fetching live prices for: {item_name}...")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(stores_needing_scrape)) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS) as executor:
                 future_to_store = {
-                    executor.submit(get_live_price, store, item_name, api_keys): store 
+                    executor.submit(price_scraper.get_live_price, store, item_name): store
                     for store in stores_needing_scrape
                 }
-                for future in concurrent.futures.as_completed(future_to_store):
+                for future in concurrent.futures.as_completed(future_to_store, timeout=THREAD_POOL_TIMEOUT):
                     store = future_to_store[future]
                     try:
                         price = future.result()
-                    except Exception:
-                        price = 99.99
+                    except Exception as e:
+                        logger.error(f"Error getting price for {item_name} at {store}: {e}")
+                        price = config.DEFAULT_PRICE_FALLBACK
                     
                     item_store_prices[store] = price
                     price_cache[(store, item_lower)] = {
                         "price": price,
-                        "timestamp": datetime.now()
+                        "timestamp": datetime.now(),
                     }
                     cache_updated = True
-
+        
+        # Calculate store totals and item breakdown
         item_store_data = {}
         for store, unit_price in item_store_prices.items():
             total_price = unit_price * qty
             store_totals[store] += total_price
             item_store_data[store] = {
-                "unit_price": f"${unit_price:.2f}/{unit}",
-                "total_price": total_price
+                "unit_price": format_price(unit_price) + f"/{unit}",
+                "total_price": total_price,
             }
-            
-        sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]['total_price'])
+        
+        sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]["total_price"])
         cheapest_store = sorted_item_stores[0][0]
-        best_price = sorted_item_stores[0][1]['total_price']
-                
+        best_price = sorted_item_stores[0][1]["total_price"]
+        
         split_store_total += best_price
         
         item_breakdown.append({
             "item_name": item_name,
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
-            "unit_price": f"${(best_price/qty):.2f}/{unit}",
-            "total_price": f"${best_price:.2f}",
-            "all_stores": sorted_item_stores
+            "unit_price": f"{format_price(best_price/qty)}/{unit}",
+            "total_price": format_price(best_price),
+            "all_stores": sorted_item_stores,
         })
         
         progress_bar.progress((idx + 1) / total_items)
-        
+    
+    # Save updated cache
     if cache_updated:
         status_text.text("Saving updated prices to cache...")
-        save_price_cache(price_cache)
-        
+        sheets_manager.save_price_cache(price_cache)
+    
     status_text.empty()
     progress_bar.empty()
     
+    # Generate rankings
     ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
@@ -283,13 +257,14 @@ def generate_smart_basket_report(user_items, selected_stores):
     store_rankings = []
     for rank, (store, cost) in enumerate(ranked_stores, 1):
         diff = cost - best_single_store_cost
-        diff_str = "+$0.00" if diff == 0 else f"+${diff:.2f} more"
-        badge = "YOUR STORE" if store in selected_stores else ""
+        diff_str = "+$0.00" if diff == 0 else f"+{format_price(diff)} more"
         store_rankings.append({
-            "store": store, "rank": rank, "total_cost": cost, 
-            "badge": badge, "difference_from_best": diff_str
+            "store": store,
+            "rank": rank,
+            "total_cost": cost,
+            "difference_from_best": diff_str,
         })
-        
+    
     return {
         "total_items": total_items,
         "trip_savings": trip_savings,
@@ -297,483 +272,41 @@ def generate_smart_basket_report(user_items, selected_stores):
             "single_store_best": {
                 "store_name": best_single_store,
                 "total_cost": best_single_store_cost,
-                "is_recommended": True
+                "is_recommended": True,
             },
             "split_store_optimal": {
                 "total_cost": split_store_total,
-                "description": "Buy each item where it's cheapest across your stores"
-            }
+                "description": "Buy each item where it's cheapest across your stores",
+            },
         },
         "store_rankings": store_rankings,
-        "item_breakdown": item_breakdown
+        "item_breakdown": item_breakdown,
     }
 
-def archive_shop_to_history():
-    """Saves the current shopping list to a 'Recent Shops' worksheet and clears the list."""
-    try:
-        list_ws = sh.worksheet("Shopping List")
-        items = list_ws.get_all_values()
-        if len(items) <= 1: return False
-        
-        try:
-            history_ws = sh.worksheet("Recent Shops")
-        except gspread.WorksheetNotFound:
-            history_ws = sh.add_worksheet(title="Recent Shops", rows="1000", cols="5")
-            history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date"])
-        
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        rows_to_add = []
-        
-        start_idx = 1 if items[0][0].lower() == "item" else 0
-        for row in items[start_idx:]:
-            if len(row) >= 3 and row[0].strip():
-                item_name = row[0].strip()
-                qty = row[1]
-                unit = row[2]
-                img = row[3].strip() if len(row) >= 4 else ""
-                rows_to_add.append([item_name, qty, unit, img, current_date])
-        
-        if rows_to_add:
-            history_ws.append_rows(rows_to_add)
-        
-        # Clear current list ready for next week
-        list_ws.clear()
-        list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
-        return True
-    except Exception:
-        return False
 
-def get_recent_history():
-    """Retrieves items from the last 21 days, removing duplicates."""
-    try:
-        history_ws = sh.worksheet("Recent Shops")
-        data = history_ws.get_all_values()
-        if len(data) <= 1: return []
-        
-        recent_items = {}
-        cutoff_date = datetime.now() - timedelta(days=21)
-        
-        start_idx = 1 if data[0][0].lower() == "item" else 0
-        for row in data[start_idx:]:
-            if len(row) >= 5:
-                item = row[0].strip()
-                if not item: continue
-                qty, unit, img, date_str = row[1], row[2], row[3], row[4]
-                try:
-                    row_date = datetime.strptime(date_str, "%Y-%m-%d")
-                    if row_date >= cutoff_date:
-                        # Overwrites older entries, naturally deduplicating & keeping the most recent image/unit
-                        recent_items[item.lower()] = {"name": item, "qty": qty, "unit": unit, "img": img}
-                except ValueError:
-                    pass
-        return list(recent_items.values())
-    except Exception:
-        return []
+try:
+    import pathlib
+    css_path = pathlib.Path(__file__).parent / "static" / "styles.css"
+    if css_path.exists():
+        css_content = css_path.read_text()
+        st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+        logger.info("External CSS stylesheet loaded successfully")
+    else:
+        logger.warning(f"CSS file not found at {css_path}")
+except Exception as e:
+    logger.warning(f"Failed to load external CSS: {e}")
 
-def send_secure_feedback(user_email, feedback_msg):
-    target_inbox = "bscoble74@gmail.com" 
-    url = f"https://formsubmit.co/ajax/{target_inbox}"
-    payload = {
-        "email": user_email,
-        "message": feedback_msg,
-        "_subject": "🚨 SmartBasket: New Problem Report"
-    }
-    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        return response.status_code == 200
-    except:
-        return False
-
-def decode_barcode(image_file):
-    """Multi-pass enhanced barcode decoder for curved surfaces and camera glare."""
-    try:
-        img = Image.open(image_file)
-        
-        def check_image(img_variant):
-            decoded_objects = decode(img_variant)
-            for obj in decoded_objects:
-                return obj.data.decode("utf-8")
-            return None
-            
-        # Pass 1: Raw image
-        res = check_image(img)
-        if res: return res
-        
-        # Pass 2: Grayscale & High Contrast
-        gray = ImageOps.grayscale(img)
-        enhancer = ImageEnhance.Contrast(gray)
-        high_contrast = enhancer.enhance(2.0)
-        res = check_image(high_contrast)
-        if res: return res
-        
-        # Pass 3: Sharpened High Contrast
-        sharpener = ImageEnhance.Sharpness(high_contrast)
-        sharp = sharpener.enhance(2.5)
-        res = check_image(sharp)
-        if res: return res
-        
-        # Pass 4: Auto-rotations
-        for angle in [90, 180, 270]:
-            rotated = high_contrast.rotate(angle, expand=True)
-            res = check_image(rotated)
-            if res: return res
-            
-        # Pass 5: Binarization
-        bw = gray.point(lambda p: 255 if p > 120 else 0)
-        res = check_image(bw)
-        if res: return res
-    except Exception:
-        pass
-    return None
-
-def lookup_barcode_product(barcode):
-    """Fetches human-readable product title and image URL from Open Food Facts API."""
-    url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
-    headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == 1:
-                product = data.get("product", {})
-                name = product.get("product_name_en") or product.get("product_name")
-                brand = product.get("brands")
-                image_url = product.get("image_front_url") or product.get("image_url") or ""
-                
-                title = f"{brand} {name}".strip() if brand else name
-                if title:
-                    return title, image_url
-    except Exception:
-        pass
-    return None, None
-
-def search_product_by_name(query):
-    """Searches Open Food Facts database by text query."""
-    url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={urllib.parse.quote(query)}&search_simple=1&action=process&json=1&page_size=5"
-    headers = {"User-Agent": "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"}
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            results = []
-            for p in data.get("products", []):
-                name = p.get("product_name_en") or p.get("product_name")
-                brand = p.get("brands")
-                image_url = p.get("image_front_url") or p.get("image_url") or ""
-                title = f"{brand} {name}".strip() if brand else name
-                
-                if title and title not in [r['title'] for r in results]:
-                    results.append({"title": title, "image_url": image_url})
-            return results
-    except Exception:
-        pass
-    return []
-
-# --- 2. SESSION STATE INIT ---
-if "app_started" not in st.session_state:
-    st.session_state["app_started"] = False
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-if "auth_mode" not in st.session_state:
-    st.session_state["auth_mode"] = "login"
-if "current_page" not in st.session_state:
-    st.session_state["current_page"] = "home"
-if "reset_email" not in st.session_state:
-    st.session_state["reset_email"] = ""
-if "prefs" not in st.session_state:
-    st.session_state["prefs"] = load_store_preferences()
-if "last_savings" not in st.session_state:
-    st.session_state["last_savings"] = 0.0
-if "expander_toggle" not in st.session_state:
-    st.session_state["expander_toggle"] = False
-
-prefs = st.session_state["prefs"]
-
-# --- 3. CUSTOM FIGMA CSS & PHONE FRAME SILHOUETTE ---
+# ============================================================================
+# INLINE CSS FOR DYNAMIC STORE STYLING
+# ============================================================================
+# Store pill colors are dynamic based on current preferences
 st.markdown(f"""
 <style>
-    /* IPHONE SILHOUETTE WRAPPER FOR DESKTOP VIEW */
-    @media (min-width: 768px) {{
-        .stApp {{
-            max-width: 412px !important;
-            height: 850px !important;
-            margin: 30px auto !important;
-            border: 14px solid #1c1c1e !important;
-            border-radius: 44px !important;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            background-color: #ffffff !important;
-        }}
-    }}
-    /* REMOVE EDGE PADDING TO FIX RIGHT-SIDE WHITE STRIPE */
-    div[data-testid="stMainBlockContainer"], .main .block-container {{
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        max-width: 100% !important;
-    }}
-    /* PREVENT CHECKBOX LABELS FROM WRAPPING */
-    div[data-testid="stCheckbox"] label p {{
-        white-space: nowrap !important;
-    }}
-    /* THUMBNAIL HOVER TO ZOOM EFFECT */
-    .thumbnail-zoom {{
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        object-fit: cover;
-        transition: transform 0.25s ease, box-shadow 0.25s ease;
-        position: relative;
-        z-index: 1;
-        transform-origin: center left;
-        cursor: zoom-in;
-    }}
-    .thumbnail-zoom:hover {{
-        transform: scale(4);
-        z-index: 9999 !important;
-        box-shadow: 0px 8px 16px rgba(0,0,0,0.4);
-        border-radius: 6px;
-    }}
-    /* SPLASH GET STARTED BUTTON OVERRIDE */
-    button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {{
-        background-color: #ffffff !important;
-        color: #005A36 !important;
-        border-radius: 30px !important;
-        padding: 14px 20px !important;
-        font-weight: 800 !important;
-        font-size: 16px !important;
-        width: 100% !important;
-        border: none !important;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.25) !important;
-        margin-top: 20px !important;
-    }}
-    button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover {{
-        background-color: #f2f2f2 !important;
-        color: #004D2E !important;
-    }}
-    /* AUTH HEADER */
-    .auth-header {{
-        background-color: #005A36;
-        color: white;
-        padding: 50px 20px 40px 20px;
-        margin: -60px -20px 40px -20px;
-        border-radius: 0 0 50% 50% / 0 0 45px 45px;
-        text-align: center;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }}
-    .auth-header h1 {{
-        font-family: "Georgia", serif;
-        font-size: 32px;
-        font-weight: 700;
-        margin-top: 10px;
-        color: white;
-    }}
-    
-    /* NATIVE APP HEADER */
-    .app-header {{
-        background-color: #005A36;
-        color: white;
-        padding: 30px 20px 20px 20px;
-        margin: -60px -20px 20px -20px;
-        border-radius: 0 0 20px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }}
-    .app-header h1 {{ margin: 0; color: white; font-size: 26px; font-weight: 800; padding-top: 5px; }}
-    .app-header p {{ margin: 0; font-size: 14px; opacity: 0.9; }}
-    
-    /* LOGOUT BUTTON INVISIBLE OVERLAY */
-    div[data-testid="element-container"]:has(#logout-anchor) {{ display: none; }}
-    div[data-testid="element-container"]:has(#logout-anchor) + div[data-testid="element-container"] {{
-        margin-top: -65px !important; margin-bottom: 25px !important; margin-left: auto !important; margin-right: 0px !important; width: 40px !important; z-index: 99 !important;
-    }}
-    div[data-testid="element-container"]:has(#logout-anchor) + div[data-testid="element-container"] button {{
-        opacity: 0 !important; height: 40px !important; width: 40px !important; cursor: pointer !important;
-    }}
-
     /* DYNAMIC STORE PILLS */
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label [data-baseweb="checkbox"] {{
-        display: none !important;
-    }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
-    /* PRIMARY BUTTONS (COMPARE PRICES BUTTON) */
-    button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")) {{
-        background-color: #005A36 !important;
-        color: white !important;
-        border-radius: 35px !important;
-        padding: 16px 24px !important;
-        font-weight: 800 !important;
-        font-size: 16.5px !important;
-        width: 100% !important;
-        border: none !important;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.2) !important;
-        margin-top: 20px !important;
-        margin-bottom: 10px !important;
-    }}
-    button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")):hover {{
-        background-color: #004D2E !important;
-    }}
-    /* GENERAL PRIMARY BUTTONS */
-    button[data-testid="baseButton-primary"] {{
-        background-color: #005A36 !important;
-        color: white !important;
-        border-radius: 30px;
-        padding: 12px;
-        font-weight: 800;
-        font-size: 16px;
-        width: 100%;
-        border: none;
-        margin-top: 20px;
-    }}
-    
-    /* SECONDARY ADD ITEM SUBMIT BUTTON */
-    button[kind="secondaryFormSubmit"] {{
-        background-color: #005A36;
-        color: white;
-        border-radius: 12px;
-        font-weight: 800;
-        border: none;
-    }}
-    /* HIDE MARKER DIVS */
-    div:has(> .clear-all-marker),
-    div:has(> .qty-minus-marker),
-    div:has(> .qty-plus-marker),
-    div:has(> .qty-del-marker) {{
-        display: none !important;
-    }}
-    /* CLEAR ALL BUTTON - FRAMELESS RED TEXT LINK */
-    div:has(> .clear-all-marker) + div[data-testid="element-container"] button {{
-        background: none !important;
-        border: none !important;
-        padding: 0 !important;
-        color: #E31837 !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        box-shadow: none !important;
-        min-height: unset !important;
-        display: inline-block !important;
-        margin-top: 2px !important;
-    }}
-    div:has(> .clear-all-marker) + div[data-testid="element-container"] button:hover {{
-        color: #B30000 !important;
-        background: none !important;
-        text-decoration: underline !important;
-    }}
-    /* BASE BUTTON CENTERING FOR QUANTITY / DELETE CONTROL FRAMES */
-    button[data-testid="baseButton-secondary"] {{
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        text-align: center !important;
-        padding: 0 !important;
-        height: 38px !important;
-        min-height: 38px !important;
-        width: 100% !important;
-        border-radius: 8px !important;
-        border: none !important;
-    }}
-    /* FORCE INTERNAL TEXT/MARKDOWN CONTAINER TO PERFECT CENTER */
-    button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"],
-    button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"] p {{
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        width: 100% !important;
-        height: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        line-height: 1 !important;
-        font-size: 16px !important;
-        font-weight: bold !important;
-        text-align: center !important;
-    }}
-    /* MINUS BUTTON - LIGHT GREEN FRAME */
-    div:has(> .qty-minus-marker) + div[data-testid="element-container"] button {{
-        background-color: #E6F4EA !important;
-        color: #137333 !important;
-    }}
-    div:has(> .qty-minus-marker) + div[data-testid="element-container"] button:hover {{
-        background-color: #CEEAD6 !important;
-    }}
-    /* PLUS BUTTON - LIGHT GREEN FRAME */
-    div:has(> .qty-plus-marker) + div[data-testid="element-container"] button {{
-        background-color: #E6F4EA !important;
-        color: #137333 !important;
-    }}
-    div:has(> .qty-plus-marker) + div[data-testid="element-container"] button:hover {{
-        background-color: #CEEAD6 !important;
-    }}
-    /* DELETE (X) BUTTON - LIGHT RED FRAME */
-    div:has(> .qty-del-marker) + div[data-testid="element-container"] button {{
-        background-color: #FCE8E6 !important;
-        color: #C5221F !important;
-    }}
-    div:has(> .qty-del-marker) + div[data-testid="element-container"] button:hover {{
-        background-color: #FAD2CF !important;
-    }}
-    /* INVISIBLE OVERLAY BUTTONS (Results Screen) */
-    div[data-testid="element-container"]:has(#single-card-anchor), div[data-testid="element-container"]:has(#split-card-anchor) {{ display: none; }}
-    div[data-testid="element-container"]:has(#single-card-anchor) + div[data-testid="element-container"],
-    div[data-testid="element-container"]:has(#split-card-anchor) + div[data-testid="element-container"] {{
-        margin-top: -95px !important; margin-bottom: 15px !important;
-    }}
-    div[data-testid="element-container"]:has(#single-card-anchor) + div[data-testid="element-container"] button,
-    div[data-testid="element-container"]:has(#split-card-anchor) + div[data-testid="element-container"] button {{
-        opacity: 0 !important; height: 95px !important; width: 100% !important; z-index: 99 !important; cursor: pointer !important;
-    }}
-    
-    /* SUBPAGE BACK BUTTON INVISIBLE OVERLAY */
-    div[data-testid="element-container"]:has(#subpage-back-anchor) {{ display: none; }}
-    div[data-testid="element-container"]:has(#subpage-back-anchor) + div[data-testid="element-container"] {{
-        margin-top: -65px !important; margin-bottom: 20px !important; margin-left: -5px !important; width: 40px !important;
-    }}
-    div[data-testid="element-container"]:has(#subpage-back-anchor) + div[data-testid="element-container"] button {{
-        opacity: 0 !important; height: 40px !important; width: 40px !important; z-index: 99 !important; cursor: pointer !important;
-    }}
-    /* FOOTER BUTTONS - FRAMELESS SINGLE-LINE TEXT LINKS */
-    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button {{
-        background: transparent !important;
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        min-height: unset !important;
-        height: auto !important;
-        width: 100% !important;
-    }}
-    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button p {{
-        font-size: 11px !important;
-        white-space: nowrap !important;
-        color: #666666 !important;
-        font-weight: 500 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        text-align: center !important;
-    }}
-    div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button:hover p {{
-        color: #111111 !important;
-        text-decoration: underline !important;
-    }}
-    /* AUTH TEXT LINK BUTTONS */
-    button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")),
-    button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")) {{
-        background: none !important; border: none !important; padding: 0 !important;
-        color: #888 !important; font-size: 13px !important; font-weight: normal !important;
-        box-shadow: none !important; margin-top: -5px !important;
-    }}
-    button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Don't have an account?")):hover,
-    button[data-testid="baseButton-secondary"]:has(div:contains("Already have an account?")):hover {{
-        text-decoration: underline !important; color: #555 !important;
-    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -806,6 +339,7 @@ if not st.session_state["app_started"]:
     with col_m:
         if st.button("Get Started", type="primary", use_container_width=True, key="splash_get_started"):
             st.session_state["app_started"] = True
+            st.query_params["welcome_seen"] = "1"
             st.rerun()
 
 # =====================================================================
@@ -830,8 +364,19 @@ elif not st.session_state["authenticated"]:
             
             submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
             if submitted:
-                st.session_state["authenticated"] = True
-                st.rerun()
+                if not validate_email(email):
+                    st.error("Please enter a valid email address.")
+                elif not pwd:
+                    st.error("Please enter your password.")
+                else:
+                    user = auth_manager.authenticate(email, pwd)
+                    if user:
+                        st.session_state["authenticated"] = True
+                        st.session_state["current_user"] = user
+                        st.query_params["auth_token"] = user["token"]
+                        st.rerun()
+                    else:
+                        st.error("Email or password is incorrect.")
                 
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -864,8 +409,23 @@ elif not st.session_state["authenticated"]:
             
             submitted = st.form_submit_button("Create Account", type="primary", use_container_width=True)
             if submitted:
-                st.session_state["authenticated"] = True
-                st.rerun()
+                if not name.strip():
+                    st.error("Please enter your name.")
+                elif not validate_email(email):
+                    st.error("Please enter a valid email address.")
+                elif len(pwd) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif not postcode.isdigit() or len(postcode) != 4:
+                    st.error("Please enter a valid 4-digit Australian postcode.")
+                else:
+                    user = auth_manager.create_user(name, email, pwd, postcode)
+                    if user:
+                        st.session_state["authenticated"] = True
+                        st.session_state["current_user"] = user
+                        st.query_params["auth_token"] = user["token"]
+                        st.rerun()
+                    else:
+                        st.error("An account with that email already exists.")
                 
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1139,7 +699,7 @@ else:
                 if not email_input or not feedback_input:
                     st.error("Please fill in both fields so we can assist you properly.")
                 else:
-                    success = send_secure_feedback(email_input, feedback_input)
+                    success = FeedbackManager.send_feedback(email_input, feedback_input)
                     if success:
                         st.success("Thanks! Your feedback has been sent to our team.")
                     else:
@@ -1149,19 +709,16 @@ else:
     # VIEW: HOME / LIST PAGE
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "home":
-        current_hour = datetime.now().hour
-        if current_hour < 12:
-            greeting = "Good morning,"
-        elif current_hour < 18:
-            greeting = "Good afternoon,"
-        else:
-            greeting = "Good evening,"
+        greeting = get_greeting()
+        current_user = st.session_state.get("current_user") or {}
+        display_name = current_user.get("name", "there")
+        user_id = current_user.get("email", "")
             
         st.markdown(f"""
         <div class="app-header">
             <div>
                 <p>{greeting}</p>
-                <h1>Brad</h1>
+                <h1>{display_name}</h1>
             </div>
             <div style="background-color: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; position: relative;">
                 ↩
@@ -1170,7 +727,13 @@ else:
         <div id="logout-anchor"></div>
         """, unsafe_allow_html=True)
         if st.button("Logout", key="btn_logout"):
+            auth_token = st.query_params.get("auth_token", "")
+            if auth_token:
+                auth_manager.revoke_session(auth_token)
+            st.query_params.pop("auth_token", None)
             st.session_state["authenticated"] = False
+            st.session_state["current_user"] = None
+            st.session_state["auth_mode"] = "login"
             st.rerun()
         
         with st.container(border=True):
@@ -1181,19 +744,22 @@ else:
                 with c1:
                     qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
                 with c2:
-                    unit = st.selectbox("Unit", ["each", "L", "kg", "g", "Pk"], label_visibility="collapsed")
+                    unit = st.selectbox("Unit", config.UNIT_OPTIONS, label_visibility="collapsed")
                 with c3:
                     submitted = st.form_submit_button("＋", help="Add to List")
                 
                 if submitted and item_name:
-                    list_ws = sh.worksheet("Shopping List")
-                    list_ws.append_row([item_name, qty, unit, ""])
-                    st.rerun()
+                    if sheets_manager.add_item_to_list(item_name, int(qty), unit, user_id=user_id):
+                        st.rerun()
+                    else:
+                        st.error("Failed to add item. Please try again.")
             
             # Dynamic label toggle hack to force the expander to reset/collapse upon state change
             recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
             with st.expander(recent_shops_label):
-                recent_items = get_recent_history()
+                recent_items = sheets_manager.get_recent_history(
+                    st.session_state["current_user"]["email"]
+                )
                 if not recent_items:
                     st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
                 else:
@@ -1218,10 +784,11 @@ else:
                         
                         if st.form_submit_button("➕ Add Selected to List", use_container_width=True):
                             if selected_indices:
-                                list_ws = sh.worksheet("Shopping List")
                                 for i in selected_indices:
                                     sr = recent_items[i]
-                                    list_ws.append_row([sr["name"], 1, sr["unit"], sr["img"]])
+                                    sheets_manager.add_item_to_list(
+                                        sr["name"], int(sr["qty"]), sr["unit"], sr["img"], user_id
+                                    )
                                 
                                 # Toggle state to trick Streamlit into generating a "new" expander component that starts collapsed
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
@@ -1232,7 +799,7 @@ else:
                 if st.button("Search Database", use_container_width=True):
                     if search_query:
                         with st.spinner("Searching database..."):
-                            results = search_product_by_name(search_query)
+                            results = ProductLookup.search_product_by_name(search_query)
                             if results:
                                 st.session_state["search_results"] = results
                             else:
@@ -1252,29 +819,35 @@ else:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
                         with sc3:
                             if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
-                                list_ws = sh.worksheet("Shopping List")
-                                list_ws.append_row([res['title'], 1, "each", res['image_url']])
-                                st.session_state["search_results"] = []
-                                st.rerun()
+                                if sheets_manager.add_item_to_list(
+                                    res["title"], 1, "each", res["image_url"], user_id
+                                ):
+                                    st.session_state["search_results"] = []
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to add item. Please try again.")
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
                         
             with st.expander("📷 Scan Barcode from Pantry"):
                 camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
                 if camera_photo:
                     with st.spinner("Reading barcode..."):
-                        barcode_number = decode_barcode(camera_photo)
+                        barcode_number = BarcodeScanner.decode_barcode(camera_photo)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
-                            product_name, product_image = lookup_barcode_product(barcode_number)
+                            product_name, product_image = ProductLookup.lookup_barcode_product(barcode_number)
                             if product_name:
                                 st.info(f"Found: **{product_name}**")
                                 if product_image:
                                     st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
-                                    list_ws = sh.worksheet("Shopping List")
-                                    list_ws.append_row([product_name, 1, "each", product_image or ""])
-                                    st.success(f"Added {product_name} to your list!")
-                                    st.rerun()
+                                    if sheets_manager.add_item_to_list(
+                                        product_name, 1, "each", product_image or "", user_id
+                                    ):
+                                        st.success(f"Added {product_name} to your list!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to add item. Please try again.")
                             else:
                                 st.warning("Product not found in database. Please enter the name manually.")
                         else:
@@ -1295,7 +868,7 @@ else:
             
         new_prefs = {"Woolworths": sel_woolies, "Coles": sel_coles, "Aldi": sel_aldi, "IGA": sel_iga}
         if new_prefs != prefs:
-            save_store_preferences(new_prefs)
+            sheets_manager.save_store_preferences(new_prefs)
             st.session_state["prefs"] = new_prefs
             st.rerun()
             
@@ -1303,9 +876,9 @@ else:
         st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
         
         try:
-            list_ws = sh.worksheet("Shopping List")
-            current_items = list_ws.get_all_values()
-        except Exception:
+            current_items = sheets_manager.get_shopping_list(user_id)
+        except Exception as e:
+            logger.error(f"Error retrieving shopping list: {e}")
             current_items = []
             
         valid_rows_with_indices = []
@@ -1323,9 +896,10 @@ else:
                 st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
                 st.markdown('<div class="clear-all-marker"></div>', unsafe_allow_html=True)
                 if st.button("Clear all", type="secondary"):
-                    list_ws.clear()
-                    list_ws.append_row(["Item", "Qty", "Unit", "Image_URL"])
-                    st.rerun()
+                    if sheets_manager.clear_shopping_list(user_id):
+                        st.rerun()
+                    else:
+                        st.error("Failed to clear shopping list. Please try again.")
                 st.markdown("</div>", unsafe_allow_html=True)
                 
         if valid_rows_with_indices:
@@ -1349,20 +923,22 @@ else:
                         st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
                         if st.button("−", key=f"sub_{sheet_idx}"):
                             if i_qty > 1:
-                                list_ws.update(f'B{sheet_idx}', [[i_qty - 1]])
+                                sheets_manager.update_list_quantity(sheet_idx, i_qty - 1, user_id)
                                 st.rerun()
                     with sub_c2:
                         st.markdown(f'<div style="text-align:center; padding-top:10px; font-weight: bold;">{i_qty}</div>', unsafe_allow_html=True)
                     with sub_c3:
                         st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
                         if st.button("+", key=f"add_{sheet_idx}"):
-                            list_ws.update(f'B{sheet_idx}', [[i_qty + 1]])
+                            sheets_manager.update_list_quantity(sheet_idx, i_qty + 1, user_id)
                             st.rerun()
                 with cols[3]:
                     st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
                     if st.button("✕", key=f"del_{sheet_idx}"):
-                        list_ws.delete_rows(sheet_idx)
-                        st.rerun()
+                        if sheets_manager.delete_list_row(sheet_idx, user_id):
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete item. Please try again.")
                         
                 st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
             
@@ -1373,7 +949,7 @@ else:
                     st.error("Please select at least one store to compare.")
                 else:
                     with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
-                        fresh_items = list_ws.get_all_values()
+                        fresh_items = sheets_manager.get_shopping_list(user_id)
                         report = generate_smart_basket_report(fresh_items, active_names)
                         
                     if report:
@@ -1511,13 +1087,14 @@ else:
                         
                         single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
                         
+                        # SINGLE STORE OPTION
                         c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
                         c1_border_width = "2px" if single_is_recommended else "1px"
                         c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
                         html_single = (
-                            f'<div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">'
+                            f'<div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
                             f'{c1_badge}'
-                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">'
+                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
                             f'<div style="display: flex; align-items: center; gap: 15px;">'
                             f'<div style="font-size: 26px;">🏪</div>'
                             f'<div style="line-height: 1.3;">'
@@ -1527,19 +1104,22 @@ else:
                             f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
                             f'</div></div>'
                         )
-                        st.markdown(html_single, unsafe_allow_html=True)
-                        st.markdown('<div id="single-card-anchor"></div>', unsafe_allow_html=True)
-                        if st.button("", key="btn_single", use_container_width=True):
-                            st.session_state["shop_mode"] = "single"
-                            st.rerun()
                         
+                        with st.form("single_store_form", clear_on_submit=False):
+                            st.markdown(html_single, unsafe_allow_html=True)
+                            submitted_single = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_single")
+                            if submitted_single:
+                                st.session_state["shop_mode"] = "single"
+                                st.rerun()
+                        
+                        # SPLIT STORES OPTION
                         c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
                         c2_border_width = "2px" if not single_is_recommended else "1px"
                         c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
                         html_split = (
-                            f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0px;">'
+                            f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
                             f'{c2_badge}'
-                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">'
+                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
                             f'<div style="display: flex; align-items: center; gap: 15px;">'
                             f'<div style="font-size: 26px;">🛍️</div>'
                             f'<div style="line-height: 1.3;">'
@@ -1549,11 +1129,13 @@ else:
                             f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
                             f'</div></div>'
                         )
-                        st.markdown(html_split, unsafe_allow_html=True)
-                        st.markdown('<div id="split-card-anchor"></div>', unsafe_allow_html=True)
-                        if st.button("", key="btn_split", use_container_width=True):
-                            st.session_state["shop_mode"] = "split"
-                            st.rerun()
+                        
+                        with st.form("split_stores_form", clear_on_submit=False):
+                            st.markdown(html_split, unsafe_allow_html=True)
+                            submitted_split = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_split")
+                            if submitted_split:
+                                st.session_state["shop_mode"] = "split"
+                                st.rerun()
                             
                         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — FULL BASKET</p>", unsafe_allow_html=True)
                         
@@ -1639,7 +1221,11 @@ else:
                 st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                 if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
                     with st.spinner("Archiving items to your recent shops database..."):
-                        archive_shop_to_history()
+                        fresh_items = sheets_manager.get_shopping_list(user_id)
+                        sheets_manager.archive_shop_to_history(
+                            fresh_items,
+                            st.session_state["current_user"]["email"],
+                        )
                     
                     if "report" in st.session_state:
                         st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
@@ -1651,8 +1237,33 @@ else:
                     st.rerun()
                     
         # --- MAIN APP GLOBAL FOOTER ---
-        st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 30px 0 20px 0; opacity: 0.1;'>", unsafe_allow_html=True)
         
+        # Enhanced footer with grid layout, icons, and hover effects
+        footer_html = """
+        <div style="padding: 20px 0 10px 0; text-align: center;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 15px;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
+                    <span style="font-size: 16px;">ℹ️</span>
+                    <span style="font-size: 11px; font-weight: 600; color: #333;">About</span>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
+                    <span style="font-size: 16px;">🔒</span>
+                    <span style="font-size: 11px; font-weight: 600; color: #333;">Privacy</span>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
+                    <span style="font-size: 16px;">💬</span>
+                    <span style="font-size: 11px; font-weight: 600; color: #333;">Support</span>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
+                    <span style="font-size: 16px;">👥</span>
+                    <span style="font-size: 11px; font-weight: 600; color: #333;">Refer</span>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">© 2026 SmartBasket • Shop Smarter, Save Every Week</p>
+        </div>
+        """
+        st.markdown(footer_html, unsafe_allow_html=True)
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns([1, 1.2, 1.2, 1.4])
         with fc1:
@@ -1671,5 +1282,4 @@ else:
             if st.button("Refer a Friend", key="footer_refer"):
                 st.session_state["current_page"] = "refer"
                 st.rerun()
-        st.markdown("<br>", unsafe_allow_html=True)
 

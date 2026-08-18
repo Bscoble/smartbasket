@@ -1,0 +1,422 @@
+/* SmartBasket - Main Stylesheet */
+/* iPhone Silhouette, Components, and Brand Styling */
+
+/* ========================================================================
+   PHONE FRAME STYLING - iPhone Silhouette for Desktop View
+   ======================================================================== */
+@media (min-width: 768px) {
+    .stApp {
+        max-width: 412px !important;
+        height: 850px !important;
+        margin: 30px auto !important;
+        border: 14px solid #1c1c1e !important;
+        border-radius: 44px !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        background-color: #ffffff !important;
+    }
+}
+
+/* ========================================================================
+   MAIN CONTAINER & PADDING
+   ======================================================================== */
+div[data-testid="stMainBlockContainer"],
+.main .block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
+}
+
+/* ========================================================================
+   CHECKBOX & LABEL STYLING
+   ======================================================================== */
+/* Prevent checkbox labels from wrapping */
+div[data-testid="stCheckbox"] label p {
+    white-space: nowrap !important;
+}
+
+/* ========================================================================
+   IMAGE THUMBNAILS - HOVER TO ZOOM
+   ======================================================================== */
+.thumbnail-zoom {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    object-fit: cover;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+    z-index: 1;
+    transform-origin: center left;
+    cursor: zoom-in;
+}
+
+.thumbnail-zoom:hover {
+    transform: scale(4);
+    z-index: 9999 !important;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.4);
+    border-radius: 6px;
+}
+
+/* ========================================================================
+   SPLASH SCREEN - GET STARTED BUTTON
+   ======================================================================== */
+button[data-testid="baseButton-primary"]:has(div:contains("Get Started")) {
+    background-color: #ffffff !important;
+    color: #005A36 !important;
+    border-radius: 30px !important;
+    padding: 14px 20px !important;
+    font-weight: 800 !important;
+    font-size: 16px !important;
+    width: 100% !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+    margin-top: 20px !important;
+}
+
+button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover {
+    background-color: #f2f2f2 !important;
+    color: #004D2E !important;
+}
+
+/* ========================================================================
+   AUTH HEADER
+   ======================================================================== */
+.auth-header {
+    background-color: #005A36;
+    color: white;
+    padding: 50px 20px 40px 20px;
+    margin: -60px -20px 40px -20px;
+    border-radius: 0 0 50% 50% / 0 0 45px 45px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.auth-header h1 {
+    font-family: "Georgia", serif;
+    font-size: 32px;
+    font-weight: 700;
+    margin-top: 10px;
+    color: white;
+}
+
+/* ========================================================================
+   NATIVE APP HEADER
+   ======================================================================== */
+.app-header {
+    background-color: #005A36;
+    color: white;
+    padding: 30px 20px 20px 20px;
+    margin: -60px -20px 20px -20px;
+    border-radius: 0 0 20px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-header h1 {
+    margin: 0;
+    color: white;
+    font-size: 26px;
+    font-weight: 800;
+    padding-top: 5px;
+}
+
+.app-header p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* ========================================================================
+   LOGOUT BUTTON - INVISIBLE OVERLAY
+   ======================================================================== */
+div[data-testid="element-container"]:has(#logout-anchor) {
+    display: none;
+}
+
+div[data-testid="element-container"]:has(#logout-anchor)
+    + div[data-testid="element-container"] {
+    margin-top: -65px !important;
+    margin-bottom: 25px !important;
+    margin-left: auto !important;
+    margin-right: 0px !important;
+    width: 40px !important;
+    z-index: 99 !important;
+}
+
+div[data-testid="element-container"]:has(#logout-anchor)
+    + div[data-testid="element-container"]
+    button {
+    opacity: 0 !important;
+    height: 40px !important;
+    width: 40px !important;
+    cursor: pointer !important;
+}
+
+/* ========================================================================
+   STORE PILLS - DYNAMIC COLOR STYLING
+   ======================================================================== */
+div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="stCheckbox"]
+    label
+    [data-baseweb="checkbox"] {
+    display: none !important;
+}
+
+/* ========================================================================
+   COMPARE PRICES BUTTON
+   ======================================================================== */
+button[data-testid="baseButton-primary"]:has(
+    div:contains("Compare Prices")
+) {
+    background-color: #005A36 !important;
+    color: white !important;
+    border-radius: 35px !important;
+    padding: 16px 24px !important;
+    font-weight: 800 !important;
+    font-size: 16.5px !important;
+    width: 100% !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;
+    margin-top: 20px !important;
+    margin-bottom: 10px !important;
+}
+
+button[data-testid="baseButton-primary"]:has(div:contains("Compare Prices")):hover {
+    background-color: #004D2E !important;
+}
+
+/* ========================================================================
+   GENERAL PRIMARY BUTTONS
+   ======================================================================== */
+button[data-testid="baseButton-primary"] {
+    background-color: #005A36 !important;
+    color: white !important;
+    border-radius: 30px;
+    padding: 12px;
+    font-weight: 800;
+    font-size: 16px;
+    width: 100%;
+    border: none;
+    margin-top: 20px;
+}
+
+/* ========================================================================
+   SECONDARY ADD ITEM SUBMIT BUTTON
+   ======================================================================== */
+button[kind="secondaryFormSubmit"] {
+    background-color: #005A36;
+    color: white;
+    border-radius: 12px;
+    font-weight: 800;
+    border: none;
+}
+
+/* ========================================================================
+   MARKER DIVS - HIDE
+   ======================================================================== */
+div:has(> .clear-all-marker),
+div:has(> .qty-minus-marker),
+div:has(> .qty-plus-marker),
+div:has(> .qty-del-marker) {
+    display: none !important;
+}
+
+/* ========================================================================
+   CLEAR ALL BUTTON - FRAMELESS RED TEXT LINK
+   ======================================================================== */
+div:has(> .clear-all-marker) + div[data-testid="element-container"] button {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #E31837 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    min-height: unset !important;
+    display: inline-block !important;
+    margin-top: 2px !important;
+}
+
+div:has(> .clear-all-marker) + div[data-testid="element-container"] button:hover {
+    color: #B30000 !important;
+    background: none !important;
+    text-decoration: underline !important;
+}
+
+/* ========================================================================
+   SECONDARY BASE BUTTONS - QUANTITY/DELETE CONTROLS
+   ======================================================================== */
+button[data-testid="baseButton-secondary"] {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 0 !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    width: 100% !important;
+    border-radius: 8px !important;
+    border: none !important;
+}
+
+/* Force internal text/markdown container to perfect center */
+button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"],
+button[data-testid="baseButton-secondary"] div[data-testid="stMarkdownContainer"] p {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+    text-align: center !important;
+}
+
+/* ========================================================================
+   QUANTITY MINUS BUTTON - LIGHT GREEN
+   ======================================================================== */
+div:has(> .qty-minus-marker) + div[data-testid="element-container"] button {
+    background-color: #E6F4EA !important;
+    color: #137333 !important;
+}
+
+div:has(> .qty-minus-marker) + div[data-testid="element-container"] button:hover {
+    background-color: #CEEAD6 !important;
+}
+
+/* ========================================================================
+   QUANTITY PLUS BUTTON - LIGHT GREEN
+   ======================================================================== */
+div:has(> .qty-plus-marker) + div[data-testid="element-container"] button {
+    background-color: #E6F4EA !important;
+    color: #137333 !important;
+}
+
+div:has(> .qty-plus-marker) + div[data-testid="element-container"] button:hover {
+    background-color: #CEEAD6 !important;
+}
+
+/* ========================================================================
+   DELETE (X) BUTTON - LIGHT RED
+   ======================================================================== */
+div:has(> .qty-del-marker) + div[data-testid="element-container"] button {
+    background-color: #FCE8E6 !important;
+    color: #C5221F !important;
+}
+
+div:has(> .qty-del-marker) + div[data-testid="element-container"] button:hover {
+    background-color: #FAD2CF !important;
+}
+
+/* ========================================================================
+   FORM STYLING - Hide submit buttons while keeping form functionality
+   ======================================================================== */
+/* Form-based clickable banners - hide the submit button styling */
+form[method="post"] div[data-testid="stFormSubmitButton"] button {
+    display: none !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* ========================================================================
+   RESULTS SCREEN - CLICKABLE BANNERS (No invisible overlay buttons)
+   ======================================================================== */
+/* Banners are now wrapped in forms for direct clicking */
+
+
+/* ========================================================================
+   SUBPAGE BACK BUTTON - INVISIBLE OVERLAY
+   ======================================================================== */
+div[data-testid="element-container"]:has(#subpage-back-anchor) {
+    display: none;
+}
+
+div[data-testid="element-container"]:has(#subpage-back-anchor)
+    + div[data-testid="element-container"] {
+    margin-top: -65px !important;
+    margin-bottom: 20px !important;
+    margin-left: -5px !important;
+    width: 40px !important;
+}
+
+div[data-testid="element-container"]:has(#subpage-back-anchor)
+    + div[data-testid="element-container"]
+    button {
+    opacity: 0 !important;
+    height: 40px !important;
+    width: 40px !important;
+    z-index: 99 !important;
+    cursor: pointer !important;
+}
+
+/* ========================================================================
+   FOOTER BUTTONS - FRAMELESS SINGLE-LINE TEXT LINKS
+   ======================================================================== */
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    button {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: unset !important;
+    height: auto !important;
+    width: 100% !important;
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    button
+    p {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    color: #666666 !important;
+    font-weight: 500 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: center !important;
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    button:hover
+    p {
+    color: #111111 !important;
+    text-decoration: underline !important;
+}
+
+/* ========================================================================
+   AUTH TEXT LINK BUTTONS
+   ======================================================================== */
+button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")),
+button[data-testid="baseButton-secondary"]:has(
+    div:contains("Don't have an account?")
+),
+button[data-testid="baseButton-secondary"]:has(
+    div:contains("Already have an account?")
+) {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #888 !important;
+    font-size: 13px !important;
+    font-weight: normal !important;
+    box-shadow: none !important;
+    margin-top: -5px !important;
+}
+
+button[data-testid="baseButton-secondary"]:has(div:contains("Forgot password?")):hover,
+button[data-testid="baseButton-secondary"]:has(
+    div:contains("Don't have an account?")
+):hover,
+button[data-testid="baseButton-secondary"]:has(
+    div:contains("Already have an account?")
+):hover {
+    text-decoration: underline !important;
+    color: #555 !important;
+}
