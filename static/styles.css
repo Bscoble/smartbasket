@@ -279,11 +279,11 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
 /* ========================================================================
    LOGOUT BUTTON - INVISIBLE OVERLAY
    ======================================================================== */
-div[data-testid="element-container"]:has(#logout-anchor) {
+div[data-testid="element-container"]:has(.logout-button-marker) {
     display: none;
 }
 
-div[data-testid="element-container"]:has(#logout-anchor)
+div[data-testid="element-container"]:has(.logout-button-marker)
     + div[data-testid="element-container"] {
     margin-top: -65px !important;
     margin-bottom: 0 !important;
@@ -293,13 +293,19 @@ div[data-testid="element-container"]:has(#logout-anchor)
     z-index: 99 !important;
 }
 
-div[data-testid="element-container"]:has(#logout-anchor)
+div[data-testid="element-container"]:has(.logout-button-marker)
     + div[data-testid="element-container"]
     button {
     opacity: 0 !important;
     height: 40px !important;
     width: 40px !important;
     cursor: pointer !important;
+}
+
+div[data-testid="element-container"]:has(.logout-button-marker)
+    ~ div[data-testid="element-container"] button[key="btn_logout"] {
+    opacity: 0 !important;
+    pointer-events: auto !important;
 }
 
 /* Compact fallback if the overlay selector is not available in a Streamlit build. */

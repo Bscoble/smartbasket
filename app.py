@@ -856,8 +856,8 @@ else:
                 ↩
             </div>
         </div>
-        <div id="logout-anchor"></div>
         """, unsafe_allow_html=True)
+        st.markdown('<div class="logout-button-marker"></div>', unsafe_allow_html=True)
         if st.button("↩", key="btn_logout", help="Log out"):
             auth_token = st.query_params.get("auth_token", "")
             if auth_token:
