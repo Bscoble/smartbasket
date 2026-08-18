@@ -71,7 +71,7 @@ try:
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
 except Exception as e:
-    logger.error(f"Failed to initialize price: {e}", exc_info=True)
+    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -136,6 +136,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         Dictionary with comparison results or None if no valid items
     """
     store_totals = {store: 0.0 for store in selected_stores}
+    store_has_complete_prices = {store: True for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
     
@@ -175,6 +176,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             stores_to_search = ["IGA"]
         
         item_store_prices = {}
+        item_store_status = {}
         stores_needing_scrape = []
         
         # Check cache and determine which stores need fresh prices
@@ -183,50 +185,129 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 cache_key = (store, item_lower)
                 cached_data = price_cache.get(cache_key)
                 
-                if cached_data and sheets_manager.is_cache_valid(cached_data):
+                if (
+                    cached_data
+                    and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
+                    and sheets_manager.is_cache_valid(cached_data)
+                ):
                     item_store_prices[store] = cached_data["price"]
+                    item_store_status[store] = {
+                        "status": "cached",
+                        "message": "Using a cached price",
+                    }
                     logger.debug(f"Using cached price for {item_name} at {store}")
                 else:
                     stores_needing_scrape.append(store)
             else:
-                item_store_prices[store] = 99.99
+                item_store_prices[store] = None
+                item_store_status[store] = {
+                    "status": "not_requested",
+                    "message": "Not searched for this item",
+                }
         
         # Fetch live prices for uncached items
         if stores_needing_scrape:
             status_text.text(f"Fetching live prices for: {item_name}...")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS) as executor:
-                future_to_store = {
-                    executor.submit(price_scraper.get_live_price, store, item_name): store
-                    for store in stores_needing_scrape
-                }
-                for future in concurrent.futures.as_completed(future_to_store, timeout=THREAD_POOL_TIMEOUT):
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS)
+            future_to_store = {
+                executor.submit(price_scraper.get_live_price_result, store, item_name): store
+                for store in stores_needing_scrape
+            }
+            completed_stores = set()
+            try:
+                completed_futures = concurrent.futures.as_completed(
+                    future_to_store,
+                    timeout=THREAD_POOL_TIMEOUT,
+                )
+                for future in completed_futures:
                     store = future_to_store[future]
+                    completed_stores.add(store)
                     try:
-                        price = future.result()
+                        result = future.result()
+                        if isinstance(result, dict):
+                            price = result.get("price")
+                            item_store_status[store] = {
+                                "status": result.get("status", "unavailable"),
+                                "message": result.get("message", "Price unavailable"),
+                            }
+                        else:
+                            price = result
+                            item_store_status[store] = {
+                                "status": "ok" if price is not None else "unavailable",
+                                "message": "Price found" if price is not None else "Price unavailable",
+                            }
                     except Exception as e:
                         logger.error(f"Error getting price for {item_name} at {store}: {e}")
-                        price = config.DEFAULT_PRICE_FALLBACK
-                    
+                        price = None
+                        item_store_status[store] = {
+                            "status": "scraper_error",
+                            "message": "The supermarket scraper failed",
+                        }
+
+                    if price is not None and price >= config.PRICE_VALIDITY_THRESHOLD:
+                        price = None
+
                     item_store_prices[store] = price
-                    price_cache[(store, item_lower)] = {
-                        "price": price,
-                        "timestamp": datetime.now(),
+                    if price is not None:
+                        price_cache[(store, item_lower)] = {
+                            "price": price,
+                            "timestamp": datetime.now(),
+                        }
+                        cache_updated = True
+            except concurrent.futures.TimeoutError:
+                pending_stores = set(stores_needing_scrape) - completed_stores
+                logger.warning(
+                    "Price lookup timed out for %s at %s; marking prices unavailable",
+                    item_name,
+                    ", ".join(sorted(pending_stores)),
+                )
+                for store in pending_stores:
+                    item_store_prices[store] = None
+                    item_store_status[store] = {
+                        "status": "timeout",
+                        "message": "The supermarket lookup timed out",
                     }
-                    cache_updated = True
+            finally:
+                for future in future_to_store:
+                    future.cancel()
+                executor.shutdown(wait=False, cancel_futures=True)
         
         # Calculate store totals and item breakdown
         item_store_data = {}
         for store, unit_price in item_store_prices.items():
+            if unit_price is None:
+                store_has_complete_prices[store] = False
+                item_store_data[store] = {
+                    "unit_price": "Unavailable",
+                    "total_price": None,
+                    "status": item_store_status.get(store, {}).get("status", "unavailable"),
+                    "message": item_store_status.get(store, {}).get("message", "Price unavailable"),
+                }
+                continue
+
             total_price = unit_price * qty
             store_totals[store] += total_price
             item_store_data[store] = {
                 "unit_price": format_price(unit_price) + f"/{unit}",
                 "total_price": total_price,
+                "status": item_store_status.get(store, {}).get("status", "ok"),
+                "message": item_store_status.get(store, {}).get("message", "Price found"),
             }
         
-        sorted_item_stores = sorted(item_store_data.items(), key=lambda x: x[1]["total_price"])
-        cheapest_store = sorted_item_stores[0][0]
-        best_price = sorted_item_stores[0][1]["total_price"]
+        sorted_item_stores = sorted(
+            item_store_data.items(),
+            key=lambda x: x[1]["total_price"] if x[1]["total_price"] is not None else float("inf"),
+        )
+        available_item_stores = [
+            item for item in sorted_item_stores if item[1]["total_price"] is not None
+        ]
+        if not available_item_stores:
+            logger.warning("No prices available for %s", item_name)
+            progress_bar.progress((idx + 1) / total_items)
+            continue
+
+        cheapest_store = available_item_stores[0][0]
+        best_price = available_item_stores[0][1]["total_price"]
         
         split_store_total += best_price
         
@@ -250,7 +331,17 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     progress_bar.empty()
     
     # Generate rankings
-    ranked_stores = sorted(store_totals.items(), key=lambda x: x[1])
+    ranked_stores = sorted(
+        (
+            (store, cost)
+            for store, cost in store_totals.items()
+            if store_has_complete_prices[store]
+        ),
+        key=lambda x: x[1],
+    )
+    if not ranked_stores:
+        logger.warning("No stores returned complete prices for this comparison")
+        return None
     best_single_store = ranked_stores[0][0]
     best_single_store_cost = ranked_stores[0][1]
     worst_store_cost = ranked_stores[-1][1]
@@ -305,10 +396,14 @@ except Exception as e:
 st.markdown(f"""
 <style>
     /* DYNAMIC STORE PILLS */
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#E8E8E8'}; color: {'white' if prefs['Woolworths'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#E8E8E8'}; color: {'white' if prefs['Coles'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#E8E8E8'}; color: {'white' if prefs['Aldi'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#E8E8E8'}; color: {'white' if prefs['IGA'] else '#555'}; padding: 6px 8px; border-radius: 20px; font-weight: 600; font-size: 12.5px; display: inline-block; margin: 0; white-space: nowrap; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] {{ margin: 0 !important; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label > div:first-child {{ display: none !important; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label {{ display: block !important; cursor: pointer !important; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label p {{ padding: 7px 9px; border-radius: 9px; font-weight: 700; font-size: 12px; display: block; margin: 0; white-space: nowrap; text-align: center; transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#FFFFFF'}; color: {'white' if prefs['Woolworths'] else '#005A36'}; border: 1px solid #005A36; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#FFFFFF'}; color: {'white' if prefs['Coles'] else '#E31837'}; border: 1px solid #E31837; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#FFFFFF'}; color: {'white' if prefs['Aldi'] else '#002D62'}; border: 1px solid #002D62; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#FFFFFF'}; color: {'white' if prefs['IGA'] else '#E31837'}; border: 1px solid #E31837; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -390,9 +485,11 @@ elif not st.session_state["authenticated"]:
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
+            st.markdown('<div class="forgot-password-button-marker"></div>', unsafe_allow_html=True)
             if st.button("Forgot password?", use_container_width=True):
                 st.session_state["auth_mode"] = "forgot_password"
                 st.rerun()
+            st.markdown('<div class="signup-button-marker"></div>', unsafe_allow_html=True)
             if st.button("Don't have an account? **Sign up**", use_container_width=True):
                 st.session_state["auth_mode"] = "signup"
                 st.rerun()
@@ -776,6 +873,7 @@ else:
                     submitted = st.form_submit_button("＋", help="Add to List")
                 
                 if submitted and item_name:
+                    sheets_manager.save_product(user_id, item_name)
                     if sheets_manager.add_item_to_list(item_name, int(qty), unit, user_id=user_id):
                         st.rerun()
                     else:
@@ -813,6 +911,7 @@ else:
                             if selected_indices:
                                 for i in selected_indices:
                                     sr = recent_items[i]
+                                    sheets_manager.save_product(user_id, sr["name"], sr["img"])
                                     sheets_manager.add_item_to_list(
                                         sr["name"], int(sr["qty"]), sr["unit"], sr["img"], user_id
                                     )
@@ -826,7 +925,17 @@ else:
                 if st.button("Search Database", use_container_width=True):
                     if search_query:
                         with st.spinner("Searching database..."):
-                            results = ProductLookup.search_product_by_name(search_query)
+                            local_results = sheets_manager.search_saved_products(user_id, search_query)
+                            remote_results = (
+                                ProductLookup.search_product_by_name(search_query)
+                                if len(local_results) < 5
+                                else []
+                            )
+                            results = local_results + [
+                                result for result in remote_results
+                                if result["title"].lower() not in {item["title"].lower() for item in local_results}
+                            ]
+                            results = results[:5]
                             if results:
                                 st.session_state["search_results"] = results
                             else:
@@ -846,6 +955,7 @@ else:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
                         with sc3:
                             if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
+                                sheets_manager.save_product(user_id, res["title"], res["image_url"])
                                 if sheets_manager.add_item_to_list(
                                     res["title"], 1, "each", res["image_url"], user_id
                                 ):
@@ -868,6 +978,7 @@ else:
                                 if product_image:
                                     st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
+                                    sheets_manager.save_product(user_id, product_name, product_image or "")
                                     if sheets_manager.add_item_to_list(
                                         product_name, 1, "each", product_image or "", user_id
                                     ):
@@ -915,7 +1026,7 @@ else:
                     valid_rows_with_indices.append((sheet_idx, row))
                     
         item_count = len(valid_rows_with_indices)
-        c_head1, c_head2 = st.columns([3, 1])
+        c_head1, c_head2 = st.columns([3, 1], vertical_alignment="center")
         with c_head1:
             st.markdown(f"<p style='font-size: 13px; font-weight: 700; color: #666;'>MY LIST ({item_count} ITEMS)</p>", unsafe_allow_html=True)
         with c_head2:
@@ -953,7 +1064,7 @@ else:
                                 sheets_manager.update_list_quantity(sheet_idx, i_qty - 1, user_id)
                                 st.rerun()
                     with sub_c2:
-                        st.markdown(f'<div style="text-align:center; padding-top:10px; font-weight: bold;">{i_qty}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="qty-value">{i_qty}</div>', unsafe_allow_html=True)
                     with sub_c3:
                         st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
                         if st.button("+", key=f"add_{sheet_idx}"):
@@ -1227,13 +1338,18 @@ else:
                                 is_best = (store_idx == 0)
                                 
                                 best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
+                                display_total = (
+                                    f"${store_data['total_price']:.2f}"
+                                    if store_data["total_price"] is not None
+                                    else f"Unavailable: {store_data.get('message', 'Price unavailable')}"
+                                )
                                 
                                 html_row = (
                                     f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">'
                                     f'<div><b>{store_initial}</b> &nbsp; {store_name}</div>'
                                     f'<div>'
                                     f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
-                                    f'<b>${store_data["total_price"]:.2f}</b>'
+                                    f'<b>{display_total}</b>'
                                     f'{best_badge}'
                                     f'</div>'
                                     f'</div>'
@@ -1266,47 +1382,26 @@ else:
         # --- MAIN APP GLOBAL FOOTER ---
         st.markdown("<hr style='margin: 30px 0 20px 0; opacity: 0.1;'>", unsafe_allow_html=True)
         
-        # Enhanced footer with grid layout, icons, and hover effects
-        footer_html = """
-        <div style="padding: 20px 0 10px 0; text-align: center;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 15px;">
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
-                    <span style="font-size: 16px;">ℹ️</span>
-                    <span style="font-size: 11px; font-weight: 600; color: #333;">About</span>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
-                    <span style="font-size: 16px;">🔒</span>
-                    <span style="font-size: 11px; font-weight: 600; color: #333;">Privacy</span>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
-                    <span style="font-size: 16px;">💬</span>
-                    <span style="font-size: 11px; font-weight: 600; color: #333;">Support</span>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 10px; background-color: #FAFAFA; border: 1px solid #E8E8E8; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#F5F5F5'; this.style.borderColor='#005A36';" onmouseout="this.style.backgroundColor='#FAFAFA'; this.style.borderColor='#E8E8E8';">
-                    <span style="font-size: 16px;">👥</span>
-                    <span style="font-size: 11px; font-weight: 600; color: #333;">Refer</span>
-                </div>
-            </div>
-            <p style="margin: 10px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">© 2026 SmartBasket • Shop Smarter, Save Every Week</p>
-        </div>
-        """
-        st.markdown(footer_html, unsafe_allow_html=True)
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns([1, 1.2, 1.2, 1.4])
         with fc1:
-            if st.button("About", key="footer_about"):
+            if st.button("ℹ️ About", key="footer_about"):
                 st.session_state["current_page"] = "about"
                 st.rerun()
         with fc2:
-            if st.button("Privacy", key="footer_privacy"):
+            if st.button("🔒 Privacy", key="footer_privacy"):
                 st.session_state["current_page"] = "privacy"
                 st.rerun()
         with fc3:
-            if st.button("Support", key="footer_contact"):
+            if st.button("💬 Support", key="footer_contact"):
                 st.session_state["current_page"] = "contact"
                 st.rerun()
         with fc4:
-            if st.button("Refer a Friend", key="footer_refer"):
+            if st.button("👥 Refer", key="footer_refer"):
                 st.session_state["current_page"] = "refer"
                 st.rerun()
+        st.markdown(
+            "<p class='footer-tagline'>© 2026 SmartBasket · Shop Smarter, Save Every Week</p>",
+            unsafe_allow_html=True,
+        )
 

@@ -5,7 +5,7 @@ Handles price lookups from various supermarket websites using APIs and web scrap
 
 import logging
 import re
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
@@ -67,6 +67,78 @@ class PriceScraper:
         except Exception as e:
             logger.error(f"Error fetching price for {store}/{item_name}: {e}", exc_info=True)
             return DEFAULT_PRICE_FALLBACK
+
+    def get_live_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
+        """Return a price together with a reason when it is unavailable."""
+        if store not in STORES:
+            return {"price": None, "status": "configuration", "message": "Unknown supermarket"}
+
+        try:
+            if store in ["Woolworths", "Coles"]:
+                return self._get_apify_price_result(store, item_name)
+            if store in ["Aldi", "IGA"]:
+                return self._get_zenrows_price_result(store, item_name)
+            return {"price": None, "status": "configuration", "message": "Unsupported supermarket"}
+        except requests.Timeout:
+            return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+        except requests.RequestException:
+            return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except Exception as e:
+            logger.error(f"Error fetching structured price for {store}/{item_name}: {e}", exc_info=True)
+            return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
+
+    def _get_apify_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
+        if not self.apify_token:
+            return {"price": None, "status": "configuration", "message": "Apify is not configured"}
+
+        try:
+            store_config = STORES[store]
+            client = ApifyClient(self.apify_token)
+            search_url = store_config["search_url"].format(quote(item_name))
+            run = client.actor(store_config["api_actor"]).call(
+                run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG}
+            )
+            for item in client.dataset(run.default_dataset_id).list_items().items:
+                price = self._extract_apify_price(item)
+                if price and is_valid_price(price):
+                    return {"price": price, "status": "ok", "message": "Price found"}
+            return {"price": None, "status": "not_found", "message": "No matching product price was found"}
+        except requests.Timeout:
+            return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+        except requests.RequestException:
+            return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except Exception as e:
+            logger.error(f"Apify error for {store}/{item_name}: {e}", exc_info=True)
+            return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
+
+    def _get_zenrows_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
+        if not self.zenrows_key:
+            return {"price": None, "status": "configuration", "message": "ZenRows is not configured"}
+
+        try:
+            target_url = STORES[store]["search_url"].format(quote(item_name))
+            response = requests.get(
+                ZENROWS_API_URL,
+                params={"apikey": self.zenrows_key, "url": target_url, **ZENROWS_PARAMS},
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            selector = ".box--price .value, .product-price, .price, span.price" if store == "Aldi" else ".item-price, .price"
+            price_element = soup.select_one(selector)
+            price = self._parse_price_from_element(price_element.text, store) if price_element else None
+            if not price:
+                price = self._extract_price_from_page_text(soup.get_text(), store)
+            if price and is_valid_price(price):
+                return {"price": price, "status": "ok", "message": "Price found"}
+            return {"price": None, "status": "not_found", "message": "No matching product price was found"}
+        except requests.Timeout:
+            return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+        except requests.RequestException:
+            return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except Exception as e:
+            logger.error(f"ZenRows error for {store}/{item_name}: {e}", exc_info=True)
+            return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
     
     def _get_apify_price(self, store: str, item_name: str) -> float:
         """

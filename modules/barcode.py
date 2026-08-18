@@ -8,6 +8,7 @@ from typing import Optional, Tuple, List, Dict
 from PIL import Image, ImageEnhance, ImageOps
 from pyzbar.pyzbar import decode
 import requests
+import streamlit as st
 from config import (
     OPEN_FOOD_FACTS_BARCODE_URL,
     OPEN_FOOD_FACTS_SEARCH_URL,
@@ -168,6 +169,7 @@ class ProductLookup:
             return None, None
     
     @staticmethod
+    @st.cache_data(ttl=86400, show_spinner=False)
     def search_product_by_name(query: str) -> List[Dict[str, str]]:
         """
         Search Open Food Facts database by product name.
@@ -179,6 +181,7 @@ class ProductLookup:
             List of matching products with title and image_url
         """
         try:
+            query = query.strip()
             logger.debug(f"Searching Open Food Facts for: {query}")
             
             params = {

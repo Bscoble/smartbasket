@@ -352,6 +352,71 @@ class SheetsManager:
     # ========================================================================
     # RECENT SHOPS / HISTORY
     # ========================================================================
+
+    # ========================================================================
+    # CUSTOMER PRODUCT CATALOGUE
+    # ========================================================================
+
+    def save_product(self, user_id: str, title: str, image_url: str = "") -> bool:
+        """Save a product a customer has used for future local searches."""
+        try:
+            ws = self._get_or_create_worksheet(
+                WORKSHEET_NAMES["product_catalog"],
+                rows=WORKSHEET_CONFIG["product_catalog"]["rows"],
+                cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
+            )
+            data = ws.get_all_values()
+            headers = ["User_ID", "Title", "Image_URL", "Search_Key", "Updated"]
+            if not data:
+                ws.append_row(headers)
+            elif data[0] != headers:
+                ws.update("A1:E1", [headers])
+
+            normalized_user = user_id.strip().lower()
+            normalized_title = title.strip()
+            if not normalized_user or not normalized_title:
+                return False
+
+            search_key = normalized_title.lower()
+            existing_row = None
+            for row_number, row in enumerate(ws.get_all_values()[1:], start=2):
+                if len(row) >= 4 and row[0].strip().lower() == normalized_user and row[3].strip() == search_key:
+                    existing_row = row_number
+                    break
+
+            values = [normalized_user, normalized_title, image_url.strip(), search_key, datetime.now().isoformat(timespec="seconds")]
+            if existing_row:
+                ws.update(f"A{existing_row}:E{existing_row}", [values])
+            else:
+                ws.append_row(values)
+            return True
+        except Exception as e:
+            logger.error(f"Error saving product catalogue entry: {e}", exc_info=True)
+            return False
+
+    def search_saved_products(self, user_id: str, query: str, limit: int = 5) -> List[Dict[str, str]]:
+        """Search products previously used by the current customer."""
+        try:
+            ws = self._get_or_create_worksheet(
+                WORKSHEET_NAMES["product_catalog"],
+                rows=WORKSHEET_CONFIG["product_catalog"]["rows"],
+                cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
+            )
+            normalized_user = user_id.strip().lower()
+            terms = [term for term in query.strip().lower().split() if term]
+            if not normalized_user or not terms:
+                return []
+
+            matches = []
+            for row in ws.get_all_values()[1:]:
+                if len(row) >= 4 and row[0].strip().lower() == normalized_user:
+                    search_key = row[3].strip().lower()
+                    if all(term in search_key for term in terms):
+                        matches.append({"title": row[1].strip(), "image_url": row[2].strip()})
+            return matches[:limit]
+        except Exception as e:
+            logger.error(f"Error searching product catalogue: {e}", exc_info=True)
+            return []
     
     def archive_shop_to_history(self, items: List[List[str]], user_id: str) -> bool:
         """

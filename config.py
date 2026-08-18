@@ -104,12 +104,14 @@ WORKSHEET_NAMES = {
     "price_cache": "Price Cache",
     "preferences": "Preferences",
     "recent_shops": "Recent Shops",
+    "product_catalog": "Product Catalog",
 }
 
 WORKSHEET_CONFIG = {
     "users": {"rows": "1000", "cols": "8"},
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
+    "product_catalog": {"rows": "5000", "cols": "5"},
 }
 
 # ============================================================================
