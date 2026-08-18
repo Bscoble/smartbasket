@@ -51,6 +51,13 @@ class AuthManager:
             worksheet.update("A1:H1", [self._HEADERS])
         return worksheet
 
+    @staticmethod
+    def _is_header_row(row: list) -> bool:
+        """Return True when a row is the users worksheet header."""
+        if not row:
+            return False
+        return row[0].strip().lower() == "email"
+
     @classmethod
     def _hash_password(cls, password: str, salt: Optional[bytes] = None) -> str:
         salt = salt or secrets.token_bytes(16)
@@ -77,17 +84,30 @@ class AuthManager:
 
     @staticmethod
     def _user_from_row(row: list) -> Optional[Dict[str, str]]:
-        if len(row) < 7 or not row[0].strip():
+        if len(row) < 4 or not row[0].strip():
             return None
+
+        if AuthManager._is_header_row(row):
+            return None
+
         has_country_column = len(row) >= 8 and row[3].strip() in SUPPORTED_COUNTRIES
+        password_hash = row[4] if has_country_column else row[3]
+        session_token_hash = row[5] if has_country_column and len(row) > 5 else (row[4] if len(row) > 4 else "")
+        password_column = 5 if has_country_column else 4
+        session_token_column = 6 if has_country_column else 5
+        token_created_column = 7 if has_country_column else 6
+
         return {
             "email": row[0].strip().lower(),
             "name": row[1].strip(),
             "postcode": row[2].strip(),
             "country": row[3].strip() if has_country_column else "Australia",
-            "password_hash": row[4] if has_country_column else row[3],
-            "session_token_hash": row[5] if has_country_column else row[4],
+            "password_hash": password_hash,
+            "session_token_hash": session_token_hash,
             "has_country_column": has_country_column,
+            "password_column": password_column,
+            "session_token_column": session_token_column,
+            "token_created_column": token_created_column,
         }
 
     @staticmethod
@@ -102,7 +122,7 @@ class AuthManager:
 
     def _find_user(self, email: str) -> Optional[Dict[str, str]]:
         worksheet = self._worksheet()
-        for row_number, row in enumerate(worksheet.get_all_values()[1:], start=2):
+        for row_number, row in enumerate(worksheet.get_all_values(), start=1):
             user = self._user_from_row(row)
             if user and user["email"] == email.strip().lower():
                 user["row_number"] = str(row_number)
@@ -141,8 +161,8 @@ class AuthManager:
         token = secrets.token_urlsafe(32)
         worksheet = self._worksheet()
         row_number = int(user["row_number"])
-        worksheet.update_cell(row_number, 5, self._hash_token(token))
-        worksheet.update_cell(row_number, 6, datetime.now().isoformat(timespec="seconds"))
+        worksheet.update_cell(row_number, user["session_token_column"], self._hash_token(token))
+        worksheet.update_cell(row_number, user["token_created_column"], datetime.now().isoformat(timespec="seconds"))
         user["token"] = token
         return user
 
@@ -157,13 +177,10 @@ class AuthManager:
             return False
 
         worksheet = self._worksheet()
-        password_column = 5 if user["has_country_column"] else 4
-        session_column = 6 if user["has_country_column"] else 5
-        token_created_column = 7 if user["has_country_column"] else 6
-        worksheet.update_cell(int(user["row_number"]), password_column, self._hash_password(new_password))
+        worksheet.update_cell(int(user["row_number"]), user["password_column"], self._hash_password(new_password))
         # Invalidate any existing browser session after a password reset.
-        worksheet.update_cell(int(user["row_number"]), session_column, "")
-        worksheet.update_cell(int(user["row_number"]), token_created_column, "")
+        worksheet.update_cell(int(user["row_number"]), user["session_token_column"], "")
+        worksheet.update_cell(int(user["row_number"]), user["token_created_column"], "")
         return True
 
     def validate_session(self, token: str) -> Optional[Dict[str, str]]:
@@ -172,7 +189,7 @@ class AuthManager:
 
         token_hash = self._hash_token(token)
         worksheet = self._worksheet()
-        for row_number, row in enumerate(worksheet.get_all_values()[1:], start=2):
+        for row_number, row in enumerate(worksheet.get_all_values(), start=1):
             user = self._user_from_row(row)
             if user and hmac.compare_digest(user["session_token_hash"], token_hash):
                 user["row_number"] = str(row_number)
@@ -184,5 +201,5 @@ class AuthManager:
         if user:
             worksheet = self._worksheet()
             row_number = int(user["row_number"])
-            worksheet.update_cell(row_number, 5, "")
-            worksheet.update_cell(row_number, 6, "")
+            worksheet.update_cell(row_number, user["session_token_column"], "")
+            worksheet.update_cell(row_number, user["token_created_column"], "")
