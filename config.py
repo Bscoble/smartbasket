@@ -140,6 +140,10 @@ BARCODE_BRIGHTNESS_THRESHOLD = 120  # Threshold for binarization pass
 
 SUPPORTED_COUNTRIES = ["Australia", "New Zealand"]
 DEFAULT_COUNTRY = "Australia"
+COUNTRY_TIMEZONES = {
+    "Australia": "Australia/Sydney",
+    "New Zealand": "Pacific/Auckland",
+}
 
 APP_TITLE = "SmartBasket"
 APP_ICON = "🛒"

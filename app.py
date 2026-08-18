@@ -71,7 +71,7 @@ try:
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
 except Exception as e:
-    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+    loggeerror(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -833,10 +833,10 @@ else:
     # VIEW: HOME / LIST PAGE
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "home":
-        greeting = get_greeting()
         current_user = st.session_state.get("current_user") or {}
         display_name = current_user.get("name", "there")
         user_id = current_user.get("email", "")
+        greeting = get_greeting(current_user.get("country", config.DEFAULT_COUNTRY))
             
         st.markdown(f"""
         <div class="app-header">

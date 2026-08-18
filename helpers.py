@@ -4,7 +4,7 @@ Includes price formatting, data validation, and common UI utilities.
 """
 
 from typing import Optional, Dict, Tuple
-from config import STORES, UNIT_OPTIONS
+from config import STORES, UNIT_OPTIONS, COUNTRY_TIMEZONES, DEFAULT_COUNTRY
 import re
 
 
@@ -176,7 +176,7 @@ def build_search_url(store_name: str, query: str) -> str:
     return store_config["search_url"].format(quote(query))
 
 
-def get_greeting() -> str:
+def get_greeting(country: str = DEFAULT_COUNTRY) -> str:
     """
     Get a time-based greeting.
     
@@ -184,7 +184,10 @@ def get_greeting() -> str:
         Greeting string (Good morning/afternoon/evening)
     """
     from datetime import datetime
-    hour = datetime.now().hour
+    from zoneinfo import ZoneInfo
+
+    timezone_name = COUNTRY_TIMEZONES.get(country, COUNTRY_TIMEZONES[DEFAULT_COUNTRY])
+    hour = datetime.now(ZoneInfo(timezone_name)).hour
     if hour < 12:
         return "Good morning,"
     elif hour < 18:
