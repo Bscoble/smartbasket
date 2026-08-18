@@ -967,13 +967,8 @@ else:
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
                                 st.rerun()
                                 
-            search_marker = (
-                "search-results-visible-marker"
-                if st.session_state.get("search_performed", False)
-                else "search-results-hidden-marker"
-            )
-            st.markdown(f'<div class="{search_marker}"></div>', unsafe_allow_html=True)
-            with st.expander("🔍 Matching products", expanded=bool(st.session_state.get("search_results"))):
+            if st.session_state.get("search_performed", False):
+                st.markdown("<div class='matching-products-heading'>Matching products</div>", unsafe_allow_html=True)
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                     for idx, res in enumerate(st.session_state["search_results"]):
@@ -996,8 +991,8 @@ else:
                                 else:
                                     st.error("Failed to add item. Please try again.")
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
-                elif st.session_state.get("search_results") == []:
-                    st.info("Enter a description above and choose Find matches.")
+                else:
+                    st.info("No products found. Try adding a brand or pack size.")
                         
             with st.expander("📷 Scan Barcode from Pantry"):
                 camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")

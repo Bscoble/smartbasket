@@ -664,8 +664,12 @@ div:has(> .recent-shops-hidden-marker) + div[data-testid="stExpander"] {
     display: none !important;
 }
 
-div:has(> .search-results-hidden-marker) + div[data-testid="stExpander"] {
-    display: none !important;
+.matching-products-heading {
+    margin: 12px 0 8px 0;
+    color: #4B5563;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
