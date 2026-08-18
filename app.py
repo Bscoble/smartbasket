@@ -870,19 +870,20 @@ else:
         
         with st.container(border=True):
             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
+            st.markdown('<div class="add-item-form-marker"></div>', unsafe_allow_html=True)
             with st.form("add_item_form", clear_on_submit=True):
                 item_name = st.text_input(
                     "What do you need?",
                     placeholder="e.g., Helga's white bread 700g",
                     label_visibility="collapsed",
                 )
-                c1, c2, c3 = st.columns([1.5, 2.5, 1])
+                c1, c2, c3 = st.columns([1.2, 2, 1.4])
                 with c1:
                     qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
                 with c2:
                     unit = st.selectbox("Unit", config.UNIT_OPTIONS, label_visibility="collapsed")
                 with c3:
-                    add_submitted = st.form_submit_button("＋", help="Add to List")
+                    add_submitted = st.form_submit_button("Add directly", use_container_width=True)
                 find_submitted = st.form_submit_button("🔍 Find matches", use_container_width=True)
                 
                 if add_submitted and item_name:

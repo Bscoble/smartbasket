@@ -668,6 +668,23 @@ div[data-testid="element-container"]:has(#subpage-back-anchor)
     object-fit: cover;
 }
 
+/* The direct-add action is secondary to product matching. */
+div:has(> .add-item-form-marker) + div[data-testid="stForm"] button[kind="secondaryFormSubmit"] {
+    min-height: 40px !important;
+    padding: 6px 8px !important;
+    border-radius: 10px !important;
+    background: #FFFFFF !important;
+    border: 1px solid #B9D9C8 !important;
+    color: #005A36 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+}
+
+div:has(> .add-item-form-marker) + div[data-testid="stForm"] button[kind="secondaryFormSubmit"]:hover {
+    background: #F5FAF7 !important;
+    border-color: #005A36 !important;
+}
+
 .product-result-placeholder {
     display: flex;
     align-items: center;
