@@ -595,6 +595,7 @@ div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button p {
     justify-content: center;
     width: 100%;
     height: 38px;
+    transform: translateY(7px);
     color: #1F2937;
     font-weight: 700;
     line-height: 1;
