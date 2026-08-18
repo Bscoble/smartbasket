@@ -364,6 +364,7 @@ elif not st.session_state["authenticated"]:
             
             submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
             if submitted:
+                st.session_state["reset_email"] = email.strip()
                 if not validate_email(email):
                     st.error("Please enter a valid email address.")
                 elif not pwd:
@@ -458,16 +459,20 @@ elif not st.session_state["authenticated"]:
         """, unsafe_allow_html=True)
         
         with st.form("forgot_form"):
-            reset_email_input = st.text_input("Email address", placeholder="Email address", label_visibility="collapsed")
+            reset_email_input = st.text_input(
+                "Email address",
+                value=st.session_state.get("reset_email", ""),
+                placeholder="Email address",
+                label_visibility="collapsed",
+            )
             
             submitted = st.form_submit_button("Send Reset Link", type="primary", use_container_width=True)
             if submitted:
-                if reset_email_input:
-                    st.session_state["reset_email"] = reset_email_input
-                else:
-                    st.session_state["reset_email"] = "bscoble74@gmail.com"
-                st.session_state["auth_mode"] = "forgot_success"
-                st.rerun()
+                if reset_email_input and validate_email(reset_email_input):
+                    st.session_state["reset_email"] = reset_email_input.strip()
+                    st.session_state["auth_mode"] = "forgot_success"
+                    st.rerun()
+                st.error("Please enter a valid email address.")
                 
     # -----------------------------------------------------------
     # VIEW: FORGOT PASSWORD SUCCESS (STEP 2)
