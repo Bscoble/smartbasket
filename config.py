@@ -107,7 +107,7 @@ WORKSHEET_NAMES = {
 }
 
 WORKSHEET_CONFIG = {
-    "users": {"rows": "1000", "cols": "7"},
+    "users": {"rows": "1000", "cols": "8"},
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
 }
@@ -135,6 +135,9 @@ BARCODE_BRIGHTNESS_THRESHOLD = 120  # Threshold for binarization pass
 # ============================================================================
 # UI CONFIGURATION
 # ============================================================================
+
+SUPPORTED_COUNTRIES = ["Australia", "New Zealand"]
+DEFAULT_COUNTRY = "Australia"
 
 APP_TITLE = "SmartBasket"
 APP_ICON = "🛒"

@@ -19,6 +19,7 @@ class AuthManager:
         "Email",
         "Name",
         "Postcode",
+        "Country",
         "Password Hash",
         "Session Token Hash",
         "Token Created",
@@ -39,8 +40,14 @@ class AuthManager:
                 cols=WORKSHEET_CONFIG["users"]["cols"],
             )
 
-        if not worksheet.get_all_values():
+        worksheet_data = worksheet.get_all_values()
+        if not worksheet_data:
             worksheet.append_row(self._HEADERS)
+        elif worksheet_data[0][:7] == [
+            "Email", "Name", "Postcode", "Password Hash",
+            "Session Token Hash", "Token Created", "Created At",
+        ]:
+            worksheet.update("A1:H1", [self._HEADERS])
         return worksheet
 
     @classmethod
@@ -71,12 +78,14 @@ class AuthManager:
     def _user_from_row(row: list) -> Optional[Dict[str, str]]:
         if len(row) < 7 or not row[0].strip():
             return None
+        has_country_column = len(row) >= 8
         return {
             "email": row[0].strip().lower(),
             "name": row[1].strip(),
             "postcode": row[2].strip(),
-            "password_hash": row[3],
-            "session_token_hash": row[4],
+            "country": row[3].strip() if has_country_column else "Australia",
+            "password_hash": row[4] if has_country_column else row[3],
+            "session_token_hash": row[5] if has_country_column else row[4],
         }
 
     def _find_user(self, email: str) -> Optional[Dict[str, str]]:
@@ -88,7 +97,14 @@ class AuthManager:
                 return user
         return None
 
-    def create_user(self, name: str, email: str, password: str, postcode: str) -> Optional[Dict[str, str]]:
+    def create_user(
+        self,
+        name: str,
+        email: str,
+        password: str,
+        postcode: str,
+        country: str,
+    ) -> Optional[Dict[str, str]]:
         email = email.strip().lower()
         if self._find_user(email):
             return None
@@ -97,6 +113,7 @@ class AuthManager:
             email,
             name.strip(),
             postcode.strip(),
+            country.strip(),
             self._hash_password(password),
             "",
             "",

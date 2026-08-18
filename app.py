@@ -353,11 +353,13 @@ elif not st.session_state["authenticated"]:
     if st.session_state["auth_mode"] == "login":
         st.markdown("""
         <div class="auth-header">
-            <div style="font-size: 40px; margin-bottom: -10px;">🛒</div>
+            <div class="auth-logo">🛒</div>
             <h1>Welcome back</h1>
+            <p class="auth-subtitle">Sign in to pick up your shopping list.</p>
         </div>
         """, unsafe_allow_html=True)
         
+        st.markdown('<div class="login-screen-marker"></div>', unsafe_allow_html=True)
         with st.form("login_form"):
             email = st.text_input("Email address", placeholder="Email address", label_visibility="collapsed")
             pwd = st.text_input("Password", type="password", placeholder="Password", label_visibility="collapsed")
@@ -379,7 +381,7 @@ elif not st.session_state["authenticated"]:
                     else:
                         st.error("Email or password is incorrect.")
                 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="auth-links-marker"></div>', unsafe_allow_html=True)
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:
@@ -396,17 +398,20 @@ elif not st.session_state["authenticated"]:
     elif st.session_state["auth_mode"] == "signup":
         st.markdown("""
         <div class="auth-header">
-            <div style="font-size: 40px; margin-bottom: -10px;">🛒</div>
+            <div class="auth-logo">🛒</div>
             <h1>Create account</h1>
+            <p class="auth-subtitle">Save your list and shop smarter each week.</p>
         </div>
         """, unsafe_allow_html=True)
         
+        st.markdown('<div class="signup-screen-marker"></div>', unsafe_allow_html=True)
         with st.form("signup_form"):
             name = st.text_input("Full name", placeholder="Full name", label_visibility="collapsed")
             email = st.text_input("Email address", placeholder="Email address", label_visibility="collapsed")
             pwd = st.text_input("Password", type="password", placeholder="Password", label_visibility="collapsed")
-            postcode = st.text_input("Australian postcode", placeholder="Australian postcode", label_visibility="collapsed")
-            st.caption("Australian postcodes only (e.g. 2000, 3000, 4000)")
+            country = st.selectbox("Country", config.SUPPORTED_COUNTRIES, index=config.SUPPORTED_COUNTRIES.index(config.DEFAULT_COUNTRY), label_visibility="collapsed")
+            postcode = st.text_input("Postcode", placeholder=f"{country} postcode", label_visibility="collapsed")
+            st.caption(f"Enter your {country} postcode (4 digits).")
             
             submitted = st.form_submit_button("Create Account", type="primary", use_container_width=True)
             if submitted:
@@ -419,7 +424,7 @@ elif not st.session_state["authenticated"]:
                 elif not postcode.isdigit() or len(postcode) != 4:
                     st.error("Please enter a valid 4-digit Australian postcode.")
                 else:
-                    user = auth_manager.create_user(name, email, pwd, postcode)
+                    user = auth_manager.create_user(name, email, pwd, postcode, country)
                     if user:
                         st.session_state["authenticated"] = True
                         st.session_state["current_user"] = user
@@ -428,7 +433,7 @@ elif not st.session_state["authenticated"]:
                     else:
                         st.error("An account with that email already exists.")
                 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="auth-links-marker signup-links-marker"></div>', unsafe_allow_html=True)
         
         _, center_col, _ = st.columns([1, 2, 1])
         with center_col:

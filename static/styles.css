@@ -96,8 +96,119 @@ button[data-testid="baseButton-primary"]:has(div:contains("Get Started")):hover 
     font-family: "Georgia", serif;
     font-size: 32px;
     font-weight: 700;
-    margin-top: 10px;
+    margin: 12px 0 0 0;
     color: white;
+}
+
+.auth-logo {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.14);
+    font-size: 32px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.auth-subtitle {
+    margin: 10px 0 0 0;
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 13px;
+}
+
+div:has(> .login-screen-marker) + div[data-testid="stForm"] {
+    margin-top: -8px !important;
+    padding: 16px !important;
+    border: 1px solid #D9DEE5 !important;
+    border-radius: 16px !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 8px 24px rgba(28, 33, 40, 0.08) !important;
+}
+
+div:has(> .login-screen-marker) + div[data-testid="stForm"] input {
+    background: #F3F5F8 !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    min-height: 42px !important;
+}
+
+div:has(> .login-screen-marker) + div[data-testid="stForm"] input:focus {
+    border-color: #005A36 !important;
+    box-shadow: 0 0 0 2px rgba(0, 90, 54, 0.12) !important;
+}
+
+div:has(> .login-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
+    margin-top: 10px !important;
+    min-height: 44px !important;
+    border-radius: 10px !important;
+    background: #FF4B4B !important;
+    box-shadow: 0 5px 12px rgba(255, 75, 75, 0.22) !important;
+}
+
+div:has(> .login-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"]:hover {
+    background: #E94141 !important;
+}
+
+div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] {
+    gap: 8px !important;
+    margin-top: 2px !important;
+}
+
+div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] button {
+    min-height: 38px !important;
+    padding: 6px 10px !important;
+    border: 1px solid #D9DEE5 !important;
+    border-radius: 9px !important;
+    background: #FFFFFF !important;
+    color: #334155 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+}
+
+div:has(> .auth-links-marker) + div[data-testid="stHorizontalBlock"] button:hover {
+    border-color: #005A36 !important;
+    color: #005A36 !important;
+    background: #F5FAF7 !important;
+}
+
+div:has(> .signup-screen-marker) + div[data-testid="stForm"] {
+    margin-top: -8px !important;
+    padding: 14px 16px 16px 16px !important;
+    border: 1px solid #D9DEE5 !important;
+    border-radius: 16px !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 8px 24px rgba(28, 33, 40, 0.08) !important;
+}
+
+div:has(> .signup-screen-marker) + div[data-testid="stForm"] input {
+    background: #F3F5F8 !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    min-height: 40px !important;
+}
+
+div:has(> .signup-screen-marker) + div[data-testid="stForm"] input:focus {
+    border-color: #005A36 !important;
+    box-shadow: 0 0 0 2px rgba(0, 90, 54, 0.12) !important;
+}
+
+div:has(> .signup-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
+    margin-top: 10px !important;
+    min-height: 44px !important;
+    border-radius: 10px !important;
+    background: #FF4B4B !important;
+    box-shadow: 0 5px 12px rgba(255, 75, 75, 0.22) !important;
+}
+
+div:has(> .signup-screen-marker) + div[data-testid="stForm"] button[kind="primaryFormSubmit"]:hover {
+    background: #E94141 !important;
+}
+
+div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
+    max-width: 220px !important;
 }
 
 /* ========================================================================
