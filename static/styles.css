@@ -285,8 +285,9 @@ div[data-testid="element-container"]:has(.logout-button-marker) {
 
 div[data-testid="element-container"]:has(.logout-button-marker)
     + div[data-testid="element-container"] {
-    margin-top: -65px !important;
-    margin-bottom: 0 !important;
+    position: relative !important;
+    margin-top: -78px !important;
+    margin-bottom: 38px !important;
     margin-left: auto !important;
     margin-right: 0px !important;
     width: 40px !important;
@@ -296,16 +297,24 @@ div[data-testid="element-container"]:has(.logout-button-marker)
 div[data-testid="element-container"]:has(.logout-button-marker)
     + div[data-testid="element-container"]
     button {
-    opacity: 0 !important;
+    opacity: 1 !important;
     height: 40px !important;
     width: 40px !important;
+    min-height: 40px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #FFFFFF !important;
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    box-shadow: none !important;
     cursor: pointer !important;
 }
 
 div[data-testid="element-container"]:has(.logout-button-marker)
-    ~ div[data-testid="element-container"] button[key="btn_logout"] {
-    opacity: 0 !important;
-    pointer-events: auto !important;
+    + div[data-testid="element-container"] button:hover {
+    background: rgba(255, 255, 255, 0.32) !important;
 }
 
 /* Compact fallback if the overlay selector is not available in a Streamlit build. */
