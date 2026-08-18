@@ -671,8 +671,9 @@ div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     border-radius: 10px !important;
     box-shadow: 0 2px 6px rgba(28, 33, 40, 0.04) !important;
     color: #333333 !important;
-    min-height: 76px !important;
-    padding: 10px 6px !important;
+    min-height: 58px !important;
+    height: 58px !important;
+    padding: 8px 2px !important;
     width: 100% !important;
     transition: background-color 0.18s ease, border-color 0.18s ease,
         box-shadow 0.18s ease, transform 0.18s ease !important;
@@ -681,13 +682,26 @@ div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     button
     p {
-    font-size: 11px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    font-size: 10px !important;
     white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
     color: #333333 !important;
     font-weight: 600 !important;
     margin: 0 !important;
-    padding: 8px 0 0 0 !important;
+    padding: 0 !important;
     text-align: center !important;
+}
+
+div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
+    button [data-testid="stMarkdownContainer"] {
+    width: 100% !important;
+    white-space: nowrap !important;
 }
 
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]

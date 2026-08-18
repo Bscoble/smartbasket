@@ -1432,7 +1432,7 @@ else:
         st.markdown("<hr style='margin: 30px 0 20px 0; opacity: 0.1;'>", unsafe_allow_html=True)
         
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
-        fc1, fc2, fc3, fc4 = st.columns([1, 1.2, 1.2, 1.4])
+        fc1, fc2, fc3, fc4 = st.columns(4, gap="small")
         with fc1:
             if st.button("ℹ️ About", key="footer_about"):
                 st.session_state["current_page"] = "about"
