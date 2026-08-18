@@ -567,7 +567,7 @@ div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 38px !important;
+    width: 34px !important;
     height: 38px !important;
     min-height: 38px !important;
     margin: 0 auto !important;
@@ -599,6 +599,7 @@ div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button p {
     font-weight: 700;
     line-height: 1;
     text-align: center;
+    font-size: 14px;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button {

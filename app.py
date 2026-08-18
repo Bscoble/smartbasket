@@ -70,8 +70,7 @@ try:
     APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
     logger.info("Price scraper initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+except Exception as e:    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
     price_scraper = None
 
 # ============================================================================
@@ -1069,7 +1068,7 @@ else:
                 except ValueError: i_qty = 1
                 i_unit = row[2]
                 i_img = row[3].strip() if len(row) >= 4 and row[3] else ""
-                cols = st.columns([0.6, 2.1, 1.3, 0.5])
+                cols = st.columns([0.55, 1.9, 1.65, 0.55])
                 with cols[0]:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
@@ -1078,7 +1077,7 @@ else:
                 with cols[1]:
                     st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_qty} {i_unit}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
-                    sub_c1, sub_c2, sub_c3 = st.columns(3)
+                    sub_c1, sub_c2, sub_c3 = st.columns([1, 1, 1], gap="small")
                     with sub_c1:
                         st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
                         if st.button("−", key=f"sub_{sheet_idx}"):
