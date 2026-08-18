@@ -975,9 +975,15 @@ else:
                         sc1, sc2, sc3 = st.columns([1, 3, 1.5])
                         with sc1:
                             if res["image_url"]:
-                                st.markdown(f'<img src="{res["image_url"]}" class="thumbnail-zoom" />', unsafe_allow_html=True)
+                                st.markdown(
+                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" />',
+                                    unsafe_allow_html=True,
+                                )
                             else:
-                                st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px;">🛒</div>', unsafe_allow_html=True)
+                                st.markdown(
+                                    '<div class="product-result-placeholder">🛒</div>',
+                                    unsafe_allow_html=True,
+                                )
                         with sc2:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
                         with sc3:

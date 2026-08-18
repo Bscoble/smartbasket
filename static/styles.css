@@ -660,6 +660,22 @@ div[data-testid="element-container"]:has(#subpage-back-anchor)
     text-align: center;
 }
 
+.product-result-image,
+.product-result-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    object-fit: cover;
+}
+
+.product-result-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #E6F4EA;
+    font-size: 20px;
+}
+
 div:has(> .recent-shops-hidden-marker) + div[data-testid="stExpander"] {
     display: none !important;
 }
