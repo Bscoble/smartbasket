@@ -15,6 +15,7 @@ from config import (
     CACHE_EXPIRY_HOURS_VALID,
     CACHE_EXPIRY_HOURS_INVALID,
     PRICE_VALIDITY_THRESHOLD,
+    SHEETS_READ_CACHE_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,26 @@ class SheetsManager:
             spreadsheet: Authorized gspread spreadsheet object
         """
         self.sh = spreadsheet
+        self._worksheet_cache: Dict[str, Any] = {}
+        self._values_cache: Dict[str, Tuple[datetime, List[List[str]]]] = {}
         logger.info("SheetsManager initialized")
+
+    def _cached_values(self, worksheet_name: str, ws: Any, force_refresh: bool = False) -> List[List[str]]:
+        """Return worksheet values using a short-lived in-memory cache."""
+        if not force_refresh:
+            cached = self._values_cache.get(worksheet_name)
+            if cached:
+                cached_at, data = cached
+                if (datetime.now() - cached_at).total_seconds() < SHEETS_READ_CACHE_SECONDS:
+                    return data
+
+        data = ws.get_all_values()
+        self._values_cache[worksheet_name] = (datetime.now(), data)
+        return data
+
+    def _invalidate_values_cache(self, worksheet_name: str) -> None:
+        """Invalidate cached values after writes to a worksheet."""
+        self._values_cache.pop(worksheet_name, None)
     
     def _get_or_create_worksheet(self, name: str, rows: str = "1000", cols: str = "4") -> Any:
         """
@@ -45,11 +65,18 @@ class SheetsManager:
         Returns:
             Worksheet object
         """
+        cached_ws = self._worksheet_cache.get(name)
+        if cached_ws is not None:
+            return cached_ws
+
         try:
-            return self.sh.worksheet(name)
+            ws = self.sh.worksheet(name)
         except gspread.WorksheetNotFound:
             logger.info(f"Creating new worksheet: {name}")
-            return self.sh.add_worksheet(title=name, rows=rows, cols=cols)
+            ws = self.sh.add_worksheet(title=name, rows=rows, cols=cols)
+
+        self._worksheet_cache[name] = ws
+        return ws
     
     # ========================================================================
     # STORE PREFERENCES
@@ -65,8 +92,9 @@ class SheetsManager:
         default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True, "IGA": True}
         
         try:
-            pref_ws = self._get_or_create_worksheet(WORKSHEET_NAMES["preferences"])
-            data = pref_ws.get_all_values()
+            worksheet_name = WORKSHEET_NAMES["preferences"]
+            pref_ws = self._get_or_create_worksheet(worksheet_name)
+            data = self._cached_values(worksheet_name, pref_ws)
             
             if len(data) >= 2:
                 return {
@@ -91,7 +119,8 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
-            pref_ws = self._get_or_create_worksheet(WORKSHEET_NAMES["preferences"])
+            worksheet_name = WORKSHEET_NAMES["preferences"]
+            pref_ws = self._get_or_create_worksheet(worksheet_name)
             pref_ws.update(
                 "A1:D2",
                 [
@@ -104,6 +133,7 @@ class SheetsManager:
                     ],
                 ],
             )
+            self._invalidate_values_cache(worksheet_name)
             logger.info("Store preferences saved successfully")
             return True
         except Exception as e:
@@ -124,8 +154,9 @@ class SheetsManager:
         cache = {}
         
         try:
+            worksheet_name = WORKSHEET_NAMES["price_cache"]
             ws = self._get_or_create_worksheet(
-                WORKSHEET_NAMES["price_cache"],
+                worksheet_name,
                 rows=WORKSHEET_CONFIG["price_cache"]["rows"],
                 cols=WORKSHEET_CONFIG["price_cache"]["cols"],
             )
@@ -135,7 +166,7 @@ class SheetsManager:
                 ws.append_row(["Store", "Item", "Price", "Timestamp"])
                 return cache
             
-            data = ws.get_all_values()
+            data = self._cached_values(worksheet_name, ws)
             
             if len(data) > 1:
                 for row in data[1:]:
@@ -166,8 +197,9 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
+            worksheet_name = WORKSHEET_NAMES["price_cache"]
             ws = self._get_or_create_worksheet(
-                WORKSHEET_NAMES["price_cache"],
+                worksheet_name,
                 rows=WORKSHEET_CONFIG["price_cache"]["rows"],
                 cols=WORKSHEET_CONFIG["price_cache"]["cols"],
             )
@@ -185,6 +217,7 @@ class SheetsManager:
             
             ws.clear()
             ws.append_rows(rows)
+            self._invalidate_values_cache(worksheet_name)
             logger.info(f"Saved {len(cache)} price cache entries")
             return True
         except Exception as e:
@@ -228,11 +261,12 @@ class SheetsManager:
             List of rows belonging to the authenticated customer
         """
         try:
-            ws = self._get_or_create_worksheet(WORKSHEET_NAMES["shopping_list"])
+            worksheet_name = WORKSHEET_NAMES["shopping_list"]
+            ws = self._get_or_create_worksheet(worksheet_name)
             normalized_user_id = user_id.strip().lower()
             return [
                 row[:4]
-                for row in ws.get_all_values()
+                for row in self._cached_values(worksheet_name, ws)
                 if len(row) >= 5 and row[4].strip().lower() == normalized_user_id
             ]
         except Exception as e:
@@ -261,8 +295,10 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
-            ws = self._get_or_create_worksheet(WORKSHEET_NAMES["shopping_list"])
+            worksheet_name = WORKSHEET_NAMES["shopping_list"]
+            ws = self._get_or_create_worksheet(worksheet_name)
             ws.append_row([item_name, qty, unit, image_url, user_id.strip().lower()])
+            self._invalidate_values_cache(worksheet_name)
             logger.info(f"Added item to shopping list: {item_name}")
             return True
         except Exception as e:
@@ -277,15 +313,17 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
-            ws = self._get_or_create_worksheet(WORKSHEET_NAMES["shopping_list"])
+            worksheet_name = WORKSHEET_NAMES["shopping_list"]
+            ws = self._get_or_create_worksheet(worksheet_name)
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 row_number
-                for row_number, row in enumerate(ws.get_all_values(), start=1)
+                for row_number, row in enumerate(self._cached_values(worksheet_name, ws), start=1)
                 if len(row) >= 5 and row[4].strip().lower() == normalized_user_id
             ]
             for row_number in reversed(matching_rows):
                 ws.delete_rows(row_number)
+            self._invalidate_values_cache(worksheet_name)
             logger.info("Shopping list cleared for user %s", normalized_user_id)
             return True
         except Exception as e:
@@ -304,16 +342,18 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
-            ws = self._get_or_create_worksheet(WORKSHEET_NAMES["shopping_list"])
+            worksheet_name = WORKSHEET_NAMES["shopping_list"]
+            ws = self._get_or_create_worksheet(worksheet_name)
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 sheet_row
-                for sheet_row, row in enumerate(ws.get_all_values(), start=1)
+                for sheet_row, row in enumerate(self._cached_values(worksheet_name, ws), start=1)
                 if len(row) >= 5 and row[4].strip().lower() == normalized_user_id
             ]
             if not 1 <= row_index <= len(matching_rows):
                 return False
             ws.delete_rows(matching_rows[row_index - 1])
+            self._invalidate_values_cache(worksheet_name)
             logger.info("Deleted shopping-list row %s for user %s", row_index, normalized_user_id)
             return True
         except Exception as e:
@@ -333,16 +373,18 @@ class SheetsManager:
             True if successful, False otherwise
         """
         try:
-            ws = self._get_or_create_worksheet(WORKSHEET_NAMES["shopping_list"])
+            worksheet_name = WORKSHEET_NAMES["shopping_list"]
+            ws = self._get_or_create_worksheet(worksheet_name)
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 sheet_row
-                for sheet_row, row in enumerate(ws.get_all_values(), start=1)
+                for sheet_row, row in enumerate(self._cached_values(worksheet_name, ws), start=1)
                 if len(row) >= 5 and row[4].strip().lower() == normalized_user_id
             ]
             if not 1 <= row_index <= len(matching_rows):
                 return False
             ws.update(f"B{matching_rows[row_index - 1]}", [[qty]])
+            self._invalidate_values_cache(worksheet_name)
             logger.info("Updated quantity for row %s for user %s", row_index, normalized_user_id)
             return True
         except Exception as e:
@@ -360,17 +402,22 @@ class SheetsManager:
     def save_product(self, user_id: str, title: str, image_url: str = "") -> bool:
         """Save a product a customer has used for future local searches."""
         try:
+            worksheet_name = WORKSHEET_NAMES["product_catalog"]
             ws = self._get_or_create_worksheet(
-                WORKSHEET_NAMES["product_catalog"],
+                worksheet_name,
                 rows=WORKSHEET_CONFIG["product_catalog"]["rows"],
                 cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
             )
-            data = ws.get_all_values()
+            data = self._cached_values(worksheet_name, ws)
             headers = ["User_ID", "Title", "Image_URL", "Search_Key", "Updated"]
             if not data:
                 ws.append_row(headers)
+                self._invalidate_values_cache(worksheet_name)
+                data = [headers]
             elif data[0] != headers:
                 ws.update("A1:E1", [headers])
+                self._invalidate_values_cache(worksheet_name)
+                data[0] = headers
 
             normalized_user = user_id.strip().lower()
             normalized_title = title.strip()
@@ -379,7 +426,7 @@ class SheetsManager:
 
             search_key = normalized_title.lower()
             existing_row = None
-            for row_number, row in enumerate(ws.get_all_values()[1:], start=2):
+            for row_number, row in enumerate(data[1:], start=2):
                 if len(row) >= 4 and row[0].strip().lower() == normalized_user and row[3].strip() == search_key:
                     existing_row = row_number
                     break
@@ -389,6 +436,7 @@ class SheetsManager:
                 ws.update(f"A{existing_row}:E{existing_row}", [values])
             else:
                 ws.append_row(values)
+            self._invalidate_values_cache(worksheet_name)
             return True
         except Exception as e:
             logger.error(f"Error saving product catalogue entry: {e}", exc_info=True)
@@ -397,8 +445,9 @@ class SheetsManager:
     def search_saved_products(self, user_id: str, query: str, limit: int = 5) -> List[Dict[str, str]]:
         """Search products previously used by the current customer."""
         try:
+            worksheet_name = WORKSHEET_NAMES["product_catalog"]
             ws = self._get_or_create_worksheet(
-                WORKSHEET_NAMES["product_catalog"],
+                worksheet_name,
                 rows=WORKSHEET_CONFIG["product_catalog"]["rows"],
                 cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
             )
@@ -408,7 +457,7 @@ class SheetsManager:
                 return []
 
             matches = []
-            for row in ws.get_all_values()[1:]:
+            for row in self._cached_values(worksheet_name, ws)[1:]:
                 if len(row) >= 4 and row[0].strip().lower() == normalized_user:
                     search_key = row[3].strip().lower()
                     if all(term in search_key for term in terms):
@@ -434,17 +483,20 @@ class SheetsManager:
             return False
         
         try:
+            worksheet_name = WORKSHEET_NAMES["recent_shops"]
             history_ws = self._get_or_create_worksheet(
-                WORKSHEET_NAMES["recent_shops"],
+                worksheet_name,
                 rows=WORKSHEET_CONFIG["recent_shops"]["rows"],
                 cols=WORKSHEET_CONFIG["recent_shops"]["cols"],
             )
             
-            history_data = history_ws.get_all_values()
+            history_data = self._cached_values(worksheet_name, history_ws)
             if not history_data:
                 history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID"])
+                self._invalidate_values_cache(worksheet_name)
             elif history_data[0][:5] == ["Item", "Qty", "Unit", "Image_URL", "Date"]:
                 history_ws.update("A1:F1", [["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID"]])
+                self._invalidate_values_cache(worksheet_name)
             
             current_date = datetime.now().strftime(DATETIME_FORMAT)
             rows_to_add = []
@@ -461,6 +513,7 @@ class SheetsManager:
             
             if rows_to_add:
                 history_ws.append_rows(rows_to_add)
+                self._invalidate_values_cache(worksheet_name)
                 logger.info(f"Archived {len(rows_to_add)} items to recent shops")
             
             return True
@@ -483,8 +536,9 @@ class SheetsManager:
         recent_items = {}
         
         try:
-            history_ws = self._get_or_create_worksheet(WORKSHEET_NAMES["recent_shops"])
-            data = history_ws.get_all_values()
+            worksheet_name = WORKSHEET_NAMES["recent_shops"]
+            history_ws = self._get_or_create_worksheet(worksheet_name)
+            data = self._cached_values(worksheet_name, history_ws)
             
             if len(data) <= 1:
                 return []

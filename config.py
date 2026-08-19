@@ -46,6 +46,7 @@ CACHE_EXPIRY_HOURS_INVALID = 1  # Invalid prices (>= $90)
 PRICE_VALIDITY_THRESHOLD = 90.00  # USD threshold for valid pricing
 DEFAULT_PRICE_FALLBACK = 99.99  # Fallback for scraping failures
 APIFY_DEFAULT_PRICE = 5.00  # Fallback for Apify scraping failures
+SHEETS_READ_CACHE_SECONDS = 20  # Reduce duplicate reads across Streamlit reruns
 
 # ============================================================================
 # PRICE CONSTRAINTS & VALIDATION
@@ -76,16 +77,22 @@ APIFY_DEFAULT_CONFIG = {
 # SCRAPING CONFIGURATION
 # ============================================================================
 
-REQUEST_TIMEOUT = 15  # seconds
+REQUEST_TIMEOUT = 20  # seconds, ZenRows (Aldi/IGA) HTTP request timeout
+# Apify actor runs (Woolworths/Coles) have no timeout by default and can hang
+# well past the overall thread-pool budget, so bound how long we wait on them.
+APIFY_RUN_TIMEOUT = 25  # seconds
 THREAD_POOL_MAX_WORKERS = 4
-THREAD_POOL_TIMEOUT = 30  # seconds
+THREAD_POOL_TIMEOUT = 30  # seconds, must stay above REQUEST_TIMEOUT and APIFY_RUN_TIMEOUT
 
 # ============================================================================
 # PRODUCT DATABASE
 # ============================================================================
 
 OPEN_FOOD_FACTS_BARCODE_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
-OPEN_FOOD_FACTS_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl"
+# search-a-licious powers the search box on openfoodfacts.org; the legacy cgi/search.pl
+# endpoint only does literal per-word matching and misses many real products (e.g. it
+# fails on "Arnotts Tim Tam" because of the apostrophe in "Arnott's").
+OPEN_FOOD_FACTS_SEARCH_URL = "https://search.openfoodfacts.org/search"
 OPEN_FOOD_FACTS_USER_AGENT = "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"
 
 # ============================================================================

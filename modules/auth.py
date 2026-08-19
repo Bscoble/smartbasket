@@ -4,11 +4,12 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from config import WORKSHEET_CONFIG, WORKSHEET_NAMES
 from config import SUPPORTED_COUNTRIES
+from config import SHEETS_READ_CACHE_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,59 @@ class AuthManager:
 
     def __init__(self, spreadsheet: Any):
         self.spreadsheet = spreadsheet
+        self._users_worksheet: Optional[Any] = None
+        self._users_values_cache: Optional[list] = None
+        self._users_values_cached_at: Optional[datetime] = None
+        self._headers_checked = False
+
+    def _read_users(self, force_refresh: bool = False) -> list:
+        """Return users worksheet rows with a short-lived in-memory cache."""
+        if (
+            not force_refresh
+            and self._users_values_cache is not None
+            and self._users_values_cached_at is not None
+            and (datetime.now() - self._users_values_cached_at)
+            < timedelta(seconds=SHEETS_READ_CACHE_SECONDS)
+        ):
+            return self._users_values_cache
+
+        worksheet = self._worksheet()
+        data = worksheet.get_all_values()
+        self._users_values_cache = data
+        self._users_values_cached_at = datetime.now()
+        return data
+
+    def _invalidate_users_cache(self) -> None:
+        self._users_values_cache = None
+        self._users_values_cached_at = None
+
+    def _ensure_headers(self, worksheet: Any) -> None:
+        if self._headers_checked:
+            return
+
+        worksheet_data = worksheet.get_all_values()
+        if not worksheet_data:
+            worksheet.append_row(self._HEADERS)
+            self._invalidate_users_cache()
+        elif worksheet_data[0][:7] == [
+            "Email", "Name", "Postcode", "Password Hash",
+            "Session Token Hash", "Token Created", "Created At",
+        ]:
+            worksheet.update("A1:I1", [self._HEADERS])
+            self._invalidate_users_cache()
+        elif worksheet_data[0][:8] == [
+            "Email", "Name", "Postcode", "Country", "Password Hash",
+            "Session Token Hash", "Token Created", "Created At",
+        ]:
+            worksheet.update("A1:I1", [self._HEADERS])
+            self._invalidate_users_cache()
+
+        self._headers_checked = True
 
     def _worksheet(self) -> Any:
+        if self._users_worksheet is not None:
+            return self._users_worksheet
+
         try:
             worksheet = self.spreadsheet.worksheet(WORKSHEET_NAMES["users"])
         except Exception:
@@ -42,19 +94,8 @@ class AuthManager:
                 cols=WORKSHEET_CONFIG["users"]["cols"],
             )
 
-        worksheet_data = worksheet.get_all_values()
-        if not worksheet_data:
-            worksheet.append_row(self._HEADERS)
-        elif worksheet_data[0][:7] == [
-            "Email", "Name", "Postcode", "Password Hash",
-            "Session Token Hash", "Token Created", "Created At",
-        ]:
-            worksheet.update("A1:I1", [self._HEADERS])
-        elif worksheet_data[0][:8] == [
-            "Email", "Name", "Postcode", "Country", "Password Hash",
-            "Session Token Hash", "Token Created", "Created At",
-        ]:
-            worksheet.update("A1:I1", [self._HEADERS])
+        self._users_worksheet = worksheet
+        self._ensure_headers(worksheet)
         return worksheet
 
     @staticmethod
@@ -139,9 +180,8 @@ class AuthManager:
             normalized = normalized.zfill(4)
         return normalized
 
-    def _find_user(self, email: str) -> Optional[Dict[str, str]]:
-        worksheet = self._worksheet()
-        for row_number, row in enumerate(worksheet.get_all_values(), start=1):
+    def _find_user(self, email: str, force_refresh: bool = False) -> Optional[Dict[str, str]]:
+        for row_number, row in enumerate(self._read_users(force_refresh=force_refresh), start=1):
             user = self._user_from_row(row)
             if user and user["email"] == email.strip().lower():
                 user["row_number"] = str(row_number)
@@ -158,7 +198,7 @@ class AuthManager:
         country: str,
     ) -> Optional[Dict[str, str]]:
         email = email.strip().lower()
-        if self._find_user(email):
+        if self._find_user(email, force_refresh=True):
             return None
 
         self._worksheet().append_row([
@@ -172,10 +212,11 @@ class AuthManager:
             "",
             datetime.now().isoformat(timespec="seconds"),
         ])
+        self._invalidate_users_cache()
         return self.authenticate(email, password)
 
     def authenticate(self, email: str, password: str) -> Optional[Dict[str, str]]:
-        user = self._find_user(email)
+        user = self._find_user(email, force_refresh=True)
         if not user or not self._verify_password(password, user["password_hash"]):
             return None
 
@@ -184,12 +225,13 @@ class AuthManager:
         row_number = int(user["row_number"])
         worksheet.update_cell(row_number, user["session_token_column"], self._hash_token(token))
         worksheet.update_cell(row_number, user["token_created_column"], datetime.now().isoformat(timespec="seconds"))
+        self._invalidate_users_cache()
         user["token"] = token
         return user
 
     def reset_password(self, email: str, postcode: str, new_password: str) -> bool:
         """Reset a password after verifying the account email and postcode."""
-        user = self._find_user(email)
+        user = self._find_user(email, force_refresh=True)
         if not user:
             return False
         stored_postcode = self._normalize_postcode(user["postcode"])
@@ -202,6 +244,7 @@ class AuthManager:
         # Invalidate any existing browser session after a password reset.
         worksheet.update_cell(int(user["row_number"]), user["session_token_column"], "")
         worksheet.update_cell(int(user["row_number"]), user["token_created_column"], "")
+        self._invalidate_users_cache()
         return True
 
     def validate_session(self, token: str) -> Optional[Dict[str, str]]:
@@ -209,8 +252,7 @@ class AuthManager:
             return None
 
         token_hash = self._hash_token(token)
-        worksheet = self._worksheet()
-        for row_number, row in enumerate(worksheet.get_all_values(), start=1):
+        for row_number, row in enumerate(self._read_users(), start=1):
             user = self._user_from_row(row)
             if user and hmac.compare_digest(user["session_token_hash"], token_hash):
                 user["row_number"] = str(row_number)
@@ -224,3 +266,4 @@ class AuthManager:
             row_number = int(user["row_number"])
             worksheet.update_cell(row_number, user["session_token_column"], "")
             worksheet.update_cell(row_number, user["token_created_column"], "")
+            self._invalidate_users_cache()

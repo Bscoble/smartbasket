@@ -5,6 +5,7 @@ Handles price lookups from various supermarket websites using APIs and web scrap
 
 import logging
 import re
+from datetime import timedelta
 from typing import Optional, Dict, Any
 from urllib.parse import quote
 import requests
@@ -16,6 +17,7 @@ from config import (
     ZENROWS_PARAMS,
     APIFY_DEFAULT_CONFIG,
     REQUEST_TIMEOUT,
+    APIFY_RUN_TIMEOUT,
     PRICE_REGEX,
     DEFAULT_PRICE_FALLBACK,
     APIFY_DEFAULT_PRICE,
@@ -96,8 +98,11 @@ class PriceScraper:
             client = ApifyClient(self.apify_token)
             search_url = store_config["search_url"].format(quote(item_name))
             run = client.actor(store_config["api_actor"]).call(
-                run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG}
+                run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
+                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
             )
+            if run is None or run.status != "SUCCEEDED":
+                return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
             for item in client.dataset(run.default_dataset_id).list_items().items:
                 price = self._extract_apify_price(item)
                 if price and is_valid_price(price):
@@ -170,7 +175,13 @@ class PriceScraper:
             }
             
             logger.debug(f"Calling Apify actor for {store}: {actor}")
-            run = client.actor(actor).call(run_input=run_input)
+            run = client.actor(actor).call(
+                run_input=run_input,
+                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+            )
+            if run is None or run.status != "SUCCEEDED":
+                logger.debug(f"Apify run for {store}/{item_name} did not finish within {APIFY_RUN_TIMEOUT}s")
+                return APIFY_DEFAULT_PRICE
             
             # Parse results from Apify dataset
             for item in client.dataset(run.default_dataset_id).list_items().items:

@@ -185,10 +185,7 @@ class ProductLookup:
             logger.debug(f"Searching Open Food Facts for: {query}")
             
             params = {
-                "search_terms": query,
-                "search_simple": 1,
-                "action": "process",
-                "json": 1,
+                "q": query,
                 "page_size": 5,
             }
             
@@ -206,12 +203,19 @@ class ProductLookup:
             results = []
             seen_titles = set()
             
-            for product in data.get("products", []):
+            for product in data.get("hits", []):
                 name = product.get("product_name_en") or product.get("product_name")
-                brand = product.get("brands")
+                if not name:
+                    continue
+                brands = product.get("brands")
+                # search-a-licious returns brands as a list rather than a comma-separated string
+                brand = ", ".join(brands) if isinstance(brands, list) else brands
                 image_url = product.get("image_front_url") or product.get("image_url") or ""
                 
-                title = f"{brand} {name}".strip() if brand else name
+                if brand and not name.lower().startswith(brand.lower()):
+                    title = f"{brand} {name}".strip()
+                else:
+                    title = name
                 
                 # Deduplicate results
                 if title and title not in seen_titles:

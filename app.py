@@ -76,6 +76,15 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
         )
 
     if isinstance(error, APIError):
+        if "quota" in error_text or "429" in error_text:
+            return (
+                "Google Sheets quota limit was reached.",
+                [
+                    "Wait 60-90 seconds and try again.",
+                    "Reduce repeated reads (short-lived caching is now enabled in this app).",
+                    "If this keeps happening, increase Google Sheets API quota for this project.",
+                ],
+            )
         return (
             "Google Sheets API rejected the request.",
             [
@@ -961,6 +970,8 @@ else:
                         stored_unit = infer_unit(item_name)
                     sheets_manager.save_product(user_id, item_name)
                     if sheets_manager.add_item_to_list(item_name, int(qty), stored_unit, user_id=user_id):
+                        st.session_state["search_performed"] = False
+                        st.session_state["search_results"] = []
                         st.rerun()
                     else:
                         st.error("Failed to add item. Please try again.")
@@ -987,10 +998,10 @@ else:
                         st.warning("Enter a product description first.")
             
             # Dynamic label toggle hack to force the expander to reset/collapse upon state change
+            recent_items = []
             if not st.session_state.get("recent_shops_available", False):
-                st.session_state["recent_shops_available"] = bool(
-                    sheets_manager.get_recent_history(user_id)
-                )
+                recent_items = sheets_manager.get_recent_history(user_id)
+                st.session_state["recent_shops_available"] = bool(recent_items)
             recent_marker = (
                 "recent-shops-visible-marker"
                 if st.session_state["recent_shops_available"]
@@ -999,9 +1010,10 @@ else:
             st.markdown(f'<div class="{recent_marker}"></div>', unsafe_allow_html=True)
             recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
             with st.expander(recent_shops_label):
-                recent_items = sheets_manager.get_recent_history(
-                    st.session_state["current_user"]["email"]
-                )
+                if not recent_items:
+                    recent_items = sheets_manager.get_recent_history(
+                        st.session_state["current_user"]["email"]
+                    )
                 if not recent_items:
                     st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
                 else:
@@ -1035,6 +1047,8 @@ else:
                                 
                                 # Toggle state to trick Streamlit into generating a "new" expander component that starts collapsed
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
+                                st.session_state["search_performed"] = False
+                                st.session_state["search_results"] = []
                                 st.rerun()
                                 
             if st.session_state.get("search_performed", False):
@@ -1062,6 +1076,7 @@ else:
                                 if sheets_manager.add_item_to_list(
                                     res["title"], 1, "each", res["image_url"], user_id
                                 ):
+                                    st.session_state["search_performed"] = False
                                     st.session_state["search_results"] = []
                                     st.rerun()
                                 else:
@@ -1088,6 +1103,8 @@ else:
                                         product_name, 1, "each", product_image or "", user_id
                                     ):
                                         st.success(f"Added {product_name} to your list!")
+                                        st.session_state["search_performed"] = False
+                                        st.session_state["search_results"] = []
                                         st.rerun()
                                     else:
                                         st.error("Failed to add item. Please try again.")
@@ -1199,8 +1216,7 @@ else:
                     st.error("Please select at least one store to compare.")
                 else:
                     with st.spinner("Bypassing supermarket firewalls and fetching live prices..."):
-                        fresh_items = sheets_manager.get_shopping_list(user_id)
-                        report = generate_smart_basket_report(fresh_items, active_names)
+                        report = generate_smart_basket_report(current_items, active_names)
                         
                     if report:
                         st.session_state["report"] = report
