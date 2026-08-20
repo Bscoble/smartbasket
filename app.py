@@ -222,10 +222,15 @@ def summarize_store_health(diagnostics: list) -> dict:
     for detail in diagnostics:
         store = detail.get("store", "Unknown")
         status = detail.get("status", "unavailable")
-        entry = summary.setdefault(store, {"total": 0, "timeout": 0, "not_found": 0, "other": 0})
+        entry = summary.setdefault(
+            store,
+            {"total": 0, "success": 0, "timeout": 0, "not_found": 0, "other": 0},
+        )
         entry["total"] += 1
 
-        if status == "timeout":
+        if status in {"ok", "cached"}:
+            entry["success"] += 1
+        elif status == "timeout":
             entry["timeout"] += 1
         elif status in {"not_found", "no_match", "unavailable"}:
             entry["not_found"] += 1
@@ -1149,6 +1154,7 @@ else:
                     store_name,
                     key=f"store_toggle_{store_key}",
                     type="primary" if prefs[store_name] else "secondary",
+                    use_container_width=True,
                 ):
                     updated_prefs = prefs.copy()
                     updated_prefs[store_name] = not prefs[store_name]
@@ -1287,7 +1293,7 @@ else:
                                 st.markdown("#### Store health")
                                 summary_cols = st.columns(len(store_health))
                                 for idx, (store, stats) in enumerate(sorted(store_health.items())):
-                                    failed_total = stats["timeout"] + stats["not_found"] + stats["other"]
+                                    failed_total = stats["total"] - stats["success"]
                                     if failed_total == 0:
                                         badge_text = "Healthy"
                                         badge_bg = "#E8F7EE"
