@@ -89,7 +89,7 @@ class SheetsManager:
         Returns:
             Dictionary of store preferences {store_name: enabled}
         """
-        default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True, "IGA": True}
+        default_prefs = {"Woolworths": True, "Coles": True, "Aldi": True}
         
         try:
             worksheet_name = WORKSHEET_NAMES["preferences"]
@@ -101,7 +101,6 @@ class SheetsManager:
                     "Woolworths": data[1][0] == "True",
                     "Coles": data[1][1] == "True",
                     "Aldi": data[1][2] == "True",
-                    "IGA": data[1][3] == "True",
                 }
         except Exception as e:
             logger.error(f"Error loading store preferences: {e}", exc_info=True)
@@ -122,14 +121,13 @@ class SheetsManager:
             worksheet_name = WORKSHEET_NAMES["preferences"]
             pref_ws = self._get_or_create_worksheet(worksheet_name)
             pref_ws.update(
-                "A1:D2",
+                "A1:C2",
                 [
-                    ["Woolworths", "Coles", "Aldi", "IGA"],
+                    ["Woolworths", "Coles", "Aldi"],
                     [
                         str(prefs.get("Woolworths", True)),
                         str(prefs.get("Coles", True)),
                         str(prefs.get("Aldi", True)),
-                        str(prefs.get("IGA", True)),
                     ],
                 ],
             )

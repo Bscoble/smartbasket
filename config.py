@@ -26,12 +26,6 @@ STORES = {
         "search_url": "https://www.aldi.com.au/en/search/?q={}",
         "zenrows_required": True,
     },
-    "IGA": {
-        "color": "#E31837",
-        "initial": "I",
-        "search_url": "https://www.igashop.com.au/search?q={}",
-        "zenrows_required": True,
-    },
 }
 
 STORE_NAMES = list(STORES.keys())
@@ -77,7 +71,7 @@ APIFY_DEFAULT_CONFIG = {
 # SCRAPING CONFIGURATION
 # ============================================================================
 
-REQUEST_TIMEOUT = 20  # seconds, ZenRows (Aldi/IGA) HTTP request timeout
+REQUEST_TIMEOUT = 20  # seconds, ZenRows (Aldi) HTTP request timeout
 # Apify actor runs (Woolworths/Coles) have no timeout by default and can hang
 # well past the overall thread-pool budget, so bound how long we wait on them.
 APIFY_RUN_TIMEOUT = 25  # seconds

@@ -284,7 +284,7 @@ def build_store_search_candidates(item_name: str, store_name: str) -> list[str]:
             candidates.append(clean_variant)
 
     # Retailer-specific tuning.
-    if store in {"Aldi", "IGA"}:
+    if store == "Aldi":
         candidates = [c for c in candidates if len(c.split()) <= 10]
     elif store in {"Woolworths", "Coles"}:
         candidates = [c for c in candidates if len(c.split()) <= 12]

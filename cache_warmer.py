@@ -33,7 +33,7 @@ COMMON_STAPLES = [
     "Free Range Eggs 12pk"
 ]
 
-STORES = ["Woolworths", "Coles", "Aldi", "IGA"]
+STORES = ["Woolworths", "Coles", "Aldi"]
 api_keys = {"zenrows": ZENROWS_KEY, "apify": APIFY_TOKEN}
 
 def get_live_price(store, item_name, api_keys):
@@ -66,9 +66,9 @@ def get_live_price(store, item_name, api_keys):
                         pass
             return 5.00
 
-        # --- 2. ZENROWS SCRAPERS (ALDI & IGA) ---
-        elif store in ["Aldi", "IGA"]:
-            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}" if store == "Aldi" else f"https://www.igashop.com.au/search?q={urllib.parse.quote(item_name)}"
+        # --- 2. ZENROWS SCRAPER (ALDI) ---
+        elif store == "Aldi":
+            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
             
             api_url = "https://api.zenrows.com/v1/"
             params = {
