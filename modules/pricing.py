@@ -125,7 +125,12 @@ class PriceScraper:
             target_url = STORES[store]["search_url"].format(quote(item_name))
             response = requests.get(
                 ZENROWS_API_URL,
-                params={"apikey": self.zenrows_key, "url": target_url, **ZENROWS_PARAMS},
+                params={
+                    "apikey": self.zenrows_key,
+                    "url": target_url,
+                    **ZENROWS_PARAMS,
+                    "wait": "5000",
+                },
                 timeout=REQUEST_TIMEOUT,
             )
             response.raise_for_status()

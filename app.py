@@ -1055,7 +1055,14 @@ else:
                                     selected_indices.append(idx)
                             with cols[1]:
                                 if r_item["img"]:
-                                    st.markdown(f'<img src="{r_item["img"]}" class="thumbnail-zoom" style="width:28px; height:28px; margin-top:-5px;" />', unsafe_allow_html=True)
+                                    st.markdown(
+                                        f'<img src="{r_item["img"]}" class="thumbnail-zoom" '
+                                        'style="width:28px; height:28px; margin-top:-5px;" '
+                                        'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';" />'
+                                        '<div class="image-load-fallback" style="display:none; width:28px; height:28px; '
+                                        'border-radius:6px; align-items:center; justify-content:center; font-size:14px;">🛒</div>',
+                                        unsafe_allow_html=True,
+                                    )
                                 else:
                                     st.markdown('<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 14px; margin-top:-5px;">🛒</div>', unsafe_allow_html=True)
                             with cols[2]:
@@ -1087,7 +1094,9 @@ else:
                         with sc1:
                             if res["image_url"]:
                                 st.markdown(
-                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" />',
+                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" '
+                                    'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';" />'
+                                    '<div class="product-result-placeholder image-load-fallback" style="display:none;">🛒</div>',
                                     unsafe_allow_html=True,
                                 )
                             else:

@@ -23,7 +23,7 @@ STORES = {
     "Aldi": {
         "color": "#002D62",
         "initial": "A",
-        "search_url": "https://www.aldi.com.au/en/search/?q={}",
+        "search_url": "https://www.aldi.com.au/results?q={}",
         "zenrows_required": True,
     },
 }
