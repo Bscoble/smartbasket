@@ -205,7 +205,11 @@ if st.query_params.get("logout") == "1":
     st.session_state["auth_mode"] = "login"
     st.rerun()
 
-prefs = st.session_state["prefs"]
+prefs = {
+    store_name: bool(st.session_state["prefs"].get(store_name, True))
+    for store_name in config.STORE_NAMES
+}
+st.session_state["prefs"] = prefs
 
 # ============================================================================
 # HELPER FUNCTIONS FOR REPORT GENERATION
@@ -1132,7 +1136,7 @@ else:
         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns([1.35, 0.85, 0.85])
+        col1, col2, col3 = st.columns(3)
         store_columns = [
             (col1, "Woolworths", "woolworths"),
             (col2, "Coles", "coles"),
@@ -1153,8 +1157,10 @@ else:
                     st.rerun()
 
         new_prefs = st.session_state["prefs"]
-            
-        active_names = [name for name, active in new_prefs.items() if active]
+        active_names = [
+            name for name in config.STORE_NAMES
+            if new_prefs.get(name, False)
+        ]
         st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
         
         try:

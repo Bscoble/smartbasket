@@ -446,8 +446,7 @@ div:has(> .clear-all-marker) + div[data-testid="element-container"] button:hover
    ======================================================================== */
 div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button,
 div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button,
-div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button,
-div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button {
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button {
     min-height: 40px !important;
     height: 40px !important;
     padding: 8px 16px !important;
@@ -456,13 +455,12 @@ div:has(> .iga-store-button-marker) + div[data-testid="element-container"] butto
     font-weight: 700 !important;
     line-height: 1 !important;
     box-shadow: none !important;
-    width: auto !important;
+    width: 100% !important;
 }
 
 div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button p,
 div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button p,
-div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button p,
-div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button p {
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button p {
     margin: 0 !important;
     line-height: 1 !important;
     white-space: nowrap !important;
@@ -474,8 +472,7 @@ div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"
     color: #FFFFFF !important;
 }
 
-div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button,
-div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button {
+div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button {
     background: #D50000 !important;
     border: 1px solid #D50000 !important;
     color: #FFFFFF !important;
@@ -494,7 +491,7 @@ div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"
 }
 
 div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"],
-div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"] {
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button[kind="secondary"] {
     background: #FFFFFF !important;
     border: 2px solid #C7E9D5 !important;
     color: #1F2937 !important;
@@ -508,8 +505,7 @@ div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] butt
 
 div:has(> .woolworths-store-button-marker) + div[data-testid="element-container"] button:hover,
 div:has(> .coles-store-button-marker) + div[data-testid="element-container"] button:hover,
-div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button:hover,
-div:has(> .iga-store-button-marker) + div[data-testid="element-container"] button:hover {
+div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button:hover {
     filter: brightness(0.9) !important;
     transform: translateY(-1px) !important;
 }
