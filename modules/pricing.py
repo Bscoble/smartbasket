@@ -237,12 +237,15 @@ class PriceScraper:
         "products" list rather than as flat top-level records.
         """
         products = []
-        for item in items:
+        for item in items or []:
             if not isinstance(item, dict):
                 continue
-            nested_products = item.get("products")
-            if isinstance(nested_products, list) and nested_products:
-                products.extend(p for p in nested_products if isinstance(p, dict))
+
+            for key in ("products", "results", "items", "data"):
+                nested_products = item.get(key)
+                if isinstance(nested_products, list):
+                    products.extend(p for p in nested_products if isinstance(p, dict))
+                    break
             else:
                 products.append(item)
         return products
@@ -292,6 +295,28 @@ class PriceScraper:
         matched = len(meaningful_terms) - len(missing_terms)
         return matched / len(meaningful_terms)
 
+    @staticmethod
+    def _coerce_apify_price(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            match = re.search(r"\d+(?:\.\d+)?", value.replace(",", ""))
+            return float(match.group()) if match else None
+        if isinstance(value, dict):
+            for key in ("amount", "value", "now", "price", "unitPrice", "instore_price"):
+                if key in value:
+                    parsed = PriceScraper._coerce_apify_price(value[key])
+                    if parsed is not None:
+                        return parsed
+        if isinstance(value, list):
+            for nested in value:
+                parsed = PriceScraper._coerce_apify_price(nested)
+                if parsed is not None:
+                    return parsed
+        return None
+
     def _extract_apify_price(self, item: Dict) -> Optional[float]:
         """
         Extract price from an Apify product record.
@@ -303,13 +328,11 @@ class PriceScraper:
             Price as float or None
         """
         try:
-            # Try different price field locations across actor versions
-            if "pricing" in item and "now" in item["pricing"]:
-                return float(item["pricing"]["now"])
-            for field in ("price", "instore_price"):
-                if item.get(field) is not None:
-                    price_str = str(item[field]).replace("$", "")
-                    return float(price_str)
+            for field in ("pricing", "price", "instore_price", "unitPrice", "amount", "value", "now", "offers"):
+                if field in item:
+                    price = self._coerce_apify_price(item[field])
+                    if price is not None and is_valid_price(price):
+                        return price
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"Failed to extract price from Apify item: {e}")
         

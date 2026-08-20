@@ -205,11 +205,7 @@ if st.query_params.get("logout") == "1":
     st.session_state["auth_mode"] = "login"
     st.rerun()
 
-prefs = {
-    store_name: bool(st.session_state["prefs"].get(store_name, True))
-    for store_name in config.STORE_NAMES
-}
-st.session_state["prefs"] = prefs
+prefs = st.session_state["prefs"]
 
 # ============================================================================
 # HELPER FUNCTIONS FOR REPORT GENERATION
@@ -222,15 +218,10 @@ def summarize_store_health(diagnostics: list) -> dict:
     for detail in diagnostics:
         store = detail.get("store", "Unknown")
         status = detail.get("status", "unavailable")
-        entry = summary.setdefault(
-            store,
-            {"total": 0, "success": 0, "timeout": 0, "not_found": 0, "other": 0},
-        )
+        entry = summary.setdefault(store, {"total": 0, "timeout": 0, "not_found": 0, "other": 0})
         entry["total"] += 1
 
-        if status in {"ok", "cached"}:
-            entry["success"] += 1
-        elif status == "timeout":
+        if status == "timeout":
             entry["timeout"] += 1
         elif status in {"not_found", "no_match", "unavailable"}:
             entry["not_found"] += 1
@@ -252,7 +243,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     """
     store_totals = {store: 0.0 for store in selected_stores}
     store_has_complete_prices = {store: True for store in selected_stores}
-    store_price_counts = {store: 0 for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
     unavailable_reasons = []
@@ -289,6 +279,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             stores_to_search = ["Coles"]
         elif "aldi" in item_lower and "Aldi" in selected_stores:
             stores_to_search = ["Aldi"]
+        elif "iga" in item_lower and "IGA" in selected_stores:
+            stores_to_search = ["IGA"]
         
         item_store_prices = {}
         item_store_status = {}
@@ -304,13 +296,11 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     cached_data
                     and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
                     and sheets_manager.is_cache_valid(cached_data)
-                    and cached_data.get("product_name")
                 ):
                     item_store_prices[store] = cached_data["price"]
                     item_store_status[store] = {
                         "status": "cached",
                         "message": "Using a cached price",
-                        "product_name": cached_data.get("product_name") or None,
                     }
                     logger.debug(f"Using cached price for {item_name} at {store}")
                 else:
@@ -346,7 +336,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             item_store_status[store] = {
                                 "status": result.get("status", "unavailable"),
                                 "message": result.get("message", "Price unavailable"),
-                                "product_name": result.get("product_name"),
                             }
                         else:
                             price = result
@@ -370,7 +359,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         price_cache[(store, item_lower)] = {
                             "price": price,
                             "timestamp": datetime.now(),
-                            "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
                         }
                         cache_updated = True
             except concurrent.futures.TimeoutError:
@@ -412,13 +400,11 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
             total_price = unit_price * qty
             store_totals[store] += total_price
-            store_price_counts[store] += 1
             item_store_data[store] = {
                 "unit_price": format_price(unit_price) + f"/{unit}",
                 "total_price": total_price,
                 "status": item_store_status.get(store, {}).get("status", "ok"),
                 "message": item_store_status.get(store, {}).get("message", "Price found"),
-                "product_name": item_store_status.get(store, {}).get("product_name"),
             }
         
         sorted_item_stores = sorted(
@@ -462,7 +448,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         (
             (store, cost)
             for store, cost in store_totals.items()
-            if store_price_counts[store] == total_items
+            if store_has_complete_prices[store]
         ),
         key=lambda x: x[1],
     )
@@ -531,6 +517,7 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#FFFFFF'}; color: {'white' if prefs['Woolworths'] else '#005A36'}; border: 1px solid #005A36; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#FFFFFF'}; color: {'white' if prefs['Coles'] else '#E31837'}; border: 1px solid #E31837; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#FFFFFF'}; color: {'white' if prefs['Aldi'] else '#002D62'}; border: 1px solid #002D62; }}
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#FFFFFF'}; color: {'white' if prefs['IGA'] else '#E31837'}; border: 1px solid #E31837; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -867,7 +854,7 @@ else:
             <p>SmartBasket is Australia's independent grocery price comparison companion, designed to help households cut through supermarket price hikes and make informed shopping choices.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Our Mission</h4>
-            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, and Aldi, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
+            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, Aldi, and IGA, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Built for Everyday Australians</h4>
             <p>Created to simplify weekly budgeting, SmartBasket puts full transparency back into your hands. No hidden fees, no corporate bias—just real-time data comparing your preferred local stores.</p>
@@ -1060,14 +1047,7 @@ else:
                                     selected_indices.append(idx)
                             with cols[1]:
                                 if r_item["img"]:
-                                    st.markdown(
-                                        f'<img src="{r_item["img"]}" class="thumbnail-zoom" '
-                                        'style="width:28px; height:28px; margin-top:-5px;" '
-                                        'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';" />'
-                                        '<div class="image-load-fallback" style="display:none; width:28px; height:28px; '
-                                        'border-radius:6px; align-items:center; justify-content:center; font-size:14px;">🛒</div>',
-                                        unsafe_allow_html=True,
-                                    )
+                                    st.markdown(f'<img src="{r_item["img"]}" class="thumbnail-zoom" style="width:28px; height:28px; margin-top:-5px;" />', unsafe_allow_html=True)
                                 else:
                                     st.markdown('<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 14px; margin-top:-5px;">🛒</div>', unsafe_allow_html=True)
                             with cols[2]:
@@ -1099,9 +1079,7 @@ else:
                         with sc1:
                             if res["image_url"]:
                                 st.markdown(
-                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" '
-                                    'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';" />'
-                                    '<div class="product-result-placeholder image-load-fallback" style="display:none;">🛒</div>',
+                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" />',
                                     unsafe_allow_html=True,
                                 )
                             else:
@@ -1157,11 +1135,12 @@ else:
         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns([1.35, 0.85, 0.85, 0.85])
         store_columns = [
             (col1, "Woolworths", "woolworths"),
             (col2, "Coles", "coles"),
             (col3, "Aldi", "aldi"),
+            (col4, "IGA", "iga"),
         ]
         for store_column, store_name, store_key in store_columns:
             with store_column:
@@ -1170,7 +1149,6 @@ else:
                     store_name,
                     key=f"store_toggle_{store_key}",
                     type="primary" if prefs[store_name] else "secondary",
-                    use_container_width=True,
                 ):
                     updated_prefs = prefs.copy()
                     updated_prefs[store_name] = not prefs[store_name]
@@ -1179,10 +1157,8 @@ else:
                     st.rerun()
 
         new_prefs = st.session_state["prefs"]
-        active_names = [
-            name for name in config.STORE_NAMES
-            if new_prefs.get(name, False)
-        ]
+            
+        active_names = [name for name, active in new_prefs.items() if active]
         st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
         
         try:
@@ -1307,40 +1283,42 @@ else:
                             store_health = summarize_store_health(diagnostics)
                             if store_health:
                                 st.markdown("#### Store health")
-                                summary_cols = st.columns(len(store_health))
-                                for idx, (store, stats) in enumerate(sorted(store_health.items())):
-                                    failed_total = stats["total"] - stats["success"]
-                                    if failed_total == 0:
-                                        badge_text = "Healthy"
-                                        badge_bg = "#E8F7EE"
-                                        badge_color = "#0C6B43"
-                                        card_bg = "#F7FBF8"
-                                    elif stats["timeout"] > 0 and failed_total >= stats["total"] * 0.5:
-                                        badge_text = "Degraded"
-                                        badge_bg = "#FFF2D9"
-                                        badge_color = "#9A5A00"
-                                        card_bg = "#FFF9F2"
-                                    else:
-                                        badge_text = "Unavailable"
-                                        badge_bg = "#FDECEC"
-                                        badge_color = "#B42318"
-                                        card_bg = "#FFF6F4"
+                                sorted_health = sorted(store_health.items())
+                                for row_start in range(0, len(sorted_health), 2):
+                                    summary_cols = st.columns(2, gap="small")
+                                    for column, (store, stats) in zip(summary_cols, sorted_health[row_start:row_start + 2]):
+                                        failed_total = stats["timeout"] + stats["not_found"] + stats["other"]
+                                        if failed_total == 0:
+                                            badge_text = "Healthy"
+                                            badge_bg = "#E8F7EE"
+                                            badge_color = "#0C6B43"
+                                            card_bg = "#F7FBF8"
+                                        elif stats["timeout"] > 0 and failed_total >= stats["total"] * 0.5:
+                                            badge_text = "Degraded"
+                                            badge_bg = "#FFF2D9"
+                                            badge_color = "#9A5A00"
+                                            card_bg = "#FFF9F2"
+                                        else:
+                                            badge_text = "Unavailable"
+                                            badge_bg = "#FDECEC"
+                                            badge_color = "#B42318"
+                                            card_bg = "#FFF6F4"
 
-                                    with summary_cols[idx]:
-                                        st.markdown(
-                                            f"<div style='background: {card_bg}; border: 1px solid #E7D9CF; border-radius: 14px; padding: 14px 12px 12px 12px; min-height: 122px;'>"
-                                            f"<div style='display: flex; justify-content: space-between; align-items: center; gap: 8px;'>"
-                                            f"<div style='font-size: 15px; font-weight: 800; color: #1F1F1F;'>{store}</div>"
-                                            f"<span style='display: inline-block; background: {badge_bg}; color: {badge_color}; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 4px 8px; border-radius: 999px; text-transform: uppercase;'>{badge_text}</span>"
-                                            f"</div>"
-                                            f"<div style='margin-top: 12px; color: #444; font-size: 12px; line-height: 1.5;'>"
-                                            f"<div>{failed_total}/{stats['total']} failed</div>"
-                                            f"<div style='margin-top: 6px;'>timeouts: {stats['timeout']}</div>"
-                                            f"<div>no match: {stats['not_found']}</div>"
-                                            f"</div>"
-                                            f"</div>",
-                                            unsafe_allow_html=True,
-                                        )
+                                        with column:
+                                            st.markdown(
+                                                f"<div style='background: {card_bg}; border: 1px solid #E7D9CF; border-radius: 14px; padding: 14px 12px 12px 12px; min-height: 122px;'>"
+                                                f"<div style='display: flex; justify-content: space-between; align-items: center; gap: 8px;'>"
+                                                f"<div style='font-size: 15px; font-weight: 800; color: #1F1F1F; white-space: nowrap;'>{store}</div>"
+                                                f"<span style='display: inline-block; background: {badge_bg}; color: {badge_color}; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 4px 8px; border-radius: 999px; text-transform: uppercase; white-space: nowrap;'>{badge_text}</span>"
+                                                f"</div>"
+                                                f"<div style='margin-top: 12px; color: #444; font-size: 12px; line-height: 1.5;'>"
+                                                f"<div>{failed_total}/{stats['total']} failed</div>"
+                                                f"<div style='margin-top: 6px;'>timeouts: {stats['timeout']}</div>"
+                                                f"<div>no match: {stats['not_found']}</div>"
+                                                f"</div>"
+                                                f"</div>",
+                                                unsafe_allow_html=True,
+                                            )
 
                             with st.expander("Store-by-store diagnostics"):
                                 for detail in diagnostics:
@@ -1426,7 +1404,8 @@ else:
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62"
+                            "Aldi": "#002D62",
+                            "IGA": "#E31837"
                         }
                         
                         for store_name, items in grouped_items.items():
@@ -1496,9 +1475,8 @@ else:
                         )
                         
                         with st.form("single_store_form", clear_on_submit=False):
-                            st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
                             st.markdown(html_single, unsafe_allow_html=True)
-                            submitted_single = st.form_submit_button(" ", use_container_width=True, key="btn_single")
+                            submitted_single = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_single")
                             if submitted_single:
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
@@ -1522,9 +1500,8 @@ else:
                         )
                         
                         with st.form("split_stores_form", clear_on_submit=False):
-                            st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
                             st.markdown(html_split, unsafe_allow_html=True)
-                            submitted_split = st.form_submit_button(" ", use_container_width=True, key="btn_split")
+                            submitted_split = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_split")
                             if submitted_split:
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
@@ -1534,7 +1511,8 @@ else:
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62"
+                            "Aldi": "#002D62",
+                            "IGA": "#E31837"
                         }
                         
                         max_cost = report["store_rankings"][-1]["total_cost"] if report["store_rankings"] else 1
@@ -1599,10 +1577,7 @@ else:
                                 
                                 html_row = (
                                     f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">'
-                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}'
-                                    f'<div style="color: #777; font-size: 0.8em; margin-top: 2px;">'
-                                    f'{store_data.get("product_name") or "Matched product unavailable"}'
-                                    f'</div></div>'
+                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}</div>'
                                     f'<div>'
                                     f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
                                     f'<b>{display_total}</b>'
