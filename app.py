@@ -211,6 +211,25 @@ prefs = st.session_state["prefs"]
 # HELPER FUNCTIONS FOR REPORT GENERATION
 # ============================================================================
 
+
+def summarize_store_health(diagnostics: list) -> dict:
+    """Return a concise per-store health summary for scraper diagnostics."""
+    summary = {}
+    for detail in diagnostics:
+        store = detail.get("store", "Unknown")
+        status = detail.get("status", "unavailable")
+        entry = summary.setdefault(store, {"total": 0, "timeout": 0, "not_found": 0, "other": 0})
+        entry["total"] += 1
+
+        if status == "timeout":
+            entry["timeout"] += 1
+        elif status in {"not_found", "no_match", "unavailable"}:
+            entry["not_found"] += 1
+        else:
+            entry["other"] += 1
+    return summary
+
+
 def generate_smart_basket_report(user_items: list, selected_stores: list) -> Optional[dict]:
     """
     Generate a comprehensive price comparison report for shopping items.
@@ -1227,17 +1246,84 @@ else:
                     else:
                         diagnostics = st.session_state.pop("comparison_diagnostics", [])
                         if diagnostics:
-                            reason_summary = {}
+                            formatted_rows = []
+                            store_reason_map = {}
                             for detail in diagnostics:
-                                key = f"{detail['store']}: {detail['message']}"
-                                reason_summary[key] = reason_summary.get(key, 0) + 1
-                            st.error(
+                                store = detail.get("store", "Unknown")
+                                message = detail.get("message", "Price unavailable")
+                                item_name = detail.get("item", "item")
+                                store_reason_map.setdefault(store, []).append(f"{item_name}: {message}")
+
+                            for store, reasons in sorted(store_reason_map.items()):
+                                unique_reasons = []
+                                seen = set()
+                                for reason in reasons:
+                                    if reason not in seen:
+                                        unique_reasons.append(reason)
+                                        seen.add(reason)
+                                formatted_rows.append(f"{store}: {'; '.join(unique_reasons[:3])}{' ...' if len(unique_reasons) > 3 else ''}")
+
+                            st.markdown(
+                                "<div style='background: #FDECEC; border: 1px solid #E7B0B0; border-radius: 12px; padding: 18px 18px 16px 18px; margin-bottom: 18px;'>"
+                                "<div style='font-size: 18px; font-weight: 800; color: #7F1D1D; margin-bottom: 8px;'>Comparison unavailable</div>"
+                                "<div style='font-size: 15px; color: #3A1B1B; line-height: 1.5;'>"
                                 "The items were loaded, but no supermarket prices were returned. "
-                                + " | ".join(
-                                    f"{reason} ({count} item{'s' if count != 1 else ''})"
-                                    for reason, count in reason_summary.items()
-                                )
+                                + " ".join(formatted_rows)
+                                + "</div></div>",
+                                unsafe_allow_html=True,
                             )
+
+                            store_health = summarize_store_health(diagnostics)
+                            if store_health:
+                                st.markdown("#### Store health")
+                                badge_cols = st.columns(len(store_health))
+                                for idx, (store, stats) in enumerate(sorted(store_health.items())):
+                                    with badge_cols[idx]:
+                                        failed_total = stats["timeout"] + stats["not_found"] + stats["other"]
+                                        if failed_total == 0:
+                                            status_text = "Healthy"
+                                            status_color = "#E8F7EE"
+                                            status_text_color = "#0C6B43"
+                                        elif stats["timeout"] > 0 and failed_total >= stats["total"] * 0.5:
+                                            status_text = "Degraded"
+                                            status_color = "#FFF2D9"
+                                            status_text_color = "#9A5A00"
+                                        else:
+                                            status_text = "Unavailable"
+                                            status_color = "#FDECEC"
+                                            status_text_color = "#B42318"
+
+                                        st.markdown(
+                                            f"<div style='padding: 10px 12px; border: 1px solid #E7E7E7; border-radius: 12px; background: {status_color}; text-align: center;'>"
+                                            f"<div style='font-weight: 800; font-size: 15px; color: #111;'>{store}</div>"
+                                            f"<div style='display: inline-block; margin-top: 6px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,0.6); color: {status_text_color}; font-size: 11px; font-weight: 700;'>{status_text}</div>"
+                                            f"<div style='margin-top: 6px; color: #444; font-size: 12px;'>{failed_total}/{stats['total']} failed</div>"
+                                            f"</div>",
+                                            unsafe_allow_html=True,
+                                        )
+
+                                st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+                                metric_cols = st.columns(len(store_health))
+                                for idx, (store, stats) in enumerate(sorted(store_health.items())):
+                                    with metric_cols[idx]:
+                                        failed_total = stats["timeout"] + stats["not_found"] + stats["other"]
+                                        st.markdown(
+                                            f"<div style='padding: 12px; border: 1px solid #E7E7E7; border-radius: 10px; background: #FFF9F9;'>"
+                                            f"<div style='font-weight: 800; font-size: 15px;'>{store}</div>"
+                                            f"<div style='color: #555; margin-top: 6px;'>{failed_total}/{stats['total']} failed</div>"
+                                            f"<div style='font-size: 12px; color: #666; margin-top: 4px;'>"
+                                            f"timeouts: {stats['timeout']} &middot; no match: {stats['not_found']}"
+                                            f"</div></div>",
+                                            unsafe_allow_html=True,
+                                        )
+
+                            with st.expander("Store-by-store diagnostics"):
+                                for detail in diagnostics:
+                                    item_name = detail.get("item", "Unknown item")
+                                    store = detail.get("store", "Unknown store")
+                                    status = detail.get("status", "unavailable")
+                                    message = detail.get("message", "Price unavailable")
+                                    st.markdown(f"- **{store}** — **{item_name}** — {status}: {message}")
                         else:
                             st.error("No valid shopping-list items were found to compare.")
                         

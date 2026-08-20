@@ -89,6 +89,14 @@ class PriceScraper:
             logger.error(f"Error fetching structured price for {store}/{item_name}: {e}", exc_info=True)
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
 
+    @staticmethod
+    def _apify_run_succeeded(run: Any) -> bool:
+        if run is None:
+            return False
+        if isinstance(run, dict):
+            return run.get("status") == "SUCCEEDED"
+        return getattr(run, "status", None) == "SUCCEEDED"
+
     def _get_apify_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
         if not self.apify_token:
             return {"price": None, "status": "configuration", "message": "Apify is not configured"}
@@ -101,9 +109,15 @@ class PriceScraper:
                 run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
                 wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
             )
-            if run is None or run.status != "SUCCEEDED":
+            if not self._apify_run_succeeded(run):
                 return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
-            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+
+            dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+            if not dataset_id:
+                return {"price": None, "status": "scraper_error", "message": "The supermarket scraper did not return a dataset"}
+
+            items = client.dataset(dataset_id).list_items().items
+            for product in self._iter_apify_products(items):
                 price = self._extract_apify_price(product)
                 if price and is_valid_price(price):
                     return {"price": price, "status": "ok", "message": "Price found"}
@@ -202,19 +216,66 @@ class PriceScraper:
         Flatten Apify dataset items into individual product records.
 
         The Woolworths/Coles search actors return one dataset item per
-        searched URL, with the actual matched products nested under a
-        "products" list rather than as flat top-level records.
+        searched URL, with the actual matched products nested under lists such
+        as "products", "results", or "items" rather than as flat records.
         """
         products = []
-        for item in items:
+        for item in items or []:
             if not isinstance(item, dict):
                 continue
-            nested_products = item.get("products")
-            if isinstance(nested_products, list) and nested_products:
-                products.extend(p for p in nested_products if isinstance(p, dict))
+
+            for key in ("products", "results", "items", "data"):
+                nested = item.get(key)
+                if isinstance(nested, list):
+                    for product in nested:
+                        if isinstance(product, dict):
+                            products.append(product)
+                    break
             else:
                 products.append(item)
+
         return products
+
+    @staticmethod
+    def _coerce_price_value(value: Any) -> Optional[float]:
+        """Convert a nested Apify price payload into a float if it looks like a valid price."""
+        if value is None:
+            return None
+
+        if isinstance(value, (int, float)):
+            numeric = float(value)
+            return numeric if is_valid_price(numeric, MIN_VALID_PRICE, MAX_VALID_PRICE) else None
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            if "$" not in text and re.search(r"\d+\.\d{2}", text) is None and re.search(r"\d+", text) is None:
+                return None
+            match = re.search(r"\d+(?:\.\d+)?", text.replace(",", ""))
+            if not match:
+                return None
+            candidate = float(match.group())
+            return candidate if is_valid_price(candidate, MIN_VALID_PRICE, MAX_VALID_PRICE) else None
+
+        if isinstance(value, dict):
+            for key in ("price", "instore_price", "pricing", "unitPrice", "amount", "value", "now"):
+                if key in value:
+                    parsed = PriceScraper._coerce_price_value(value[key])
+                    if parsed is not None:
+                        return parsed
+            for nested in value.values():
+                parsed = PriceScraper._coerce_price_value(nested)
+                if parsed is not None:
+                    return parsed
+
+        if isinstance(value, list):
+            for item in value:
+                parsed = PriceScraper._coerce_price_value(item)
+                if parsed is not None:
+                    return parsed
+
+        return None
 
     def _extract_apify_price(self, item: Dict) -> Optional[float]:
         """
@@ -226,18 +287,25 @@ class PriceScraper:
         Returns:
             Price as float or None
         """
+        if not isinstance(item, dict):
+            return None
+
         try:
-            # Try different price field locations across actor versions
-            if "pricing" in item and "now" in item["pricing"]:
-                return float(item["pricing"]["now"])
-            for field in ("price", "instore_price"):
-                if item.get(field) is not None:
-                    price_str = str(item[field]).replace("$", "")
-                    return float(price_str)
+            for key in ("price", "instore_price", "unitPrice", "amount", "value", "now"):
+                if key in item:
+                    parsed = self._coerce_price_value(item[key])
+                    if parsed is not None:
+                        return parsed
+
+            if "pricing" in item:
+                parsed = self._coerce_price_value(item["pricing"])
+                if parsed is not None:
+                    return parsed
+
+            return self._coerce_price_value(item)
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"Failed to extract price from Apify item: {e}")
-        
-        return None
+            return None
     
     def _get_zenrows_price(self, store: str, item_name: str) -> float:
         """
