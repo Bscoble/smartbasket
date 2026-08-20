@@ -24,7 +24,7 @@ from config import (
     MIN_VALID_PRICE,
     MAX_VALID_PRICE,
 )
-from helpers import extract_price_from_text, is_valid_price, clean_price_text
+from helpers import build_store_search_candidates, build_store_search_query, extract_price_from_text, is_valid_price, clean_price_text
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +104,38 @@ class PriceScraper:
         try:
             store_config = STORES[store]
             client = ApifyClient(self.apify_token)
-            search_url = store_config["search_url"].format(quote(item_name))
-            run = client.actor(store_config["api_actor"]).call(
-                run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
-                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-            )
+            search_queries = build_store_search_candidates(item_name, store)
+            last_error = None
+            for search_query in search_queries:
+                try:
+                    search_url = store_config["search_url"].format(quote(search_query))
+                    run = client.actor(store_config["api_actor"]).call(
+                        run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
+                        wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                    )
+                    if self._apify_run_succeeded(run):
+                        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+                        if not dataset_id:
+                            return {"price": None, "status": "scraper_error", "message": "The supermarket scraper did not return a dataset"}
+
+                        items = client.dataset(dataset_id).list_items().items
+                        for product in self._iter_apify_products(items):
+                            price = self._extract_apify_price(product)
+                            if price and is_valid_price(price):
+                                return {"price": price, "status": "ok", "message": "Price found"}
+                    last_error = "No matching product price was found"
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning(f"Apify search candidate failed for {store}/{item_name}: {search_query} -> {exc}")
+
+            if last_error is not None:
+                if isinstance(last_error, requests.Timeout):
+                    return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+                if isinstance(last_error, requests.RequestException):
+                    return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+                return {"price": None, "status": "not_found", "message": "No matching product price was found"}
+
+            return {"price": None, "status": "not_found", "message": "No matching product price was found"}
             if not self._apify_run_succeeded(run):
                 return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
 
@@ -135,7 +162,8 @@ class PriceScraper:
             return {"price": None, "status": "configuration", "message": "ZenRows is not configured"}
 
         try:
-            target_url = STORES[store]["search_url"].format(quote(item_name))
+            search_query = build_store_search_query(item_name, store)
+            target_url = STORES[store]["search_url"].format(quote(search_query))
             response = requests.get(
                 ZENROWS_API_URL,
                 params={"apikey": self.zenrows_key, "url": target_url, **ZENROWS_PARAMS},
@@ -181,29 +209,34 @@ class PriceScraper:
             
             client = ApifyClient(self.apify_token)
             actor = store_config.get("api_actor", "")
-            search_url = store_config["search_url"].format(quote(item_name))
-            
-            run_input = {
-                "urls": [search_url],
-                **APIFY_DEFAULT_CONFIG,
-            }
-            
-            logger.debug(f"Calling Apify actor for {store}: {actor}")
-            run = client.actor(actor).call(
-                run_input=run_input,
-                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-            )
-            if run is None or run.status != "SUCCEEDED":
-                logger.debug(f"Apify run for {store}/{item_name} did not finish within {APIFY_RUN_TIMEOUT}s")
-                return APIFY_DEFAULT_PRICE
-            
-            # Parse results from Apify dataset
-            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
-                price = self._extract_apify_price(product)
-                if price and is_valid_price(price):
-                    logger.info(f"Found price for {item_name} at {store}: {price}")
-                    return price
-            
+            last_error = None
+            for search_query in build_store_search_candidates(item_name, store):
+                try:
+                    search_url = store_config["search_url"].format(quote(search_query))
+                    run_input = {"urls": [search_url], **APIFY_DEFAULT_CONFIG}
+                    logger.debug(f"Calling Apify actor for {store}: {actor} with query {search_query}")
+                    run = client.actor(actor).call(
+                        run_input=run_input,
+                        wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                    )
+                    if run is None or getattr(run, "status", None) != "SUCCEEDED":
+                        logger.debug(f"Apify run for {store}/{item_name} did not finish within {APIFY_RUN_TIMEOUT}s")
+                        continue
+
+                    dataset_id = getattr(run, "default_dataset_id", None)
+                    if not dataset_id:
+                        continue
+
+                    for product in self._iter_apify_products(client.dataset(dataset_id).list_items().items):
+                        price = self._extract_apify_price(product)
+                        if price and is_valid_price(price):
+                            logger.info(f"Found price for {item_name} at {store}: {price}")
+                            return price
+                    last_error = "No matching product price was found"
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning(f"Apify search candidate failed for {store}/{item_name}: {search_query} -> {exc}")
+
             logger.debug(f"No valid price found via Apify for {item_name} at {store}")
             return APIFY_DEFAULT_PRICE
         except Exception as e:
@@ -326,14 +359,43 @@ class PriceScraper:
             store_config = STORES.get(store)
             if not store_config:
                 return DEFAULT_PRICE_FALLBACK
-            
-            target_url = store_config["search_url"].format(quote(item_name))
-            
-            params = {
-                "apikey": self.zenrows_key,
-                "url": target_url,
-                **ZENROWS_PARAMS,
-            }
+
+            search_queries = build_store_search_candidates(item_name, store)
+            last_error = None
+            for search_query in search_queries:
+                try:
+                    target_url = store_config["search_url"].format(quote(search_query))
+                    params = {"apikey": self.zenrows_key, "url": target_url, **ZENROWS_PARAMS}
+                    logger.debug(f"Fetching from {store} via ZenRows: {target_url}")
+                    response = requests.get(ZENROWS_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+                    response.raise_for_status()
+
+                    soup = BeautifulSoup(response.text, "html.parser")
+                    if store == "Aldi":
+                        price_element = soup.select_one(".box--price .value, .product-price, .price, span.price")
+                    else:
+                        price_element = soup.select_one(".item-price, .price")
+
+                    if price_element:
+                        price = self._parse_price_from_element(price_element.text, store)
+                        if price and is_valid_price(price):
+                            return price
+
+                    price = self._extract_price_from_page_text(soup.get_text(), store)
+                    if price and is_valid_price(price):
+                        logger.info(f"Found price for {item_name} at {store}: {price}")
+                        return price
+
+                    last_error = "No matching product price was found"
+                except requests.RequestException as exc:
+                    last_error = exc
+                    logger.warning(f"ZenRows search candidate failed for {store}/{item_name}: {search_query} -> {exc}")
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning(f"ZenRows parsing candidate failed for {store}/{item_name}: {search_query} -> {exc}")
+
+            logger.debug(f"No valid price found via ZenRows for {item_name} at {store}")
+            return DEFAULT_PRICE_FALLBACK
             
             logger.debug(f"Fetching from {store} via ZenRows: {target_url}")
             response = requests.get(

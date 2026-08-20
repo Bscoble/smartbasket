@@ -172,6 +172,134 @@ def validate_australian_postcode(postcode: str) -> bool:
         return False
 
 
+BRAND_ALIASES = {
+    "arnott's": ["arnott's", "arnotts", "arnott s"],
+    "arnotts": ["arnotts", "arnott's", "arnott s"],
+    "woolworths": ["woolworths", "woolworths select"],
+    "coles": ["coles", "coles brand"],
+    "aldi": ["aldi", "aldi exclusive"],
+}
+
+
+def normalize_search_query(item_name: str) -> str:
+    """Normalize a product name for more reliable cross-retailer searches."""
+    if not item_name:
+        return ""
+
+    text = item_name.strip()
+    text = re.sub(r"\s+", " ", text)
+    text = text.replace("&", " and ")
+    text = text.replace("’", "'")
+    text = re.sub(r"[^a-zA-Z0-9\s\-\.\'\"]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def expand_brand_aliases(text: str) -> list[str]:
+    """Return common brand alias variants for a search query."""
+    normalized = normalize_search_query(text)
+    if not normalized:
+        return []
+
+    variants = [normalized]
+    words = normalized.split()
+    for idx, word in enumerate(words):
+        compact = re.sub(r"[^a-z0-9]", "", word.lower())
+        for canonical, aliases in BRAND_ALIASES.items():
+            alias_tokens = {re.sub(r"[^a-z0-9]", "", alias.lower()) for alias in aliases}
+            if compact in alias_tokens:
+                for alias in aliases:
+                    alias_value = alias
+                    if word[:1].isupper():
+                        alias_value = alias_value[0].upper() + alias_value[1:]
+                    rebuilt = words.copy()
+                    rebuilt[idx] = alias_value
+                    variants.append(" ".join(rebuilt))
+                break
+
+    deduped = []
+    for variant in variants:
+        cleaned = " ".join(variant.split())
+        if cleaned and cleaned not in deduped:
+            deduped.append(cleaned)
+    return deduped
+
+
+def build_store_search_query(item_name: str, store_name: str) -> str:
+    """Build a retailer-aware search string using product name, brand, and size cues."""
+    candidates = build_store_search_candidates(item_name, store_name)
+    return candidates[0] if candidates else ""
+
+
+def build_store_search_candidates(item_name: str, store_name: str) -> list[str]:
+    """Generate retailer-aware search candidates to retry when the first query misses."""
+    q = normalize_search_query(item_name)
+    if not q:
+        return []
+
+    store = store_name or ""
+    words = q.split()
+    if len(words) <= 2:
+        return [q]
+
+    preferred = []
+    for word in words:
+        if word.lower() in {"and", "the", "a", "an"}:
+            if preferred and preferred[-1] not in {"and"}:
+                preferred.append("and")
+            continue
+        preferred.append(word)
+
+    candidates = []
+    base = " ".join(preferred)
+    if base:
+        candidates.append(base)
+
+    alias_variants = expand_brand_aliases(base)
+    for alias_variant in alias_variants:
+        if alias_variant and alias_variant not in candidates:
+            candidates.append(alias_variant)
+
+    # Fallback candidate: keep the core brand/product text without filler words.
+    compact = " ".join(preferred[:min(8, len(preferred))])
+    if compact and compact not in candidates:
+        candidates.append(compact)
+
+    # Stronger variant: prefer brand + size terms when present.
+    size_tokens = []
+    for idx, word in enumerate(preferred):
+        if re.search(r"\d+(?:\.\d+)?(?:g|kg|ml|l|litre|litres|oz)", word.lower()):
+            size_tokens.extend(preferred[max(0, idx - 1):min(len(preferred), idx + 2)])
+            break
+    if size_tokens:
+        size_variant = " ".join(dict.fromkeys(size_tokens))
+        if size_variant and size_variant not in candidates:
+            candidates.append(size_variant)
+
+    # Another common variant: remove very generic words like "original" when they add noise.
+    filtered = [word for word in preferred if word.lower() not in {"original", "classic", "fresh", "new"}]
+    if len(filtered) > 1:
+        clean_variant = " ".join(filtered[:min(10, len(filtered))])
+        if clean_variant and clean_variant not in candidates:
+            candidates.append(clean_variant)
+
+    # Retailer-specific tuning.
+    if store in {"Aldi", "IGA"}:
+        candidates = [c for c in candidates if len(c.split()) <= 10]
+    elif store in {"Woolworths", "Coles"}:
+        candidates = [c for c in candidates if len(c.split()) <= 12]
+
+    if not candidates:
+        return [q]
+
+    deduped = []
+    for candidate in candidates:
+        candidate = " ".join(candidate.split())
+        if candidate and candidate not in deduped:
+            deduped.append(candidate)
+    return deduped[:5]
+
+
 def build_search_url(store_name: str, query: str) -> str:
     """
     Build a search URL for a given store and query.
