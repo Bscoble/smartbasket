@@ -316,7 +316,13 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         
         # Fetch live prices for uncached items
         if stores_needing_scrape:
-            status_text.text(f"Fetching live prices for: {item_name}...")
+            store_progress = {
+                store: "waiting"
+                for store in stores_needing_scrape
+            }
+            status_text.text(
+                f"Fetching {item_name} from {', '.join(stores_needing_scrape)}..."
+            )
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS)
             future_to_store = {
                 executor.submit(price_scraper.get_live_price_result, store, item_name): store
@@ -338,6 +344,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             item_store_status[store] = {
                                 "status": result.get("status", "unavailable"),
                                 "message": result.get("message", "Price unavailable"),
+                                "product_name": result.get("product_name"),
                             }
                         else:
                             price = result
@@ -353,6 +360,17 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             "message": "The supermarket scraper failed",
                         }
 
+                    store_progress[store] = item_store_status[store]["status"]
+                    completed_count = len(completed_stores)
+                    progress_summary = ", ".join(
+                        f"{name}: {store_progress[name]}"
+                        for name in stores_needing_scrape
+                    )
+                    status_text.text(
+                        f"{item_name}: {completed_count}/{len(stores_needing_scrape)} retailers complete "
+                        f"({progress_summary})"
+                    )
+
                     if price is not None and price >= config.PRICE_VALIDITY_THRESHOLD:
                         price = None
 
@@ -361,6 +379,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         price_cache[(store, item_lower)] = {
                             "price": price,
                             "timestamp": datetime.now(),
+                            "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
                         }
                         cache_updated = True
             except concurrent.futures.TimeoutError:
@@ -376,6 +395,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         "status": "timeout",
                         "message": "The supermarket lookup timed out",
                     }
+                    store_progress[store] = "timeout"
             finally:
                 for future in future_to_store:
                     future.cancel()
