@@ -1492,7 +1492,7 @@ else:
                         
                         with st.form("single_store_form", clear_on_submit=False):
                             st.markdown(html_single, unsafe_allow_html=True)
-                            submitted_single = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_single")
+                            submitted_single = st.form_submit_button(" ", use_container_width=True, key="btn_single")
                             if submitted_single:
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
@@ -1517,7 +1517,7 @@ else:
                         
                         with st.form("split_stores_form", clear_on_submit=False):
                             st.markdown(html_split, unsafe_allow_html=True)
-                            submitted_split = st.form_submit_button("", use_container_width=True, label_visibility="collapsed", key="btn_split")
+                            submitted_split = st.form_submit_button(" ", use_container_width=True, key="btn_split")
                             if submitted_split:
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
