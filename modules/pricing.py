@@ -25,7 +25,12 @@ from config import (
     MAX_VALID_PRICE,
     PRICE_VALIDITY_THRESHOLD,
 )
-from helpers import extract_price_from_text, is_valid_price, clean_price_text
+from helpers import (
+    extract_price_from_text,
+    is_valid_price,
+    clean_price_text,
+    build_store_search_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,29 +102,31 @@ class PriceScraper:
         try:
             store_config = STORES[store]
             client = ApifyClient(self.apify_token)
-            search_url = store_config["search_url"].format(quote(item_name))
-            run = client.actor(store_config["api_actor"]).call(
-                run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
-                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-            )
-            if run is None or run.status != "SUCCEEDED":
-                return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
-            candidates = []
-            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
-                price = self._extract_apify_price(product)
-                if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
-                    relevance = self._product_relevance(item_name, product)
-                    if relevance is not None:
-                        candidates.append((relevance, price, product))
-            if candidates:
-                _, price, product = max(candidates, key=lambda candidate: candidate[0])
-                product_name = self._extract_product_name(product) or item_name
-                return {
-                    "price": price,
-                    "product_name": product_name,
-                    "status": "ok",
-                    "message": f"Price found: {product_name}",
-                }
+            search_candidates = build_store_search_candidates(item_name, store)[:3]
+            for search_query in search_candidates:
+                search_url = store_config["search_url"].format(quote(search_query))
+                run = client.actor(store_config["api_actor"]).call(
+                    run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
+                    wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                )
+                if run is None or run.status != "SUCCEEDED":
+                    return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+                candidates = []
+                for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+                    price = self._extract_apify_price(product)
+                    if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
+                        relevance = self._product_relevance(item_name, product)
+                        if relevance is not None:
+                            candidates.append((relevance, price, product))
+                if candidates:
+                    _, price, product = max(candidates, key=lambda candidate: candidate[0])
+                    product_name = self._extract_product_name(product) or item_name
+                    return {
+                        "price": price,
+                        "product_name": product_name,
+                        "status": "ok",
+                        "message": f"Price found: {product_name}",
+                    }
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}

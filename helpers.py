@@ -276,6 +276,16 @@ def build_store_search_candidates(item_name: str, store_name: str) -> list[str]:
         if size_variant and size_variant not in candidates:
             candidates.append(size_variant)
 
+    # Retailers often rank brand-first grocery queries more accurately.
+    if "milk" in {word.lower() for word in preferred} and len(preferred) >= 3:
+        brand = preferred[0]
+        size_words = [word for word in preferred if re.search(r"\d+(?:\.\d+)?(?:g|kg|ml|l|litre|litres|oz)", word.lower())]
+        size_word_set = {word.lower() for word in size_words}
+        descriptors = [word for word in preferred[1:] if word.lower() not in {"milk", *size_word_set}]
+        brand_first = " ".join([brand, *descriptors, "milk", *size_words])
+        if brand_first and brand_first not in candidates:
+            candidates.append(brand_first)
+
     # Another common variant: remove very generic words like "original" when they add noise.
     filtered = [word for word in preferred if word.lower() not in {"original", "classic", "fresh", "new"}]
     if len(filtered) > 1:
