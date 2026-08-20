@@ -205,7 +205,11 @@ if st.query_params.get("logout") == "1":
     st.session_state["auth_mode"] = "login"
     st.rerun()
 
-prefs = st.session_state["prefs"]
+prefs = {
+    store_name: bool(st.session_state["prefs"].get(store_name, True))
+    for store_name in config.STORE_NAMES
+}
+st.session_state["prefs"] = prefs
 
 # ============================================================================
 # HELPER FUNCTIONS FOR REPORT GENERATION
@@ -279,8 +283,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             stores_to_search = ["Coles"]
         elif "aldi" in item_lower and "Aldi" in selected_stores:
             stores_to_search = ["Aldi"]
-        elif "iga" in item_lower and "IGA" in selected_stores:
-            stores_to_search = ["IGA"]
         
         item_store_prices = {}
         item_store_status = {}
@@ -517,7 +519,6 @@ st.markdown(f"""
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(1) div[data-testid="stCheckbox"] label p {{ background-color: {'#005A36' if prefs['Woolworths'] else '#FFFFFF'}; color: {'white' if prefs['Woolworths'] else '#005A36'}; border: 1px solid #005A36; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(2) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['Coles'] else '#FFFFFF'}; color: {'white' if prefs['Coles'] else '#E31837'}; border: 1px solid #E31837; }}
     div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(3) div[data-testid="stCheckbox"] label p {{ background-color: {'#002D62' if prefs['Aldi'] else '#FFFFFF'}; color: {'white' if prefs['Aldi'] else '#002D62'}; border: 1px solid #002D62; }}
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] div[data-testid="column"]:nth-child(4) div[data-testid="stCheckbox"] label p {{ background-color: {'#E31837' if prefs['IGA'] else '#FFFFFF'}; color: {'white' if prefs['IGA'] else '#E31837'}; border: 1px solid #E31837; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -854,7 +855,7 @@ else:
             <p>SmartBasket is Australia's independent grocery price comparison companion, designed to help households cut through supermarket price hikes and make informed shopping choices.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Our Mission</h4>
-            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, Aldi, and IGA, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
+            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, and Aldi, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Built for Everyday Australians</h4>
             <p>Created to simplify weekly budgeting, SmartBasket puts full transparency back into your hands. No hidden fees, no corporate bias—just real-time data comparing your preferred local stores.</p>
@@ -1135,12 +1136,11 @@ else:
         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3, col4 = st.columns([1.35, 0.85, 0.85, 0.85])
+        col1, col2, col3 = st.columns(3)
         store_columns = [
             (col1, "Woolworths", "woolworths"),
             (col2, "Coles", "coles"),
             (col3, "Aldi", "aldi"),
-            (col4, "IGA", "iga"),
         ]
         for store_column, store_name, store_key in store_columns:
             with store_column:
@@ -1404,8 +1404,7 @@ else:
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62",
-                            "IGA": "#E31837"
+                            "Aldi": "#002D62"
                         }
                         
                         for store_name, items in grouped_items.items():
@@ -1511,8 +1510,7 @@ else:
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62",
-                            "IGA": "#E31837"
+                            "Aldi": "#002D62"
                         }
                         
                         max_cost = report["store_rankings"][-1]["total_cost"] if report["store_rankings"] else 1
