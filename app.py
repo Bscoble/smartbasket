@@ -344,6 +344,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             item_store_status[store] = {
                                 "status": result.get("status", "unavailable"),
                                 "message": result.get("message", "Price unavailable"),
+                                "product_name": result.get("product_name"),
                             }
                         else:
                             price = result
@@ -414,6 +415,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 "total_price": total_price,
                 "status": item_store_status.get(store, {}).get("status", "ok"),
                 "message": item_store_status.get(store, {}).get("message", "Price found"),
+                "product_name": item_store_status.get(store, {}).get("product_name"),
             }
         
         sorted_item_stores = sorted(
@@ -1491,6 +1493,7 @@ else:
                         )
                         
                         with st.form("single_store_form", clear_on_submit=False):
+                            st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
                             st.markdown(html_single, unsafe_allow_html=True)
                             submitted_single = st.form_submit_button(" ", use_container_width=True, key="btn_single")
                             if submitted_single:
@@ -1516,6 +1519,7 @@ else:
                         )
                         
                         with st.form("split_stores_form", clear_on_submit=False):
+                            st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
                             st.markdown(html_split, unsafe_allow_html=True)
                             submitted_split = st.form_submit_button(" ", use_container_width=True, key="btn_split")
                             if submitted_split:
@@ -1592,7 +1596,10 @@ else:
                                 
                                 html_row = (
                                     f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">'
-                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}</div>'
+                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}'
+                                    f'<div style="color: #777; font-size: 0.8em; margin-top: 2px;">'
+                                    f'{store_data.get("product_name") or "Matched product unavailable"}'
+                                    f'</div></div>'
                                     f'<div>'
                                     f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
                                     f'<b>{display_total}</b>'

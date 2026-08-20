@@ -104,10 +104,22 @@ class PriceScraper:
             )
             if run is None or run.status != "SUCCEEDED":
                 return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
+            candidates = []
             for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
                 price = self._extract_apify_price(product)
                 if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
-                    return {"price": price, "status": "ok", "message": "Price found"}
+                    relevance = self._product_relevance(item_name, product)
+                    if relevance is not None:
+                        candidates.append((relevance, price, product))
+            if candidates:
+                _, price, product = max(candidates, key=lambda candidate: candidate[0])
+                product_name = self._extract_product_name(product) or item_name
+                return {
+                    "price": price,
+                    "product_name": product_name,
+                    "status": "ok",
+                    "message": f"Price found: {product_name}",
+                }
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
@@ -141,7 +153,13 @@ class PriceScraper:
             if not price:
                 price = self._extract_price_from_page_text(soup.get_text(), store)
             if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
-                return {"price": price, "status": "ok", "message": "Price found"}
+                product_name = self._extract_zenrows_product_name(soup, item_name)
+                return {
+                    "price": price,
+                    "product_name": product_name,
+                    "status": "ok",
+                    "message": f"Price found: {product_name}",
+                }
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
@@ -221,6 +239,51 @@ class PriceScraper:
             else:
                 products.append(item)
         return products
+
+    @staticmethod
+    def _extract_product_name(product: Dict) -> Optional[str]:
+        """Return the most specific product name exposed by a retailer actor."""
+        for field in ("name", "display_name", "product_name", "title"):
+            value = product.get(field)
+            if value:
+                return str(value).strip()
+        return None
+
+    @classmethod
+    def _product_relevance(cls, query: str, product: Dict) -> Optional[float]:
+        """Score a retailer product and reject results missing important query terms."""
+        product_name = cls._extract_product_name(product)
+        if not product_name:
+            return None
+
+        def normalize(value: str) -> list[str]:
+            normalized = re.sub(r"[^a-z0-9]+", " ", value.lower().replace("'", ""))
+            terms = normalized.split()
+            aliases = {"barbecue": "bbq", "tams": "tam"}
+            return [aliases.get(term, term) for term in terms]
+        query_terms = normalize(query)
+        product_terms = set(normalize(product_name))
+        if not query_terms:
+            return None
+
+        ignored_terms = {"the", "and", "of", "a", "an"}
+        meaningful_terms = [term for term in query_terms if term not in ignored_terms]
+        missing_terms = [term for term in meaningful_terms if term not in product_terms]
+
+        # A missing pack size or explicit product descriptor is a wrong match.
+        size_terms = [term for term in meaningful_terms if any(char.isdigit() for char in term)]
+        descriptor_terms = {
+            "full", "cream", "light", "bbq", "barbecue", "shapes", "tim", "tam",
+        }
+        missing_required = [
+            term for term in missing_terms
+            if term in size_terms or term in descriptor_terms
+        ]
+        if missing_required:
+            return None
+
+        matched = len(meaningful_terms) - len(missing_terms)
+        return matched / len(meaningful_terms)
 
     def _extract_apify_price(self, item: Dict) -> Optional[float]:
         """
@@ -334,6 +397,25 @@ class PriceScraper:
         except Exception as e:
             logger.debug(f"Error parsing price for {store}: {e}")
             return None
+
+    @staticmethod
+    def _extract_zenrows_product_name(soup: BeautifulSoup, fallback: str) -> str:
+        """Extract a visible product title when the retailer page exposes one."""
+        selectors = [
+            '[data-product-card="true"] h2',
+            '[data-product-card="true"] h3',
+            '[data-product-card="true"] [class*="name"]',
+            '[data-product-card="true"] [class*="title"]',
+            'a[href*="/product/"] h2',
+            'a[href*="/product/"] h3',
+        ]
+        for selector in selectors:
+            element = soup.select_one(selector)
+            if element:
+                title = " ".join(element.get_text(" ", strip=True).split())
+                if title:
+                    return title
+        return fallback
     
     def _extract_price_from_page_text(self, page_text: str, store: str) -> Optional[float]:
         """

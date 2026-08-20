@@ -44,8 +44,32 @@ div[data-testid="stCheckbox"] label p {
     height: 38px;
     border-radius: 10px;
     object-fit: cover;
+
+/* Keep recommendation cards clickable without displaying their form submit controls. */
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     position: relative;
+    position: relative !important;
+}
+
+div[data-testid="stForm"]:has(.single-store-choice-marker) button,
+div[data-testid="stForm"]:has(.split-store-choice-marker) button {
+    position: absolute !important;
+    left: 15px !important;
+    right: 15px !important;
+    bottom: 15px !important;
+    width: calc(100% - 30px) !important;
+    height: 95px !important;
+    min-height: 95px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    color: transparent !important;
+    box-shadow: none !important;
+    z-index: 3 !important;
+    cursor: pointer !important;
+}
     z-index: 1;
     transform-origin: center left;
     cursor: zoom-in;

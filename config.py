@@ -74,9 +74,9 @@ APIFY_DEFAULT_CONFIG = {
 REQUEST_TIMEOUT = 45  # seconds, ZenRows (Aldi) HTTP request timeout
 # Apify actor runs (Woolworths/Coles) have no timeout by default and can hang
 # well past the overall thread-pool budget, so bound how long we wait on them.
-APIFY_RUN_TIMEOUT = 45  # seconds
+APIFY_RUN_TIMEOUT = 75  # seconds, observed actor runs can take over a minute
 THREAD_POOL_MAX_WORKERS = 4
-THREAD_POOL_TIMEOUT = 60  # seconds, must stay above retailer request timeouts
+THREAD_POOL_TIMEOUT = 90  # seconds, must stay above retailer request timeouts
 
 # ============================================================================
 # PRODUCT DATABASE
