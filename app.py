@@ -304,11 +304,13 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     cached_data
                     and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
                     and sheets_manager.is_cache_valid(cached_data)
+                    and cached_data.get("product_name")
                 ):
                     item_store_prices[store] = cached_data["price"]
                     item_store_status[store] = {
                         "status": "cached",
                         "message": "Using a cached price",
+                        "product_name": cached_data.get("product_name") or None,
                     }
                     logger.debug(f"Using cached price for {item_name} at {store}")
                 else:
@@ -368,6 +370,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         price_cache[(store, item_lower)] = {
                             "price": price,
                             "timestamp": datetime.now(),
+                            "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
                         }
                         cache_updated = True
             except concurrent.futures.TimeoutError:

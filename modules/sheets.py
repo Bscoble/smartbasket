@@ -161,7 +161,7 @@ class SheetsManager:
             
             # Add header if new worksheet
             if ws.row_count == 1:
-                ws.append_row(["Store", "Item", "Price", "Timestamp"])
+                ws.append_row(["Store", "Item", "Price", "Timestamp", "Product Name"])
                 return cache
             
             data = self._cached_values(worksheet_name, ws)
@@ -173,7 +173,11 @@ class SheetsManager:
                         try:
                             ts = datetime.strptime(ts_str, DATETIME_TIME_FORMAT)
                             price = float(price_str)
-                            cache[(store, item.lower())] = {"price": price, "timestamp": ts}
+                            cache[(store, item.lower())] = {
+                                "price": price,
+                                "timestamp": ts,
+                                "product_name": row[4] if len(row) >= 5 else "",
+                            }
                         except (ValueError, IndexError) as e:
                             logger.debug(f"Skipping invalid cache row: {row}, error: {e}")
                             pass
@@ -202,7 +206,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["price_cache"]["cols"],
             )
             
-            rows = [["Store", "Item", "Price", "Timestamp"]]
+            rows = [["Store", "Item", "Price", "Timestamp", "Product Name"]]
             for (store, item), data in cache.items():
                 rows.append(
                     [
@@ -210,6 +214,7 @@ class SheetsManager:
                         item,
                         str(data["price"]),
                         data["timestamp"].strftime(DATETIME_TIME_FORMAT),
+                        data.get("product_name", ""),
                     ]
                 )
             
