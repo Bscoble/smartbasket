@@ -252,6 +252,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     """
     store_totals = {store: 0.0 for store in selected_stores}
     store_has_complete_prices = {store: True for store in selected_stores}
+    store_price_counts = {store: 0 for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
     unavailable_reasons = []
@@ -407,6 +408,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
             total_price = unit_price * qty
             store_totals[store] += total_price
+            store_price_counts[store] += 1
             item_store_data[store] = {
                 "unit_price": format_price(unit_price) + f"/{unit}",
                 "total_price": total_price,
@@ -455,7 +457,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         (
             (store, cost)
             for store, cost in store_totals.items()
-            if store_has_complete_prices[store]
+            if store_price_counts[store] == total_items
         ),
         key=lambda x: x[1],
     )
