@@ -23,6 +23,7 @@ from config import (
     APIFY_DEFAULT_PRICE,
     MIN_VALID_PRICE,
     MAX_VALID_PRICE,
+    PRICE_VALIDITY_THRESHOLD,
 )
 from helpers import extract_price_from_text, is_valid_price, clean_price_text
 
@@ -105,7 +106,7 @@ class PriceScraper:
                 return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
             for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
                 price = self._extract_apify_price(product)
-                if price and is_valid_price(price):
+                if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
                     return {"price": price, "status": "ok", "message": "Price found"}
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
@@ -134,7 +135,7 @@ class PriceScraper:
             price = self._parse_price_from_element(price_element.text, store) if price_element else None
             if not price:
                 price = self._extract_price_from_page_text(soup.get_text(), store)
-            if price and is_valid_price(price):
+            if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
                 return {"price": price, "status": "ok", "message": "Price found"}
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
