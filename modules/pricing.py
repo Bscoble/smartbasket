@@ -103,8 +103,8 @@ class PriceScraper:
             )
             if run is None or run.status != "SUCCEEDED":
                 return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
-            for item in client.dataset(run.default_dataset_id).list_items().items:
-                price = self._extract_apify_price(item)
+            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+                price = self._extract_apify_price(product)
                 if price and is_valid_price(price):
                     return {"price": price, "status": "ok", "message": "Price found"}
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
@@ -184,8 +184,8 @@ class PriceScraper:
                 return APIFY_DEFAULT_PRICE
             
             # Parse results from Apify dataset
-            for item in client.dataset(run.default_dataset_id).list_items().items:
-                price = self._extract_apify_price(item)
+            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+                price = self._extract_apify_price(product)
                 if price and is_valid_price(price):
                     logger.info(f"Found price for {item_name} at {store}: {price}")
                     return price
@@ -196,23 +196,44 @@ class PriceScraper:
             logger.error(f"Apify error for {store}/{item_name}: {e}", exc_info=True)
             return APIFY_DEFAULT_PRICE
     
+    @staticmethod
+    def _iter_apify_products(items) -> "list[Dict]":
+        """
+        Flatten Apify dataset items into individual product records.
+
+        The Woolworths/Coles search actors return one dataset item per
+        searched URL, with the actual matched products nested under a
+        "products" list rather than as flat top-level records.
+        """
+        products = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            nested_products = item.get("products")
+            if isinstance(nested_products, list) and nested_products:
+                products.extend(p for p in nested_products if isinstance(p, dict))
+            else:
+                products.append(item)
+        return products
+
     def _extract_apify_price(self, item: Dict) -> Optional[float]:
         """
-        Extract price from Apify result item.
+        Extract price from an Apify product record.
         
         Args:
-            item: Item dictionary from Apify response
+            item: Product dictionary from Apify response
             
         Returns:
             Price as float or None
         """
         try:
-            # Try different price field locations in Apify response
+            # Try different price field locations across actor versions
             if "pricing" in item and "now" in item["pricing"]:
                 return float(item["pricing"]["now"])
-            elif "price" in item:
-                price_str = str(item["price"]).replace("$", "")
-                return float(price_str)
+            for field in ("price", "instore_price"):
+                if item.get(field) is not None:
+                    price_str = str(item[field]).replace("$", "")
+                    return float(price_str)
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"Failed to extract price from Apify item: {e}")
         
