@@ -21,7 +21,18 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests beautifulsoup4 gspread google-auth apify-client Pillow pyzbar
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate required secrets
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$ZENROWS_KEY" || (echo "Missing GitHub Actions secret: ZENROWS_KEY" && exit 1)
+          test -n "$APIFY_TOKEN" || (echo "Missing GitHub Actions secret: APIFY_TOKEN" && exit 1)
+          test -n "$GCP_SERVICE_ACCOUNT" || (echo "Missing GitHub Actions secret: GCP_SERVICE_ACCOUNT" && exit 1)
 
       - name: Run Cache Warmer Script
         env:

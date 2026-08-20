@@ -4,19 +4,34 @@ import urllib.parse
 import concurrent.futures
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from apify_client import ApifyClient
 import json
 
 # --- SECRETS SETUP (Pulls from Environment Variables in the cloud) ---
-ZENROWS_KEY = os.environ.get("ZENROWS_KEY")
-APIFY_TOKEN = os.environ.get("APIFY_TOKEN")
-GCP_CREDS_JSON = os.environ.get("GCP_SERVICE_ACCOUNT")
+def require_environment_secret(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(
+            f"Missing required environment variable {name}. "
+            "Add it under GitHub repository Settings > Secrets and variables > Actions."
+        )
+    return value
+
+
+ZENROWS_KEY = require_environment_secret("ZENROWS_KEY")
+APIFY_TOKEN = require_environment_secret("APIFY_TOKEN")
+GCP_CREDS_JSON = require_environment_secret("GCP_SERVICE_ACCOUNT")
 
 # Setup Google Sheets
-creds_dict = json.loads(GCP_CREDS_JSON)
+try:
+    creds_dict = json.loads(GCP_CREDS_JSON)
+except json.JSONDecodeError as error:
+    raise RuntimeError("GCP_SERVICE_ACCOUNT is not valid JSON.") from error
+if not isinstance(creds_dict, dict) or not creds_dict.get("client_email") or not creds_dict.get("private_key"):
+    raise RuntimeError("GCP_SERVICE_ACCOUNT is missing client_email or private_key.")
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
@@ -54,21 +69,28 @@ def get_live_price(store, item_name, api_keys):
                 "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]}
             }
             
-            run = client.actor(actor).call(run_input=run_input)
+            run = client.actor(actor).call(
+                run_input=run_input,
+                wait_duration=timedelta(seconds=75),
+            )
             
+            if run is None or run.status != "SUCCEEDED":
+                return 99.99
             for item in client.dataset(run.default_dataset_id).list_items().items:
-                if "pricing" in item and "now" in item["pricing"]:
-                    return float(item["pricing"]["now"])
-                elif "price" in item:
-                    try:
-                        return float(str(item["price"]).replace("$", ""))
-                    except ValueError:
-                        pass
+                products = item.get("products", [item]) if isinstance(item, dict) else []
+                for product in products:
+                    if "pricing" in product and "now" in product["pricing"]:
+                        return float(product["pricing"]["now"])
+                    if "price" in product:
+                        try:
+                            return float(str(product["price"]).replace("$", ""))
+                        except ValueError:
+                            pass
             return 5.00
 
         # --- 2. ZENROWS SCRAPER (ALDI) ---
         elif store == "Aldi":
-            target_url = f"https://www.aldi.com.au/en/search/?q={urllib.parse.quote(item_name)}"
+            target_url = f"https://www.aldi.com.au/results?q={urllib.parse.quote(item_name)}"
             
             api_url = "https://api.zenrows.com/v1/"
             params = {
@@ -77,7 +99,8 @@ def get_live_price(store, item_name, api_keys):
                 "js_render": "true", 
                 "antibot": "true", 
                 "premium_proxy": "true",
-                "block_resources": "image,media,stylesheet,font"
+                "block_resources": "image,media,stylesheet,font",
+                "wait": "5000",
             }
             
             response = requests.get(api_url, params=params, timeout=15)
