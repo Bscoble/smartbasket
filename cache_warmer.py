@@ -46,6 +46,7 @@ spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 
 sheets_manager = SheetsManager(spreadsheet)
 price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
+price_scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="cache_warmer", **kw)
 
 STORES = ["Woolworths", "Coles", "Aldi"]
 COMMON_STAPLES = [

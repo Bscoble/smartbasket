@@ -135,6 +135,7 @@ def backfill() -> None:
     secrets = load_secrets()
     scraper = PriceScraper(secrets.get("APIFY_TOKEN", ""), secrets.get("ZENROWS_KEY", ""))
     sheets_manager = build_sheets_manager(secrets)
+    scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="bulk_category_crawl", **kw)
 
     standard_prices = sheets_manager.load_standard_prices()
     daily_specials = sheets_manager.load_daily_specials()
@@ -150,6 +151,11 @@ def backfill() -> None:
     sheets_manager.save_standard_prices(standard_prices)
     sheets_manager.save_daily_specials(daily_specials)
     sheets_manager.save_crawl_state(crawl_state)
+
+    for store in STORES_TO_CRAWL:
+        store_count = sum(1 for (s, _) in standard_prices if s == store)
+        sheets_manager.log_catalog_size(store, store_count)
+
     print(
         f"\nDone. +{total_added} product scrapes this run. "
         f"{len(standard_prices)} standard entries, {len(daily_specials)} active specials, "

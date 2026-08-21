@@ -141,6 +141,7 @@ try:
     ZENROWS_KEY = st.secrets.get("ZENROWS_KEY", "")
     APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
     price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
+    price_scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="live_app", **kw)
     logger.info("Price scraper initialized")
 except Exception as e:
     logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)

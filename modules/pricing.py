@@ -48,7 +48,29 @@ class PriceScraper:
         """
         self.apify_token = apify_token
         self.zenrows_key = zenrows_key
+        # Optional callable(store, query, status, duration_secs, cost_usd, product_count) for
+        # usage/cost tracking. Left as None by default so scraping never depends on logging.
+        self.usage_logger = None
         logger.info("PriceScraper initialized")
+
+    def _log_apify_usage(self, store: str, query: str, run, product_count: int = 0) -> None:
+        """Best-effort logging of an Apify run's cost/duration/status; never raises."""
+        if not self.usage_logger or run is None:
+            return
+        try:
+            stats = getattr(run, "stats", None)
+            duration_secs = getattr(stats, "run_time_secs", None) if stats else None
+            cost_usd = getattr(run, "usage_total_usd", None)
+            self.usage_logger(
+                store=store,
+                query=query,
+                status=getattr(run, "status", "unknown"),
+                duration_secs=duration_secs,
+                cost_usd=cost_usd,
+                product_count=product_count,
+            )
+        except Exception as e:
+            logger.debug(f"Usage logging failed for {store}/{query}: {e}")
     
     def get_live_price(self, store: str, item_name: str) -> float:
         """
@@ -124,6 +146,7 @@ class PriceScraper:
                 wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
             )
             if run is None or run.status != "SUCCEEDED":
+                self._log_apify_usage(store, "|".join(url_list), run)
                 return []
 
             results = []
@@ -131,6 +154,7 @@ class PriceScraper:
                 info = self._extract_bulk_product_info(store, product)
                 if info and is_valid_price(info["price"]) and info["price"] < PRICE_VALIDITY_THRESHOLD:
                     results.append(info)
+            self._log_apify_usage(store, "|".join(url_list), run, len(results))
             return results
         except Exception as e:
             logger.error(f"Bulk category scrape failed for {store}/{url_list}: {e}", exc_info=True)
@@ -198,6 +222,7 @@ class PriceScraper:
                     wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
                 )
                 if run is None or run.status != "SUCCEEDED":
+                    self._log_apify_usage(store, search_query, run)
                     return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
                 candidates = []
                 for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
@@ -209,12 +234,14 @@ class PriceScraper:
                 if candidates:
                     _, price, product = max(candidates, key=lambda candidate: candidate[0])
                     product_name = self._extract_product_name(product) or item_name
+                    self._log_apify_usage(store, search_query, run, len(candidates))
                     return {
                         "price": price,
                         "product_name": product_name,
                         "status": "ok",
                         "message": f"Price found: {product_name}",
                     }
+                self._log_apify_usage(store, search_query, run, 0)
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}

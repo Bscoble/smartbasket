@@ -509,6 +509,101 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error saving crawl state: {e}", exc_info=True)
             return False
+
+    # ========================================================================
+    # ANALYTICS: USER EVENTS, SCRAPE LOG, CATALOG SIZE HISTORY
+    # (append-only logs - each call adds one row, nothing is overwritten)
+    # ========================================================================
+
+    def log_user_event(
+        self,
+        user_id: str,
+        event_type: str,
+        mode: str = "",
+        items_ticked: Optional[int] = None,
+        items_total: Optional[int] = None,
+        savings: Optional[float] = None,
+    ) -> bool:
+        """Append a customer engagement event (item_added, comparison_run, shop_mode_selected, shop_completed, refer_click, contact_click)."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["user_events"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["user_events"]["rows"],
+                cols=WORKSHEET_CONFIG["user_events"]["cols"],
+            )
+            if ws.row_count == 1:
+                ws.append_row(["Timestamp", "User ID", "Event Type", "Mode", "Items Ticked", "Items Total", "Savings"])
+
+            ws.append_row([
+                datetime.now().isoformat(timespec="seconds"),
+                user_id.strip().lower(),
+                event_type,
+                mode,
+                str(items_ticked) if items_ticked is not None else "",
+                str(items_total) if items_total is not None else "",
+                str(savings) if savings is not None else "",
+            ])
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error logging user event: {e}", exc_info=True)
+            return False
+
+    def log_scrape_run(
+        self,
+        source: str,
+        store: str,
+        query: str,
+        status: str,
+        duration_secs: Optional[float] = None,
+        cost_usd: Optional[float] = None,
+        product_count: Optional[int] = None,
+    ) -> bool:
+        """Append one Apify/ZenRows scrape attempt (live app, cache warmer, or bulk crawl)."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["scrape_log"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["scrape_log"]["rows"],
+                cols=WORKSHEET_CONFIG["scrape_log"]["cols"],
+            )
+            if ws.row_count == 1:
+                ws.append_row(["Timestamp", "Source", "Store", "Query", "Status", "Duration Secs", "Cost USD"])
+
+            ws.append_row([
+                datetime.now().isoformat(timespec="seconds"),
+                source,
+                store,
+                query,
+                status,
+                str(duration_secs) if duration_secs is not None else "",
+                str(cost_usd) if cost_usd is not None else "",
+            ])
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error logging scrape run: {e}", exc_info=True)
+            return False
+
+    def log_catalog_size(self, store: str, product_count: int) -> bool:
+        """Append a snapshot of how many distinct products are held for a store."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["catalog_size_history"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["catalog_size_history"]["rows"],
+                cols=WORKSHEET_CONFIG["catalog_size_history"]["cols"],
+            )
+            if ws.row_count == 1:
+                ws.append_row(["Date", "Store", "Product Count"])
+
+            ws.append_row([datetime.now().strftime("%Y-%m-%d"), store, str(product_count)])
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error logging catalog size: {e}", exc_info=True)
+            return False
     
     # ========================================================================
     # SHOPPING LIST

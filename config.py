@@ -111,6 +111,9 @@ WORKSHEET_NAMES = {
     "standard_prices": "Standard Prices",
     "daily_specials": "Daily Specials",
     "crawl_state": "Crawl State",
+    "user_events": "User Events",
+    "scrape_log": "Scrape Log",
+    "catalog_size_history": "Catalog Size History",
 }
 
 WORKSHEET_CONFIG = {
@@ -121,6 +124,9 @@ WORKSHEET_CONFIG = {
     "standard_prices": {"rows": "5000", "cols": "8"},
     "daily_specials": {"rows": "2000", "cols": "5"},
     "crawl_state": {"rows": "500", "cols": "4"},
+    "user_events": {"rows": "20000", "cols": "7"},
+    "scrape_log": {"rows": "20000", "cols": "7"},
+    "catalog_size_history": {"rows": "5000", "cols": "3"},
 }
 
 # ============================================================================
