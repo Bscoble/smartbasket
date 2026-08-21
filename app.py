@@ -246,7 +246,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         Dictionary with comparison results or None if no valid items
     """
     store_totals = {store: 0.0 for store in selected_stores}
-    store_has_complete_prices = {store: True for store in selected_stores}
+    store_price_counts = {store: 0 for store in selected_stores}
     item_breakdown = []
     split_store_total = 0.0
     unavailable_reasons = []
@@ -425,6 +425,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
             total_price = unit_price * qty
             store_totals[store] += total_price
+            store_price_counts[store] += 1
             item_store_data[store] = {
                 "unit_price": format_price(unit_price) + f"/{unit}",
                 "total_price": total_price,
@@ -469,43 +470,63 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     status_text.empty()
     progress_bar.empty()
     
-    # Generate rankings
-    ranked_stores = sorted(
-        (
-            (store, cost)
-            for store, cost in store_totals.items()
-            if store_has_complete_prices[store]
-        ),
-        key=lambda x: x[1],
-    )
-    if not ranked_stores:
-        logger.warning("No stores returned complete prices for this comparison")
+    # Generate rankings, retaining stores with partial coverage for visibility.
+    available_stores = [
+        store for store in selected_stores if store_price_counts[store] > 0
+    ]
+    if not available_stores:
+        logger.warning("No stores returned usable prices for this comparison")
         st.session_state["comparison_diagnostics"] = unavailable_reasons
         return None
-    best_single_store = ranked_stores[0][0]
-    best_single_store_cost = ranked_stores[0][1]
-    worst_store_cost = ranked_stores[-1][1]
-    trip_savings = max(0.0, worst_store_cost - split_store_total)
+
+    complete_stores = [
+        store for store in available_stores
+        if store_price_counts[store] == total_items
+    ]
+    complete_stores.sort(key=lambda store: store_totals[store])
+    ranked_stores = sorted(
+        ((store, store_totals[store]) for store in available_stores),
+        key=lambda entry: (store_price_counts[entry[0]] < total_items, entry[1]),
+    )
+    best_single_store = complete_stores[0] if complete_stores else None
+    if best_single_store:
+        best_single_store_cost = store_totals[best_single_store]
+        worst_complete_cost = max(store_totals[store] for store in complete_stores)
+        trip_savings = max(0.0, worst_complete_cost - split_store_total)
+    else:
+        best_single_store_cost = None
+        trip_savings = 0.0
     
     store_rankings = []
     for rank, (store, cost) in enumerate(ranked_stores, 1):
-        diff = cost - best_single_store_cost
-        diff_str = "+$0.00" if diff == 0 else f"+{format_price(diff)} more"
+        is_complete = store_price_counts[store] == total_items
+        if best_single_store and is_complete:
+            diff = cost - best_single_store_cost
+            diff_str = "+$0.00" if diff == 0 else f"+{format_price(diff)} more"
+        else:
+            diff_str = "Complete basket" if is_complete else "Partial basket"
         store_rankings.append({
             "store": store,
             "rank": rank,
             "total_cost": cost,
             "difference_from_best": diff_str,
+            "coverage_count": store_price_counts[store],
+            "coverage_total": total_items,
+            "is_complete": is_complete,
         })
+
+    best_available_store = ranked_stores[0][0]
+    best_available_cost = store_totals[best_available_store]
     
     return {
         "total_items": total_items,
         "trip_savings": trip_savings,
         "comparison_modes": {
             "single_store_best": {
-                "store_name": best_single_store,
-                "total_cost": best_single_store_cost,
-                "is_recommended": True,
+                "store_name": best_single_store or best_available_store,
+                "total_cost": best_single_store_cost if best_single_store else best_available_cost,
+                "is_recommended": bool(best_single_store),
+                "is_complete": bool(best_single_store),
             },
             "split_store_optimal": {
                 "total_cost": split_store_total,
@@ -1477,7 +1498,28 @@ else:
                         single_best = report["comparison_modes"]["single_store_best"]
                         split_opt = report["comparison_modes"]["split_store_optimal"]
                         
-                        single_is_recommended = single_best["total_cost"] <= split_opt["total_cost"]
+                        single_is_recommended = (
+                            single_best["is_complete"]
+                            and single_best["total_cost"] <= split_opt["total_cost"]
+                        )
+                        single_coverage = next(
+                            (
+                                (store["coverage_count"], store["coverage_total"])
+                                for store in report["store_rankings"]
+                                if store["store"] == single_best["store_name"]
+                            ),
+                            (0, report["total_items"]),
+                        )
+                        single_subtitle = (
+                            f"Best of your stores: {single_best['store_name']}"
+                            if single_best["is_complete"]
+                            else f"{single_best['store_name']} has partial coverage ({single_coverage[0]}/{single_coverage[1]} items)"
+                        )
+                        single_title = (
+                            "Shop at one store"
+                            if single_best["is_complete"]
+                            else "Lowest partial store total"
+                        )
                         
                         # SINGLE STORE OPTION
                         c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
@@ -1490,18 +1532,19 @@ else:
                             f'<div style="display: flex; align-items: center; gap: 15px;">'
                             f'<div style="font-size: 26px;">🏪</div>'
                             f'<div style="line-height: 1.3;">'
-                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">Shop at one store</div>'
-                            f'<div style="font-size: 13px; color: #666;">Best of your stores: {single_best["store_name"]}</div>'
+                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">{single_title}</div>'
+                            f'<div style="font-size: 13px; color: #666;">{single_subtitle}</div>'
                             f'</div></div>'
                             f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
                             f'</div></div>'
                         )
                         
                         st.markdown(html_single, unsafe_allow_html=True)
-                        st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
-                        if st.button(" ", use_container_width=True, key="btn_single"):
-                            st.session_state["shop_mode"] = "single"
-                            st.rerun()
+                        if single_best["is_complete"]:
+                            st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
+                            if st.button(" ", use_container_width=True, key="btn_single"):
+                                st.session_state["shop_mode"] = "single"
+                                st.rerun()
                         
                         # SPLIT STORES OPTION
                         c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
@@ -1527,7 +1570,7 @@ else:
                             st.session_state["shop_mode"] = "split"
                             st.rerun()
                             
-                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — FULL BASKET</p>", unsafe_allow_html=True)
+                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — PRICE COVERAGE</p>", unsafe_allow_html=True)
                         
                         brand_colors = {
                             "Woolworths": "#005A36",
@@ -1543,7 +1586,7 @@ else:
                             s_cost = store['total_cost']
                             b_color = brand_colors.get(s_name, "#555")
                             s_initial = s_name[0].upper()
-                            is_best = (s_rank == 1)
+                            is_best = store["is_complete"] and s_name == single_best["store_name"]
                             border_color = "#005A36" if is_best else "#E0E0E0"
                             border_width = "2px" if is_best else "1px"
                             
@@ -1551,8 +1594,7 @@ else:
                                 diff_html = "<div style='color: #666; font-size: 12px; margin-top: 2px;'>Best price ✓</div>"
                                 trophy = "🏆 "
                             else:
-                                diff_val = s_cost - report["comparison_modes"]["single_store_best"]["total_cost"]
-                                diff_html = f"<div style='color: #E31837; font-size: 12px; font-weight: bold; margin-top: 2px;'>+${diff_val:.2f} more</div>"
+                                diff_html = f"<div style='color: #666; font-size: 12px; margin-top: 2px;'>{store['difference_from_best']}</div>"
                                 trophy = ""
                                 
                             bar_width = min(100, int((s_cost / max_cost) * 100)) if max_cost > 0 else 100
@@ -1565,7 +1607,7 @@ else:
                                 f'</div>'
                                 f'<div>'
                                 f'<div style="font-weight: 800; color: #111; font-size: 16px;">{trophy}{s_name}</div>'
-                                f'<div style="font-size: 13px; color: #888;">#{s_rank} cheapest</div>'
+                                f'<div style="font-size: 13px; color: #888;">{store["coverage_count"]}/{store["coverage_total"]} items priced</div>'
                                 f'</div></div>'
                                 f'<div style="text-align: right;">'
                                 f'<div style="font-size: 18px; font-weight: 800; color: #111;">${s_cost:.2f}</div>'
