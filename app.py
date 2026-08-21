@@ -1013,13 +1013,20 @@ else:
             st.markdown("<br><b style='font-size: 13px;'>What did you spot?</b>", unsafe_allow_html=True)
             feedback_input = st.text_area("Feedback", placeholder="Describe the problem in as much detail as you can. The more context you give us, the faster we can fix it.", height=150, label_visibility="collapsed")
             
+            st.markdown("<br><b style='font-size: 13px;'>Attach a screenshot (optional)</b>", unsafe_allow_html=True)
+            screenshot_input = st.file_uploader(
+                "Screenshot",
+                type=["png", "jpg", "jpeg", "gif", "webp"],
+                label_visibility="collapsed",
+            )
+            
             submitted = st.form_submit_button("Submit Feedback", type="primary", use_container_width=True)
             
             if submitted:
                 if not email_input or not feedback_input:
                     st.error("Please fill in both fields so we can assist you properly.")
                 else:
-                    success = FeedbackManager.send_feedback(email_input, feedback_input)
+                    success = FeedbackManager.send_feedback(email_input, feedback_input, screenshot_input)
                     if success:
                         st.success("Thanks! Your feedback has been sent to our team.")
                     else:
