@@ -167,3 +167,27 @@ def test_search_scraped_products_uses_stored_product_images():
     assert results[0]["title"] == "Milk 2L"
     assert results[0]["image_url"] == "https://scraped.test/milk.png"
     assert results[0]["category"] == "dairy"
+
+
+def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"],
+                ["Woolworths", "woolworths iced fruit loaf each", "4.50", "Woolworths Iced Fruit Loaf each", "2026-08-21 06:29:19", "0.81", "100G", "https://scraped.test/fruit-loaf.png"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, name):
+            assert name == "Standard Prices"
+            return FakeWorksheet()
+
+    mgr = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = mgr.search_scraped_products("woolworths iced fruit loaf")
+    assert results == [{
+        "title": "woolworths iced fruit loaf each",
+        "image_url": "https://scraped.test/fruit-loaf.png",
+        "category": "",
+        "subcategory": "",
+    }]

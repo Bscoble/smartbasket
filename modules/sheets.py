@@ -876,7 +876,7 @@ class SheetsManager:
 
             matches = []
             for row in self._cached_values(worksheet_name, ws)[1:]:
-                if len(row) < 10:
+                if len(row) < 2:
                     continue
 
                 title = row[1].strip()
