@@ -16,6 +16,7 @@ from config import (
     CACHE_EXPIRY_HOURS_INVALID,
     PRICE_VALIDITY_THRESHOLD,
     SHEETS_READ_CACHE_SECONDS,
+    STANDARD_PRICE_MAX_AGE_DAYS,
 )
 
 logger = logging.getLogger(__name__)
@@ -251,6 +252,151 @@ class SheetsManager:
         )
         
         return (datetime.now() - timestamp) < timedelta(hours=expiry_hours)
+    
+    # ========================================================================
+    # STANDARD PRICES (long-lived shelf prices, refreshed infrequently)
+    # ========================================================================
+
+    def load_standard_prices(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
+        """Load the standard (non-special) shelf price reference table."""
+        prices = {}
+        try:
+            worksheet_name = WORKSHEET_NAMES["standard_prices"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
+                cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
+            )
+
+            if ws.row_count == 1:
+                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified"])
+                return prices
+
+            data = self._cached_values(worksheet_name, ws)
+            for row in data[1:]:
+                if len(row) >= 5:
+                    store, item, price_str, product_name, verified_str = row[0], row[1], row[2], row[3], row[4]
+                    try:
+                        prices[(store, item.lower())] = {
+                            "price": float(price_str),
+                            "product_name": product_name,
+                            "last_verified": datetime.strptime(verified_str, DATETIME_TIME_FORMAT),
+                        }
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
+
+            logger.info(f"Loaded {len(prices)} standard price entries")
+        except Exception as e:
+            logger.error(f"Error loading standard prices: {e}", exc_info=True)
+        return prices
+
+    def is_standard_price_valid(self, entry: Dict[str, Any]) -> bool:
+        """Check whether a standard price entry was verified recently enough to trust."""
+        last_verified = entry.get("last_verified")
+        if not last_verified:
+            return False
+        return (datetime.now() - last_verified) < timedelta(days=STANDARD_PRICE_MAX_AGE_DAYS)
+
+    def upsert_standard_price(self, store: str, item_name: str, price: float, product_name: str = "") -> bool:
+        """Add or update a single standard price entry, e.g. from an admin/population tool."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["standard_prices"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
+                cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
+            )
+            data = self._cached_values(worksheet_name, ws)
+            headers = ["Store", "Item", "Price", "Product Name", "Last Verified"]
+            if not data:
+                ws.append_row(headers)
+                data = [headers]
+
+            item_lower = item_name.strip().lower()
+            values = [
+                store,
+                item_name.strip(),
+                str(price),
+                product_name or item_name,
+                datetime.now().strftime(DATETIME_TIME_FORMAT),
+            ]
+
+            existing_row = None
+            for row_number, row in enumerate(data[1:], start=2):
+                if len(row) >= 2 and row[0] == store and row[1].strip().lower() == item_lower:
+                    existing_row = row_number
+                    break
+
+            if existing_row:
+                ws.update(f"A{existing_row}:E{existing_row}", [values])
+            else:
+                ws.append_row(values)
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error upserting standard price: {e}", exc_info=True)
+            return False
+
+    # ========================================================================
+    # DAILY SPECIALS (short-lived, refreshed once per day)
+    # ========================================================================
+
+    def load_daily_specials(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
+        """Load today's active special prices."""
+        specials = {}
+        try:
+            worksheet_name = WORKSHEET_NAMES["daily_specials"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["daily_specials"]["rows"],
+                cols=WORKSHEET_CONFIG["daily_specials"]["cols"],
+            )
+
+            if ws.row_count == 1:
+                ws.append_row(["Store", "Item", "Price", "Product Name", "Date"])
+                return specials
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            data = self._cached_values(worksheet_name, ws)
+            for row in data[1:]:
+                if len(row) >= 5 and row[4].strip() == today:
+                    store, item, price_str, product_name = row[0], row[1], row[2], row[3]
+                    try:
+                        specials[(store, item.lower())] = {
+                            "price": float(price_str),
+                            "product_name": product_name,
+                        }
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Skipping invalid special row: {row}, error: {e}")
+
+            logger.info(f"Loaded {len(specials)} active special entries")
+        except Exception as e:
+            logger.error(f"Error loading daily specials: {e}", exc_info=True)
+        return specials
+
+    def save_daily_specials(self, specials: Dict[Tuple[str, str], Dict[str, Any]]) -> bool:
+        """Bulk-overwrite today's specials table, e.g. from an overnight scrape job."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["daily_specials"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["daily_specials"]["rows"],
+                cols=WORKSHEET_CONFIG["daily_specials"]["cols"],
+            )
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            rows = [["Store", "Item", "Price", "Product Name", "Date"]]
+            for (store, item), data in specials.items():
+                rows.append([store, item, str(data["price"]), data.get("product_name", ""), today])
+
+            ws.clear()
+            ws.append_rows(rows)
+            self._invalidate_values_cache(worksheet_name)
+            logger.info(f"Saved {len(specials)} special price entries")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving daily specials: {e}", exc_info=True)
+            return False
     
     # ========================================================================
     # SHOPPING LIST

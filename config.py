@@ -41,6 +41,7 @@ PRICE_VALIDITY_THRESHOLD = 90.00  # USD threshold for valid pricing
 DEFAULT_PRICE_FALLBACK = 99.99  # Fallback for scraping failures
 APIFY_DEFAULT_PRICE = 5.00  # Fallback for Apify scraping failures
 SHEETS_READ_CACHE_SECONDS = 20  # Reduce duplicate reads across Streamlit reruns
+STANDARD_PRICE_MAX_AGE_DAYS = 14  # Re-verify shelf prices at least this often
 
 # ============================================================================
 # PRICE CONSTRAINTS & VALIDATION
@@ -106,6 +107,8 @@ WORKSHEET_NAMES = {
     "preferences": "Preferences",
     "recent_shops": "Recent Shops",
     "product_catalog": "Product Catalog",
+    "standard_prices": "Standard Prices",
+    "daily_specials": "Daily Specials",
 }
 
 WORKSHEET_CONFIG = {
@@ -113,6 +116,8 @@ WORKSHEET_CONFIG = {
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
     "product_catalog": {"rows": "5000", "cols": "5"},
+    "standard_prices": {"rows": "5000", "cols": "5"},
+    "daily_specials": {"rows": "2000", "cols": "5"},
 }
 
 # ============================================================================

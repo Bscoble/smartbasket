@@ -71,7 +71,7 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
             [
                 "Confirm SPREADSHEET_ID is correct in config.py.",
                 "Share the spreadsheet with the service-account client_email as Editor.",
-                "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
+             "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
             ],
         )
 
@@ -263,6 +263,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     # Load price cache
     status_text.text("Loading price cache...")
     price_cache = sheets_manager.load_price_cache()
+    daily_specials = sheets_manager.load_daily_specials()
+    standard_prices = sheets_manager.load_standard_prices()
     cache_updated = False
     
     for idx, row in enumerate(valid_items):
@@ -292,9 +294,27 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         for store in selected_stores:
             if store in stores_to_search:
                 cache_key = (store, item_lower)
+                special_data = daily_specials.get(cache_key)
+                standard_data = standard_prices.get(cache_key)
                 cached_data = price_cache.get(cache_key)
                 
-                if (
+                if special_data and special_data.get("price") is not None:
+                    item_store_prices[store] = special_data["price"]
+                    item_store_status[store] = {
+                        "status": "special",
+                        "message": "Today's special price",
+                        "product_name": special_data.get("product_name") or item_name,
+                    }
+                    logger.debug(f"Using special price for {item_name} at {store}")
+                elif standard_data and sheets_manager.is_standard_price_valid(standard_data):
+                    item_store_prices[store] = standard_data["price"]
+                    item_store_status[store] = {
+                        "status": "standard",
+                        "message": "Standard shelf price",
+                        "product_name": standard_data.get("product_name") or item_name,
+                    }
+                    logger.debug(f"Using standard price for {item_name} at {store}")
+                elif (
                     cached_data
                     and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
                     and sheets_manager.is_cache_valid(cached_data)
