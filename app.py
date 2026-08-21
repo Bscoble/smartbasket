@@ -1493,12 +1493,11 @@ else:
                             f'</div></div>'
                         )
                         
-                        with st.form("single_store_form", clear_on_submit=False):
-                            st.markdown(html_single, unsafe_allow_html=True)
-                            submitted_single = st.form_submit_button(" ", use_container_width=True, key="btn_single")
-                            if submitted_single:
-                                st.session_state["shop_mode"] = "single"
-                                st.rerun()
+                        st.markdown(html_single, unsafe_allow_html=True)
+                        st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
+                        if st.button(" ", use_container_width=True, key="btn_single"):
+                            st.session_state["shop_mode"] = "single"
+                            st.rerun()
                         
                         # SPLIT STORES OPTION
                         c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
@@ -1518,12 +1517,11 @@ else:
                             f'</div></div>'
                         )
                         
-                        with st.form("split_stores_form", clear_on_submit=False):
-                            st.markdown(html_split, unsafe_allow_html=True)
-                            submitted_split = st.form_submit_button(" ", use_container_width=True, key="btn_split")
-                            if submitted_split:
-                                st.session_state["shop_mode"] = "split"
-                                st.rerun()
+                        st.markdown(html_split, unsafe_allow_html=True)
+                        st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
+                        if st.button(" ", use_container_width=True, key="btn_split"):
+                            st.session_state["shop_mode"] = "split"
+                            st.rerun()
                             
                         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — FULL BASKET</p>", unsafe_allow_html=True)
                         
