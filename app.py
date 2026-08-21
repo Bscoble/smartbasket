@@ -407,7 +407,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         item_store_data = {}
         for store, unit_price in item_store_prices.items():
             if unit_price is None:
-                store_has_complete_prices[store] = False
                 unavailable_reasons.append({
                     "item": item_name,
                     "store": store,
