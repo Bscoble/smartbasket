@@ -117,6 +117,8 @@ def crawl_keyword(
             "unit_price": product.get("unit_price"),
             "unit_label": product.get("unit_label", ""),
             "image_url": product.get("image_url", ""),
+            "category": product.get("category") or keyword,
+            "subcategory": product.get("subcategory", ""),
         }
         if product["is_special"] and product["price"] < product["standard_price"]:
             daily_specials[key] = {

@@ -70,8 +70,7 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
             "Database spreadsheet could not be opened.",
             [
                 "Confirm SPREADSHEET_ID is correct in config.py.",
-                "Share the spreadsheet with the service-account client_email as Editor.",
-             "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
+                "Share the spreadsheet with the service-account client_email as Editor.",         "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
             ],
         )
 
@@ -1175,9 +1174,25 @@ else:
                                 )
                         with sc2:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
+                            metadata = []
+                            if res.get("category"):
+                                metadata.append(res["category"])
+                            if res.get("subcategory"):
+                                metadata.append(res["subcategory"])
+                            if metadata:
+                                st.markdown(
+                                    f"<div style='font-size: 11px; color: #666; margin-top: 4px; line-height: 1.4;'>{' · '.join(metadata)}</div>",
+                                    unsafe_allow_html=True,
+                                )
                         with sc3:
                             if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
-                                sheets_manager.save_product(user_id, res["title"], res["image_url"])
+                                sheets_manager.save_product(
+                                    user_id,
+                                    res["title"],
+                                    res["image_url"],
+                                    category=res.get("category", ""),
+                                    subcategory=res.get("subcategory", ""),
+                                )
                                 if sheets_manager.add_item_to_list(
                                     res["title"], 1, "each", res["image_url"], user_id
                                 ):
@@ -1431,11 +1446,19 @@ else:
                 
                 if "active_tab" not in st.session_state:
                     st.session_state["active_tab"] = "Overview"
-                    
-                tab_choice = st.radio("Navigation", ["Overview", "Breakdown", "Discount Cycle"], 
-                                      index=["Overview", "Breakdown", "Discount Cycle"].index(st.session_state["active_tab"]),
-                                      horizontal=True, label_visibility="collapsed", key="nav_radio")
-                
+                elif st.session_state["active_tab"] not in ["Overview", "Breakdown"]:
+                    st.session_state["active_tab"] = "Overview"
+
+                tab_options = ["Overview", "Breakdown"]
+                tab_choice = st.radio(
+                    "Navigation",
+                    tab_options,
+                    index=tab_options.index(st.session_state["active_tab"]),
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key="nav_radio",
+                )
+
                 st.session_state["active_tab"] = tab_choice
                 
                 if tab_choice == "Overview":
@@ -1692,10 +1715,6 @@ else:
                                 )
                                 st.markdown(html_row, unsafe_allow_html=True)
                                 
-                elif tab_choice == "Discount Cycle":
-                    st.markdown("#### DISCOUNT CYCLE")
-                    st.info("Discount cycle tracking is active and analyzing historical specials across your selected stores.")
-                    
                 # --- NEW FINISH SHOP BUTTON ---
                 st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                 if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):

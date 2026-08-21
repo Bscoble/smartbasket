@@ -269,7 +269,7 @@ class SheetsManager:
             )
 
             if ws.row_count == 1:
-                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"])
+                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"])
                 return prices
 
             data = self._cached_values(worksheet_name, ws)
@@ -280,6 +280,8 @@ class SheetsManager:
                         unit_price = float(row[5]) if len(row) >= 6 and row[5] else None
                         unit_label = row[6] if len(row) >= 7 else ""
                         image_url = row[7] if len(row) >= 8 else ""
+                        category = row[8] if len(row) >= 9 else ""
+                        subcategory = row[9] if len(row) >= 10 else ""
                         prices[(store, item.lower())] = {
                             "price": float(price_str),
                             "product_name": product_name,
@@ -287,6 +289,8 @@ class SheetsManager:
                             "unit_price": unit_price,
                             "unit_label": unit_label,
                             "image_url": image_url,
+                            "category": category,
+                            "subcategory": subcategory,
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
@@ -312,6 +316,8 @@ class SheetsManager:
         unit_price: Optional[float] = None,
         unit_label: str = "",
         image_url: str = "",
+        category: str = "",
+        subcategory: str = "",
     ) -> bool:
         """Add or update a single standard price entry, e.g. from an admin/population tool."""
         try:
@@ -322,7 +328,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
             data = self._cached_values(worksheet_name, ws)
-            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"]
+            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"]
             if not data:
                 ws.append_row(headers)
                 data = [headers]
@@ -337,6 +343,8 @@ class SheetsManager:
                 str(unit_price) if unit_price is not None else "",
                 unit_label,
                 image_url,
+                category,
+                subcategory,
             ]
 
             existing_row = None
@@ -346,7 +354,7 @@ class SheetsManager:
                     break
 
             if existing_row:
-                ws.update(f"A{existing_row}:H{existing_row}", [values])
+                ws.update(f"A{existing_row}:J{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -365,7 +373,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
 
-            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"]]
+            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"]]
             for (store, item), data in prices.items():
                 unit_price = data.get("unit_price")
                 rows.append(
@@ -378,6 +386,8 @@ class SheetsManager:
                         str(unit_price) if unit_price is not None else "",
                         data.get("unit_label", ""),
                         data.get("image_url", ""),
+                        data.get("category", ""),
+                        data.get("subcategory", ""),
                     ]
                 )
 
@@ -755,7 +765,14 @@ class SheetsManager:
     # CUSTOMER PRODUCT CATALOGUE
     # ========================================================================
 
-    def save_product(self, user_id: str, title: str, image_url: str = "") -> bool:
+    def save_product(
+        self,
+        user_id: str,
+        title: str,
+        image_url: str = "",
+        category: str = "",
+        subcategory: str = "",
+    ) -> bool:
         """Save a product a customer has used for future local searches."""
         try:
             worksheet_name = WORKSHEET_NAMES["product_catalog"]
@@ -765,13 +782,21 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
             )
             data = self._cached_values(worksheet_name, ws)
-            headers = ["User_ID", "Title", "Image_URL", "Search_Key", "Updated"]
+            headers = [
+                "User_ID",
+                "Title",
+                "Image_URL",
+                "Search_Key",
+                "Category",
+                "Subcategory",
+                "Updated",
+            ]
             if not data:
                 ws.append_row(headers)
                 self._invalidate_values_cache(worksheet_name)
                 data = [headers]
             elif data[0] != headers:
-                ws.update("A1:E1", [headers])
+                ws.update("A1:G1", [headers])
                 self._invalidate_values_cache(worksheet_name)
                 data[0] = headers
 
@@ -787,9 +812,17 @@ class SheetsManager:
                     existing_row = row_number
                     break
 
-            values = [normalized_user, normalized_title, image_url.strip(), search_key, datetime.now().isoformat(timespec="seconds")]
+            values = [
+                normalized_user,
+                normalized_title,
+                image_url.strip(),
+                search_key,
+                category.strip(),
+                subcategory.strip(),
+                datetime.now().isoformat(timespec="seconds"),
+            ]
             if existing_row:
-                ws.update(f"A{existing_row}:E{existing_row}", [values])
+                ws.update(f"A{existing_row}:G{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -814,10 +847,15 @@ class SheetsManager:
 
             matches = []
             for row in self._cached_values(worksheet_name, ws)[1:]:
-                if len(row) >= 4 and row[0].strip().lower() == normalized_user:
+                if len(row) >= 7 and row[0].strip().lower() == normalized_user:
                     search_key = row[3].strip().lower()
                     if all(term in search_key for term in terms):
-                        matches.append({"title": row[1].strip(), "image_url": row[2].strip()})
+                        matches.append({
+                            "title": row[1].strip(),
+                            "image_url": row[2].strip(),
+                            "category": row[4].strip(),
+                            "subcategory": row[5].strip(),
+                        })
             return matches[:limit]
         except Exception as e:
             logger.error(f"Error searching product catalogue: {e}", exc_info=True)

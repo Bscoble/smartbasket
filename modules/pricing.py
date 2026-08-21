@@ -190,6 +190,14 @@ class PriceScraper:
             unit_price = PriceScraper._coerce_apify_price(product.get("cup_price"))
             unit_label = product.get("cup_measure") or ""
             image_url = product.get("medium_image_file") or product.get("large_image_file") or ""
+            category = product.get("category") or product.get("department") or product.get("product_type") or ""
+            subcategory = (
+                product.get("subcategory")
+                or product.get("sub_category")
+                or product.get("subCategory")
+                or product.get("category_level_2")
+                or ""
+            )
         elif store == "Coles":
             name = (product.get("name") or "").strip()
             size = (product.get("size") or "").strip()
@@ -208,6 +216,14 @@ class PriceScraper:
             image_uris = product.get("image_uris") or []
             image_path = image_uris[0].get("uri") if image_uris and isinstance(image_uris[0], dict) else ""
             image_url = f"{STORES['Coles']['image_base_url']}{image_path}" if image_path else ""
+            category = product.get("category") or product.get("department") or product.get("product_type") or ""
+            subcategory = (
+                product.get("subcategory")
+                or product.get("sub_category")
+                or product.get("subCategory")
+                or product.get("category_level_2")
+                or ""
+            )
         else:
             return None
 
@@ -217,6 +233,8 @@ class PriceScraper:
         return {
             "product_name": product_name,
             "brand": brand,
+            "category": category,
+            "subcategory": subcategory,
             "price": price,
             "standard_price": standard_price,
             "is_special": is_special,
