@@ -6,7 +6,6 @@ Handles barcode scanning, decoding, and product lookup from Open Food Facts.
 import logging
 from typing import Optional, Tuple, List, Dict
 from PIL import Image, ImageEnhance, ImageOps
-from pyzbar.pyzbar import decode
 import requests
 import streamlit as st
 from config import (
@@ -108,6 +107,11 @@ class BarcodeScanner:
             Decoded barcode string or None
         """
         try:
+            # Imported lazily: the native zbar shared library isn't installed
+            # in every environment (e.g. CI runners without packages.txt), and
+            # scripts that never scan barcodes shouldn't fail to import modules
+            # over it.
+            from pyzbar.pyzbar import decode
             decoded_objects = decode(img)
             for obj in decoded_objects:
                 barcode_data = obj.data.decode("utf-8")
