@@ -44,4 +44,5 @@ jobs:
           ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
         run: python cache_warmer.py

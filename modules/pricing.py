@@ -5,6 +5,7 @@ Handles price lookups from various supermarket websites using APIs and web scrap
 
 import logging
 import json
+import os
 import re
 import time
 from datetime import timedelta
@@ -42,16 +43,29 @@ logger = logging.getLogger(__name__)
 class PriceScraper:
     """Handles price scraping from various supermarkets."""
     
-    def __init__(self, apify_token: str, zenrows_key: str):
+    def __init__(
+        self,
+        apify_token: str,
+        zenrows_key: str,
+        zenrows_cost_per_request_usd: Optional[float] = None,
+    ):
         """
         Initialize the price scraper with API credentials.
         
         Args:
             apify_token: Apify API token for Woolworths/Coles
             zenrows_key: ZenRows API key for Aldi
+            zenrows_cost_per_request_usd: Optional cost of one ZenRows request.
         """
         self.apify_token = apify_token
         self.zenrows_key = zenrows_key
+        configured_cost = os.environ.get("ZENROWS_COST_PER_REQUEST_USD", "").strip()
+        self.zenrows_cost_per_request_usd = zenrows_cost_per_request_usd
+        if self.zenrows_cost_per_request_usd is None and configured_cost:
+            try:
+                self.zenrows_cost_per_request_usd = float(configured_cost)
+            except ValueError:
+                logger.warning("Ignoring invalid ZENROWS_COST_PER_REQUEST_USD value")
         # Optional callable(store, query, status, duration_secs, cost_usd, product_count) for
         # usage/cost tracking. Left as None by default so scraping never depends on logging.
         self.usage_logger = None
@@ -71,6 +85,29 @@ class PriceScraper:
                 status=getattr(run, "status", "unknown"),
                 duration_secs=duration_secs,
                 cost_usd=cost_usd,
+                product_count=product_count,
+            )
+        except Exception as e:
+            logger.debug(f"Usage logging failed for {store}/{query}: {e}")
+
+    def _log_zenrows_usage(
+        self,
+        store: str,
+        query: str,
+        status: str,
+        started_at: float,
+        product_count: int = 0,
+    ) -> None:
+        """Best-effort log for one ZenRows request; costs are plan-configured."""
+        if not self.usage_logger:
+            return
+        try:
+            self.usage_logger(
+                store=store,
+                query=query,
+                status=status,
+                duration_secs=round(time.monotonic() - started_at, 3),
+                cost_usd=self.zenrows_cost_per_request_usd,
                 product_count=product_count,
             )
         except Exception as e:
@@ -196,6 +233,7 @@ class PriceScraper:
         seen_skus = set()
 
         for target_url in url_list:
+            started_at = time.monotonic()
             try:
                 response = requests.get(
                     ZENROWS_API_URL,
@@ -210,8 +248,10 @@ class PriceScraper:
                 response.raise_for_status()
             except requests.RequestException as e:
                 logger.error(f"ZenRows request error for Aldi bulk scrape {target_url}: {e}")
+                self._log_zenrows_usage("Aldi", target_url, "failed", started_at)
                 continue
 
+            page_product_count = 0
             for product in self._parse_aldi_nuxt_products(response.text):
                 sku = product.pop("_sku", None)
                 if sku and sku in seen_skus:
@@ -220,6 +260,8 @@ class PriceScraper:
                     seen_skus.add(sku)
                 if is_valid_price(product["price"]) and product["price"] < PRICE_VALIDITY_THRESHOLD:
                     results.append(product)
+                    page_product_count += 1
+            self._log_zenrows_usage("Aldi", target_url, "SUCCEEDED", started_at, page_product_count)
 
         return results
 
@@ -441,6 +483,11 @@ class PriceScraper:
         if not self.zenrows_key:
             return {"price": None, "status": "configuration", "message": "ZenRows is not configured"}
 
+        started_at = time.monotonic()
+
+        def log_result(status: str, product_count: int = 0) -> None:
+            self._log_zenrows_usage(store, item_name, status, started_at, product_count)
+
         try:
             target_url = STORES[store]["search_url"].format(quote(item_name))
             response = requests.get(
@@ -462,19 +509,24 @@ class PriceScraper:
                 price = self._extract_price_from_page_text(soup.get_text(), store)
             if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
                 product_name = self._extract_zenrows_product_name(soup, item_name)
+                log_result("SUCCEEDED", 1)
                 return {
                     "price": price,
                     "product_name": product_name,
                     "status": "ok",
                     "message": f"Price found: {product_name}",
                 }
+            log_result("not_found")
             return {"price": None, "status": "not_found", "message": "No matching product price was found"}
         except requests.Timeout:
+            log_result("timeout")
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
         except requests.RequestException:
+            log_result("connection")
             return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
         except Exception as e:
             logger.error(f"ZenRows error for {store}/{item_name}: {e}", exc_info=True)
+            log_result("scraper_error")
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
     
     def _get_apify_price(self, store: str, item_name: str) -> float:

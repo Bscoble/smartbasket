@@ -578,8 +578,12 @@ class SheetsManager:
                 rows=WORKSHEET_CONFIG["scrape_log"]["rows"],
                 cols=WORKSHEET_CONFIG["scrape_log"]["cols"],
             )
-            if ws.row_count == 1:
-                ws.append_row(["Timestamp", "Source", "Store", "Query", "Status", "Duration Secs", "Cost USD"])
+            headers = ["Timestamp", "Source", "Store", "Query", "Status", "Duration Secs", "Cost USD"]
+            rows = self._cached_values(worksheet_name, ws)
+            if not rows:
+                ws.append_row(headers)
+            elif rows[0] != headers:
+                ws.insert_row(headers, 1)
 
             ws.append_row([
                 datetime.now().isoformat(timespec="seconds"),

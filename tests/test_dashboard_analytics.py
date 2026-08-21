@@ -41,12 +41,13 @@ def test_aggregate_scrape_cost_by_day_sums_per_store():
         ["2026-08-20T04:00:00", "cache_warmer", "Woolworths", "milk", "ok", "10", "0.05"],
         ["2026-08-20T04:01:00", "cache_warmer", "Woolworths", "bread", "ok", "12", "0.03"],
         ["2026-08-20T04:02:00", "cache_warmer", "Coles", "milk", "ok", "9", "0.04"],
+        ["2026-08-20T04:03:00", "cache_warmer", "Aldi", "milk", "ok", "8", ""],
     ]
 
     table = aggregate_scrape_cost_by_day(rows)
 
-    assert table[0] == ["Date", "Coles", "Woolworths"]
-    assert table[1] == ["2026-08-20", "0.0400", "0.0800"]
+    assert table[0] == ["Date", "Aldi", "Coles", "Woolworths"]
+    assert table[1] == ["2026-08-20", "", "0.0400", "0.0800"]
 
 
 def test_aggregate_scrape_issues_by_day_counts_non_ok_statuses():

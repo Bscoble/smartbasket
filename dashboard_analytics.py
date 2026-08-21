@@ -62,16 +62,26 @@ def aggregate_scrape_cost_by_day(rows: List[List[str]]) -> List[List[str]]:
     data_rows = rows[1:] if rows else []
     stores = sorted({row[2] for row in data_rows if len(row) >= 7 and row[2]})
     by_date: dict = defaultdict(lambda: defaultdict(float))
+    cost_recorded: dict = defaultdict(set)
 
     for row in data_rows:
         if len(row) < 7:
             continue
         timestamp, _source, store, _query, _status, _duration, cost_str = row[:7]
-        by_date[_date_part(timestamp)][store] += _safe_float(cost_str)
+        date = _date_part(timestamp)
+        if cost_str:
+            by_date[date][store] += _safe_float(cost_str)
+            cost_recorded[date].add(store)
 
     table = [["Date"] + stores]
     for date in sorted(by_date.keys()):
-        table.append([date] + [f"{by_date[date].get(store, 0.0):.4f}" for store in stores])
+        table.append(
+            [date]
+            + [
+                f"{by_date[date].get(store, 0.0):.4f}" if store in cost_recorded[date] else ""
+                for store in stores
+            ]
+        )
     return table
 
 

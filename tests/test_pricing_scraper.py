@@ -37,6 +37,24 @@ def test_apify_search_returns_multiple_results_for_relevance_matching():
     assert APIFY_DEFAULT_CONFIG["max_items_per_url"] > 1
 
 
+def test_log_zenrows_usage_uses_configured_per_request_cost():
+    scraper = PriceScraper(
+        apify_token="",
+        zenrows_key="key",
+        zenrows_cost_per_request_usd=0.015,
+    )
+    calls = []
+    scraper.usage_logger = lambda **kwargs: calls.append(kwargs)
+
+    scraper._log_zenrows_usage("Aldi", "milk", "SUCCEEDED", started_at=0, product_count=30)
+
+    assert calls[0]["store"] == "Aldi"
+    assert calls[0]["query"] == "milk"
+    assert calls[0]["status"] == "SUCCEEDED"
+    assert calls[0]["cost_usd"] == 0.015
+    assert calls[0]["product_count"] == 30
+
+
 def test_build_store_search_query_keeps_brand_and_size():
     query = build_store_search_query("Arnotts Tim Tam Original 250g", "Woolworths")
     assert "Tim Tam" in query
