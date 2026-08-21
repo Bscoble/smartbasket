@@ -191,3 +191,106 @@ def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
         "category": "",
         "subcategory": "",
     }]
+
+
+def _build_aldi_nuxt_html(products: list) -> str:
+    """
+    Build a minimal HTML page embedding a script#__NUXT_DATA__ payload in the
+    same flat "devalue" array format Aldi's real pages use: nested values are
+    integer indices back into the same top-level array.
+    """
+    data = []
+
+    def push(value):
+        data.append(value)
+        return len(data) - 1
+
+    for p in products:
+        categories = [push({"id": "1", "name": cat_name, "urlSlugText": cat_name.lower()}) for cat_name in p.get("categories", [])]
+        categories_idx = push(categories)
+        assets = [
+            push({
+                "url": asset_url,
+                "maxWidth": 1500,
+                "maxHeight": 1500,
+                "mimeType": "image/*",
+                "assetType": asset_type,
+                "alt": None,
+                "displayName": None,
+            })
+            for asset_type, asset_url in p.get("assets", [])
+        ]
+        assets_idx = push(assets)
+        price_idx = push({
+            "amount": p["amount"],
+            "amountRelevant": p["amount"],
+            "amountRelevantDisplay": f"${p['amount'] / 100:.2f}",
+            "comparison": p.get("comparison"),
+            "comparisonDisplay": p.get("comparison_display"),
+            "wasPriceDisplay": p.get("was_display"),
+        })
+        push({
+            "sku": p["sku"],
+            "name": p["name"],
+            "brandName": p.get("brand"),
+            "price": price_idx,
+            "categories": categories_idx,
+            "assets": assets_idx,
+        })
+
+    import json as _json
+    payload = _json.dumps(data)
+    return f'<html><body><script id="__NUXT_DATA__" type="application/json">{payload}</script></body></html>'
+
+
+def test_parse_aldi_nuxt_products_extracts_price_image_and_category():
+    html = _build_aldi_nuxt_html([
+        {
+            "sku": "000000000000173130",
+            "name": "Mega Roulette 45g",
+            "brand": "HARIBO",
+            "amount": 99,
+            "comparison": 220,
+            "comparison_display": "$2.20 per 100 g",
+            "was_display": None,
+            "categories": ["Pantry", "Confectionery"],
+            "assets": [("FR01", "https://dm.apac.cms.aldi.cx/is/image/aldiprodapac/product/jpg/scaleWidth/{width}/abc123/{slug}")],
+        }
+    ])
+
+    products = PriceScraper._parse_aldi_nuxt_products(html)
+
+    assert len(products) == 1
+    product = products[0]
+    assert product["product_name"] == "Mega Roulette 45g"
+    assert product["brand"] == "HARIBO"
+    assert product["price"] == 0.99
+    assert product["standard_price"] == 0.99
+    assert product["is_special"] is False
+    assert product["unit_price"] == 2.20
+    assert product["unit_label"] == "100 g"
+    assert product["category"] == "Pantry"
+    assert product["subcategory"] == "Confectionery"
+    assert product["image_url"] == "https://dm.apac.cms.aldi.cx/is/image/aldiprodapac/product/jpg/scaleWidth/300/abc123/"
+
+
+def test_parse_aldi_nuxt_products_detects_special_pricing():
+    html = _build_aldi_nuxt_html([
+        {
+            "sku": "000000000000173131",
+            "name": "Choceur Milk Chocolate Block 200g",
+            "brand": "Choceur",
+            "amount": 349,
+            "comparison": 175,
+            "comparison_display": "$1.75 per 100 g",
+            "was_display": "$4.49",
+            "categories": ["Pantry", "Confectionery"],
+            "assets": [("FR01", "https://dm.apac.cms.aldi.cx/is/image/aldiprodapac/product/jpg/scaleWidth/{width}/def456/{slug}")],
+        }
+    ])
+
+    products = PriceScraper._parse_aldi_nuxt_products(html)
+
+    assert products[0]["price"] == 3.49
+    assert products[0]["standard_price"] == 4.49
+    assert products[0]["is_special"] is True

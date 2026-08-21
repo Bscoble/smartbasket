@@ -38,7 +38,11 @@ from modules.sheets import SheetsManager
 MAX_ITEMS_PER_PAGE = 20
 PAGES_PER_RUN = 3  # how many new pages to fetch per keyword, per store, per run
 
-STORES_TO_CRAWL = ["Woolworths", "Coles"]
+STORES_TO_CRAWL = ["Woolworths", "Coles", "Aldi"]
+
+# Stores whose search endpoint has confirmed live pagination (i.e. requesting
+# additional pages returns new, non-overlapping products rather than repeats).
+PAGINATED_STORES = {"Woolworths", "Aldi"}
 
 CATEGORY_KEYWORDS = [
     "dairy",
@@ -85,6 +89,10 @@ def build_page_urls(store: str, keyword: str, start_page: int, page_count: int) 
     if store == "Woolworths":
         # Confirmed live: &pageNumber= paginates correctly on the search endpoint.
         return [f"{base}&pageNumber={page}" for page in range(start_page, start_page + page_count)]
+    if store == "Aldi":
+        # Confirmed live: &page= paginates correctly on the results endpoint
+        # (page 2 returned 30 entirely non-overlapping SKUs vs page 1).
+        return [f"{base}&page={page}" for page in range(start_page, start_page + page_count)]
     # Coles: both &pageNumber= and &page= caused the scrape to fail (0 results,
     # confirmed live twice). Its actor has no documented pagination input, so
     # only the first page is fetched; broaden coverage via more keywords instead.
@@ -100,7 +108,11 @@ def crawl_keyword(
     daily_specials: dict,
 ) -> int:
     state_key = (store, keyword)
-    start_page = crawl_state.get(state_key, {}).get("last_page", 0) + 1 if store == "Woolworths" else 1
+    start_page = (
+        crawl_state.get(state_key, {}).get("last_page", 0) + 1
+        if store in PAGINATED_STORES
+        else 1
+    )
     urls = build_page_urls(store, keyword, start_page, PAGES_PER_RUN)
     pages_fetched = len(urls)
 
@@ -127,7 +139,7 @@ def crawl_keyword(
             }
 
     crawl_state[state_key] = {
-        "last_page": start_page + pages_fetched - 1 if store == "Woolworths" else 1,
+        "last_page": start_page + pages_fetched - 1 if store in PAGINATED_STORES else 1,
         "last_run": datetime.now().isoformat(timespec="seconds"),
     }
     return len(products)

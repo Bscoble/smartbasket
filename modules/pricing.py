@@ -4,6 +4,7 @@ Handles price lookups from various supermarket websites using APIs and web scrap
 """
 
 import logging
+import json
 import re
 import time
 from datetime import timedelta
@@ -122,9 +123,9 @@ class PriceScraper:
 
     def get_bulk_products(self, store: str, urls, max_items: int = 20) -> "list[Dict[str, Any]]":
         """
-        Scrape one or more listing/search-result pages in a single Apify run and
-        return every valid product found (accepts a single URL string or a list,
-        e.g. several &pageNumber= variants of the same search for pagination).
+        Scrape one or more listing/search-result pages and return every valid
+        product found (accepts a single URL string or a list, e.g. several
+        pagination variants of the same search).
 
         Unlike _get_apify_price_result, this has no query to match against, so
         it skips relevance filtering entirely - every product on the page is
@@ -132,10 +133,17 @@ class PriceScraper:
         since bulk listings (unlike single-item lookups) can contain several
         sizes of the same base product name.
 
-        Retries a few times on a zero-result SUCCEEDED run: retailer anti-bot/
-        JS-challenge pages can silently return an empty dataset even though the
-        actor reports success, and retrying often recovers real results.
+        Woolworths/Coles run through a shared Apify actor call, retrying a few
+        times on a zero-result SUCCEEDED run: retailer anti-bot/JS-challenge
+        pages can silently return an empty dataset even though the actor
+        reports success, and retrying often recovers real results. Aldi has no
+        Apify actor and is instead fetched via ZenRows, since its search/results
+        pages embed a full product payload (Nuxt __NUXT_DATA__ JSON) that can
+        be parsed directly without per-item CSS scraping.
         """
+        if store == "Aldi":
+            return self._get_aldi_bulk_products(urls)
+
         if not self.apify_token:
             return []
 
@@ -177,6 +185,148 @@ class PriceScraper:
                 return []
 
         return []
+
+    def _get_aldi_bulk_products(self, urls) -> "list[Dict[str, Any]]":
+        """Fetch one or more Aldi search/results pages via ZenRows and parse every product."""
+        if not self.zenrows_key:
+            return []
+
+        url_list = [urls] if isinstance(urls, str) else list(urls)
+        results = []
+        seen_skus = set()
+
+        for target_url in url_list:
+            try:
+                response = requests.get(
+                    ZENROWS_API_URL,
+                    params={
+                        "apikey": self.zenrows_key,
+                        "url": target_url,
+                        **ZENROWS_PARAMS,
+                        "wait": "4000",
+                    },
+                    timeout=REQUEST_TIMEOUT,
+                )
+                response.raise_for_status()
+            except requests.RequestException as e:
+                logger.error(f"ZenRows request error for Aldi bulk scrape {target_url}: {e}")
+                continue
+
+            for product in self._parse_aldi_nuxt_products(response.text):
+                sku = product.pop("_sku", None)
+                if sku and sku in seen_skus:
+                    continue
+                if sku:
+                    seen_skus.add(sku)
+                if is_valid_price(product["price"]) and product["price"] < PRICE_VALIDITY_THRESHOLD:
+                    results.append(product)
+
+        return results
+
+    @staticmethod
+    def _parse_aldi_nuxt_products(html: str) -> "list[Dict[str, Any]]":
+        """
+        Parse Aldi's embedded Nuxt payload (script#__NUXT_DATA__) into product
+        records. The payload is a flat JSON array where nested values are
+        represented as integer indices back into the same array (Nuxt's
+        "devalue" serialization), so object/list fields must be dereferenced
+        recursively before use.
+        """
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            script = soup.find("script", id="__NUXT_DATA__")
+            if not script or not script.text:
+                return []
+            data = json.loads(script.text)
+        except Exception as e:
+            logger.debug(f"Failed to parse Aldi Nuxt payload: {e}")
+            return []
+
+        def deref(idx, depth=0):
+            """Resolve one reference slot. Containers (dict/list) hold further
+            references and get recursed into; a resolved scalar is final and
+            must never be re-interpreted as another index, even if it looks
+            like a valid one (e.g. a literal price like 99)."""
+            if depth > 20 or not isinstance(idx, int) or not (0 <= idx < len(data)):
+                return idx
+            value = data[idx]
+            if isinstance(value, dict):
+                return {k: deref(v, depth + 1) for k, v in value.items()}
+            if isinstance(value, list):
+                return [deref(v, depth + 1) for v in value]
+            return value
+
+        products = []
+        for item in data:
+            if not (isinstance(item, dict) and "sku" in item and "price" in item and "assets" in item):
+                continue
+            try:
+                record = {key: deref(value) for key, value in item.items()}
+                info = PriceScraper._extract_aldi_product_info(record)
+                if info:
+                    products.append(info)
+            except Exception as e:
+                logger.debug(f"Skipping malformed Aldi product record: {e}")
+
+        return products
+
+    @staticmethod
+    def _extract_aldi_product_info(record: Dict) -> Optional[Dict[str, Any]]:
+        """Build a size-aware product record from a dereferenced Aldi Nuxt product object."""
+        product_name = (record.get("name") or "").strip()
+        if not product_name:
+            return None
+
+        price_info = record.get("price") or {}
+        amount_cents = price_info.get("amountRelevant", price_info.get("amount"))
+        if amount_cents is None:
+            return None
+        price = round(amount_cents / 100, 2)
+
+        was_display = price_info.get("wasPriceDisplay")
+        is_special = bool(was_display)
+        standard_price = PriceScraper._parse_dollar_amount(was_display) or price
+
+        unit_price = None
+        comparison_cents = price_info.get("comparison")
+        if comparison_cents is not None:
+            unit_price = round(comparison_cents / 100, 2)
+        unit_label = ""
+        comparison_display = price_info.get("comparisonDisplay") or ""
+        if " per " in comparison_display:
+            unit_label = comparison_display.split(" per ", 1)[1].strip()
+
+        categories = record.get("categories") or []
+        category = categories[0].get("name", "") if categories else ""
+        subcategory = categories[-1].get("name", "") if len(categories) > 1 else ""
+
+        image_url = ""
+        assets = record.get("assets") or []
+        preferred_asset = next((a for a in assets if a.get("assetType") == "FR01"), None) or (assets[0] if assets else None)
+        if preferred_asset and preferred_asset.get("url"):
+            image_url = preferred_asset["url"].replace("{width}", "300").replace("{slug}", "")
+
+        return {
+            "product_name": product_name,
+            "brand": record.get("brandName"),
+            "category": category,
+            "subcategory": subcategory,
+            "price": price,
+            "standard_price": standard_price,
+            "is_special": is_special,
+            "unit_price": unit_price,
+            "unit_label": unit_label,
+            "image_url": image_url,
+            "_sku": record.get("sku"),
+        }
+
+    @staticmethod
+    def _parse_dollar_amount(text: Optional[str]) -> Optional[float]:
+        """Parse a dollar-formatted display string like '$1.50' into 1.50."""
+        if not text:
+            return None
+        match = re.search(r"[\d.]+", text)
+        return float(match.group()) if match else None
 
     @staticmethod
     def _extract_bulk_product_info(store: str, product: Dict) -> Optional[Dict[str, Any]]:
