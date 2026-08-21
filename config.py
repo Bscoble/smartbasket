@@ -118,6 +118,7 @@ WORKSHEET_NAMES = {
     "user_events": "User Events",
     "scrape_log": "Scrape Log",
     "catalog_size_history": "Catalog Size History",
+    "performance_dashboard": "Performance Dashboard",
 }
 
 WORKSHEET_CONFIG = {
@@ -131,6 +132,7 @@ WORKSHEET_CONFIG = {
     "user_events": {"rows": "20000", "cols": "7"},
     "scrape_log": {"rows": "20000", "cols": "7"},
     "catalog_size_history": {"rows": "5000", "cols": "3"},
+    "performance_dashboard": {"rows": "200", "cols": "20"},
 }
 
 # ============================================================================

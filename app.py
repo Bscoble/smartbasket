@@ -877,6 +877,7 @@ else:
         """, unsafe_allow_html=True)
         
         if st.button("💌 Refer a Friend", type="primary", use_container_width=True):
+            sheets_manager.log_user_event(st.session_state["current_user"]["email"], "refer_click")
             st.session_state["current_page"] = "refer"
             st.rerun()
             
@@ -1120,6 +1121,7 @@ else:
                         product_image,
                         user_id,
                     ):
+                        sheets_manager.log_user_event(user_id, "item_added", mode="direct")
                         st.session_state["search_performed"] = False
                         st.session_state["search_results"] = []
                         st.rerun()
@@ -1203,6 +1205,7 @@ else:
                                     sheets_manager.add_item_to_list(
                                         sr["name"], int(sr["qty"]), sr["unit"], sr["img"], user_id
                                     )
+                                    sheets_manager.log_user_event(user_id, "item_added", mode="recent_shops")
                                 
                                 # Toggle state to trick Streamlit into generating a "new" expander component that starts collapsed
                                 st.session_state["expander_toggle"] = not st.session_state["expander_toggle"]
@@ -1251,6 +1254,7 @@ else:
                                 if sheets_manager.add_item_to_list(
                                     res["title"], 1, "each", res["image_url"], user_id
                                 ):
+                                    sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
                                     st.session_state["search_performed"] = False
                                     st.session_state["search_results"] = []
                                     st.rerun()
@@ -1290,6 +1294,7 @@ else:
                                     if sheets_manager.add_item_to_list(
                                         product_name, 1, "each", product_image or "", user_id
                                     ):
+                                        sheets_manager.log_user_event(user_id, "item_added", mode="barcode")
                                         st.success(f"Added {product_name} to your list!")
                                         st.session_state["search_performed"] = False
                                         st.session_state["search_results"] = []
@@ -1406,6 +1411,9 @@ else:
                         report = generate_smart_basket_report(current_items, active_names)
                         
                     if report:
+                        sheets_manager.log_user_event(
+                            user_id, "comparison_run", items_total=report["total_items"]
+                        )
                         st.session_state["report"] = report
                         st.session_state["shopping_active"] = True
                         st.session_state["active_tab"] = "Overview"
@@ -1676,6 +1684,7 @@ else:
                         if single_best["is_complete"]:
                             st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
                             if st.button(" ", use_container_width=True, key="btn_single"):
+                                sheets_manager.log_user_event(user_id, "shop_mode_selected", mode="single")
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
 
@@ -1700,6 +1709,7 @@ else:
                             st.markdown(html_split, unsafe_allow_html=True)
                             st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
                             if st.button(" ", use_container_width=True, key="btn_split"):
+                                sheets_manager.log_user_event(user_id, "shop_mode_selected", mode="split")
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
 
@@ -1821,9 +1831,21 @@ else:
                             )
                         st.session_state["recent_shops_available"] = True
 
+                        report_savings = 0.0
+                        report_total_items = None
                         if "report" in st.session_state:
-                            st.session_state["last_savings"] = st.session_state["report"].get("trip_savings", 0.0)
+                            report_savings = st.session_state["report"].get("trip_savings", 0.0)
+                            report_total_items = st.session_state["report"].get("total_items")
+                            st.session_state["last_savings"] = report_savings
                             del st.session_state["report"]
+                        sheets_manager.log_user_event(
+                            st.session_state["current_user"]["email"],
+                            "shop_completed",
+                            mode=st.session_state.get("shop_mode", ""),
+                            items_ticked=len(selected_purchase_names),
+                            items_total=report_total_items,
+                            savings=report_savings,
+                        )
 
                         st.session_state["shopping_active"] = False
                         st.session_state["current_page"] = "celebration"
@@ -1845,10 +1867,12 @@ else:
                 st.rerun()
         with fc3:
             if st.button("Support", key="footer_contact"):
+                sheets_manager.log_user_event(st.session_state["current_user"]["email"], "contact_click")
                 st.session_state["current_page"] = "contact"
                 st.rerun()
         with fc4:
             if st.button("Refer", key="footer_refer"):
+                sheets_manager.log_user_event(st.session_state["current_user"]["email"], "refer_click")
                 st.session_state["current_page"] = "refer"
                 st.rerun()
         st.markdown(
