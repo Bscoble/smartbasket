@@ -303,6 +303,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     item_store_status[store] = {
                         "status": "cached",
                         "message": "Using a cached price",
+                        "product_name": cached_data.get("product_name") or item_name,
                     }
                     logger.debug(f"Using cached price for {item_name} at {store}")
                 else:
@@ -351,6 +352,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             item_store_status[store] = {
                                 "status": "ok" if price is not None else "unavailable",
                                 "message": "Price found" if price is not None else "Price unavailable",
+                                "product_name": item_name if price is not None else None,
                             }
                     except Exception as e:
                         logger.error(f"Error getting price for {item_name} at {store}: {e}")
@@ -417,6 +419,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     "total_price": None,
                     "status": item_store_status.get(store, {}).get("status", "unavailable"),
                     "message": item_store_status.get(store, {}).get("message", "Price unavailable"),
+                    "product_name": item_store_status.get(store, {}).get("product_name"),
                 }
                 continue
 
@@ -427,6 +430,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 "total_price": total_price,
                 "status": item_store_status.get(store, {}).get("status", "ok"),
                 "message": item_store_status.get(store, {}).get("message", "Price found"),
+                "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
             }
         
         sorted_item_stores = sorted(
@@ -1585,19 +1589,21 @@ else:
                                 is_best = (store_idx == 0)
                                 
                                 best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
-                                display_total = (
-                                    f"${store_data['total_price']:.2f}"
-                                    if store_data["total_price"] is not None
-                                    else f"Unavailable: {store_data.get('message', 'Price unavailable')}"
+                                is_available = store_data["total_price"] is not None
+                                matched_name = store_data.get("product_name") or "No matched product"
+                                value_content = (
+                                    f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
+                                    f'<span class="breakdown-total-price">${store_data["total_price"]:.2f}</span>'
+                                    if is_available
+                                    else f'<span class="breakdown-total-unavailable">Unavailable: {store_data.get("message", "Price unavailable")}</span>'
                                 )
                                 
                                 html_row = (
                                     f'<div class="breakdown-store-row">'
                                     f'<div class="breakdown-store-name"><b>{store_initial}</b> &nbsp; {store_name}'
-                                    f'<div class="breakdown-product-name">{store_data.get("product_name") or "Matched product unavailable"}</div></div>'
+                                    f'<div class="breakdown-product-name">Matched: {matched_name}</div></div>'
                                     f'<div class="breakdown-store-value">'
-                                    f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
-                                    f'<b>{display_total}</b>'
+                                    f'{value_content}'
                                     f'{best_badge}'
                                     f'</div>'
                                     f'</div>'
