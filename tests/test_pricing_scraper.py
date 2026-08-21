@@ -79,6 +79,20 @@ def test_extract_bulk_product_info_keeps_category_metadata():
     assert result["brand"] == "Coles"
 
 
+def test_split_shopping_available_requires_multiple_cheapest_stores():
+    from app import split_shopping_available
+
+    single_store_report = {
+        "item_breakdown": [{"cheapest_store": "Woolworths"}, {"cheapest_store": "Woolworths"}]
+    }
+    multi_store_report = {
+        "item_breakdown": [{"cheapest_store": "Woolworths"}, {"cheapest_store": "Coles"}]
+    }
+
+    assert split_shopping_available(single_store_report) is False
+    assert split_shopping_available(multi_store_report) is True
+
+
 def test_save_product_keeps_category_metadata():
     class FakeWorksheet:
         def __init__(self):
@@ -121,3 +135,35 @@ def test_save_product_keeps_category_metadata():
     saved = mgr.search_saved_products("user@example.com", "milk")
     assert saved[0]["category"] == "dairy"
     assert saved[0]["subcategory"] == "fresh milk"
+
+
+def test_search_scraped_products_uses_stored_product_images():
+    class FakeWorksheet:
+        def __init__(self):
+            self.values = [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+                ["Woolworths", "Milk 2L", "4.90", "Milk 2L", "2026-08-21 12:00:00", "2.45", "per L", "https://scraped.test/milk.png", "dairy", "fresh milk"],
+            ]
+
+        def get_all_values(self):
+            return [row[:] for row in self.values]
+
+    class FakeSpreadsheet:
+        def __init__(self):
+            self._sheets = {"Standard Prices": FakeWorksheet()}
+
+        def worksheet(self, name):
+            if name not in self._sheets:
+                self._sheets[name] = FakeWorksheet()
+            return self._sheets[name]
+
+        def add_worksheet(self, title, rows, cols):
+            self._sheets[title] = FakeWorksheet()
+            return self._sheets[title]
+
+    mgr = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = mgr.search_scraped_products("milk")
+    assert results[0]["title"] == "Milk 2L"
+    assert results[0]["image_url"] == "https://scraped.test/milk.png"
+    assert results[0]["category"] == "dairy"

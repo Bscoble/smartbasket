@@ -860,6 +860,45 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error searching product catalogue: {e}", exc_info=True)
             return []
+
+    def search_scraped_products(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
+        """Search the retailer catalog that was scraped and stored in standard price data."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["standard_prices"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
+                cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
+            )
+            terms = [term for term in query.strip().lower().split() if term]
+            if not terms:
+                return []
+
+            matches = []
+            for row in self._cached_values(worksheet_name, ws)[1:]:
+                if len(row) < 10:
+                    continue
+
+                title = row[1].strip()
+                if not title:
+                    continue
+
+                search_key = title.lower()
+                if all(term in search_key for term in terms):
+                    image_url = row[7].strip() if len(row) >= 8 else ""
+                    category = row[8].strip() if len(row) >= 9 else ""
+                    subcategory = row[9].strip() if len(row) >= 10 else ""
+                    matches.append({
+                        "title": title,
+                        "image_url": image_url,
+                        "category": category,
+                        "subcategory": subcategory,
+                    })
+
+            return matches[:limit]
+        except Exception as e:
+            logger.error(f"Error searching scraped product catalogue: {e}", exc_info=True)
+            return []
     
     def archive_shop_to_history(self, items: List[List[str]], user_id: str) -> bool:
         """

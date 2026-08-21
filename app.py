@@ -4,8 +4,11 @@ A Streamlit-based app that helps users compare prices across major supermarkets.
 """
 
 import logging
+import os
+import sys
 import time
 from datetime import datetime, timedelta
+from typing import Optional
 from urllib.parse import quote
 import concurrent.futures
 
@@ -114,37 +117,45 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
 # ============================================================================
 # AUTHENTICATION & SHEETS INITIALIZATION
 # ============================================================================
-try:
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=GOOGLE_SCOPES)
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SPREADSHEET_ID)
-    sheets_manager = SheetsManager(sh)
-    auth_manager = AuthManager(sh)
-    logger.info("Google Sheets authenticated successfully")
-except Exception as e:
-    logger.error(f"Failed to authenticate with Google Sheets: {e}", exc_info=True)
-    summary, steps = _build_sheets_connection_error(e)
-    st.error(summary)
-    st.markdown("**How to fix this**")
-    for step in steps:
-        st.write(f"- {step}")
-    with st.expander("Technical details"):
-        st.write(f"Error type: {type(e).__name__}")
-        st.write(f"Message: {e}")
-        st.write(f"Spreadsheet ID: {SPREADSHEET_ID}")
-    st.stop()
+if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+    sheets_manager = None
+    auth_manager = None
+    logger.info("Running under pytest: skipping live Sheets initialization")
+else:
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=GOOGLE_SCOPES)
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        sheets_manager = SheetsManager(sh)
+        auth_manager = AuthManager(sh)
+        logger.info("Google Sheets authenticated successfully")
+    except Exception as e:
+        logger.error(f"Failed to authenticate with Google Sheets: {e}", exc_info=True)
+        summary, steps = _build_sheets_connection_error(e)
+        st.error(summary)
+        st.markdown("**How to fix this**")
+        for step in steps:
+            st.write(f"- {step}")
+        with st.expander("Technical details"):
+            st.write(f"Error type: {type(e).__name__}")
+            st.write(f"Message: {e}")
+            st.write(f"Spreadsheet ID: {SPREADSHEET_ID}")
+        st.stop()
 
 # Initialize API credentials for price scraping
-try:
-    ZENROWS_KEY = st.secrets.get("ZENROWS_KEY", "")
-    APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
-    price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
-    price_scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="live_app", **kw)
-    logger.info("Price scraper initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
     price_scraper = None
+else:
+    try:
+        ZENROWS_KEY = st.secrets.get("ZENROWS_KEY", "")
+        APIFY_TOKEN = st.secrets.get("APIFY_TOKEN", "")
+        price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
+        price_scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="live_app", **kw)
+        logger.info("Price scraper initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize price scraper: {e}", exc_info=True)
+        price_scraper = None
 
 # ============================================================================
 # EXTERNAL FUNCTIONS - Moved to Modules
@@ -166,7 +177,7 @@ if "app_started" not in st.session_state:
     st.session_state["app_started"] = st.query_params.get("welcome_seen") == "1"
 if "authenticated" not in st.session_state:
     auth_token = st.query_params.get("auth_token", "")
-    restored_user = auth_manager.validate_session(auth_token) if auth_token else None
+    restored_user = auth_manager.validate_session(auth_token) if auth_manager is not None and auth_token else None
     st.session_state["authenticated"] = restored_user is not None
     st.session_state["current_user"] = restored_user
 if "auth_mode" not in st.session_state:
@@ -179,7 +190,10 @@ if "auth_notice" not in st.session_state:
     st.session_state["auth_notice"] = ""
 if "prefs" not in st.session_state:
     try:
-        st.session_state["prefs"] = sheets_manager.load_store_preferences()
+        if sheets_manager is not None:
+            st.session_state["prefs"] = sheets_manager.load_store_preferences()
+        else:
+            st.session_state["prefs"] = config.DEFAULT_STORE_PREFS
     except Exception as e:
         logger.error(f"Error loading store preferences: {e}")
         st.session_state["prefs"] = config.DEFAULT_STORE_PREFS
@@ -196,7 +210,7 @@ if "recent_shops_available" not in st.session_state:
 
 if st.query_params.get("logout") == "1":
     logout_token = st.query_params.get("auth_token", "")
-    if logout_token:
+    if logout_token and auth_manager is not None:
         auth_manager.revoke_session(logout_token)
     st.query_params.pop("logout", None)
     st.query_params.pop("auth_token", None)
@@ -214,6 +228,20 @@ st.session_state["prefs"] = prefs
 # ============================================================================
 # HELPER FUNCTIONS FOR REPORT GENERATION
 # ============================================================================
+
+
+def split_shopping_available(report: dict) -> bool:
+    """Return whether split-store shopping offers a materially different outcome."""
+    item_breakdown = report.get("item_breakdown", [])
+    if len(item_breakdown) < 2:
+        return False
+
+    cheapest_stores = {
+        item.get("cheapest_store")
+        for item in item_breakdown
+        if item.get("cheapest_store")
+    }
+    return len(cheapest_stores) > 1
 
 
 def summarize_store_health(diagnostics: list) -> dict:
@@ -1087,15 +1115,24 @@ else:
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             local_results = sheets_manager.search_saved_products(user_id, item_name)
+                            scraped_results = sheets_manager.search_scraped_products(item_name)
                             remote_results = (
                                 ProductLookup.search_product_by_name(item_name)
-                                if len(local_results) < 5
+                                if len(local_results) + len(scraped_results) < 5
                                 else []
                             )
-                            local_titles = {result["title"].lower() for result in local_results}
+                            seen_titles = {
+                                result["title"].lower()
+                                for result in local_results + scraped_results
+                            }
                             st.session_state["search_results"] = (
                                 local_results
-                                + [result for result in remote_results if result["title"].lower() not in local_titles]
+                                + scraped_results
+                                + [
+                                    result
+                                    for result in remote_results
+                                    if result["title"].lower() not in seen_titles
+                                ]
                             )[:5]
                     else:
                         st.session_state["search_results"] = []
@@ -1214,11 +1251,24 @@ else:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
                             product_name, product_image = ProductLookup.lookup_barcode_product(barcode_number)
                             if product_name:
+                                scraped_matches = sheets_manager.search_scraped_products(product_name)
+                                scraped_product = next(
+                                    (match for match in scraped_matches if match.get("image_url")),
+                                    None,
+                                )
+                                if scraped_product:
+                                    product_image = scraped_product["image_url"]
                                 st.info(f"Found: **{product_name}**")
                                 if product_image:
                                     st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
-                                    sheets_manager.save_product(user_id, product_name, product_image or "")
+                                    sheets_manager.save_product(
+                                        user_id,
+                                        product_name,
+                                        product_image or "",
+                                        category=scraped_product.get("category", "") if scraped_product else "",
+                                        subcategory=scraped_product.get("subcategory", "") if scraped_product else "",
+                                    )
                                     if sheets_manager.add_item_to_list(
                                         product_name, 1, "each", product_image or "", user_id
                                     ):
@@ -1460,25 +1510,28 @@ else:
                 )
 
                 st.session_state["active_tab"] = tab_choice
-                
+                split_available = split_shopping_available(report)
+                if st.session_state.get("shop_mode") == "split" and not split_available:
+                    st.session_state["shop_mode"] = "single"
+                    st.rerun()
+
                 if tab_choice == "Overview":
-                    
                     # -----------------------------------------------
                     # SUB-VIEW: SHOPPING SPLIT DETAILS / SINGLE DETAILS
                     # -----------------------------------------------
                     if st.session_state.get("shop_mode") in ["split", "single"]:
-                        
+
                         if st.button("← Back to Options", type="secondary", key="btn_back_options"):
                             st.session_state["shop_mode"] = "overview"
                             st.rerun()
-                            
+
                         if st.session_state["shop_mode"] == "split":
                             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SHOPPING SPLIT</p>", unsafe_allow_html=True)
                             active_cost = report["comparison_modes"]["split_store_optimal"]["total_cost"]
                         else:
                             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 15px; margin-bottom: 10px; text-transform: uppercase;'>YOUR SINGLE STORE SHOP</p>", unsafe_allow_html=True)
                             active_cost = report["comparison_modes"]["single_store_best"]["total_cost"]
-                            
+
                         html_combined = (
                             f'<div style="background-color: #F6E7B9; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">'
                             f'<div style="font-weight: 800; color: #333; font-size: 16px;">Combined total</div>'
@@ -1486,16 +1539,17 @@ else:
                             f'</div>'
                         )
                         st.markdown(html_combined, unsafe_allow_html=True)
-                        
+
                         grouped_items = {}
                         if st.session_state["shop_mode"] == "split":
                             for item in report["item_breakdown"]:
                                 store = item["cheapest_store"]
-                                if store not in grouped_items: grouped_items[store] = []
+                                if store not in grouped_items:
+                                    grouped_items[store] = []
                                 grouped_items[store].append({
                                     "item_name": item["item_name"],
                                     "unit_price": item["unit_price"],
-                                    "total_price": item["total_price"]
+                                    "total_price": item["total_price"],
                                 })
                         else:
                             best_store = report["comparison_modes"]["single_store_best"]["store_name"]
@@ -1506,27 +1560,26 @@ else:
                                     grouped_items[best_store].append({
                                         "item_name": item["item_name"],
                                         "unit_price": store_data["unit_price"],
-                                        "total_price": f"${store_data['total_price']:.2f}"
+                                        "total_price": f"${store_data['total_price']:.2f}",
                                     })
-                                    
+
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62"
+                            "Aldi": "#002D62",
                         }
-                        
+
                         for store_name, items in grouped_items.items():
                             b_color = brand_colors.get(store_name, "#555")
                             s_initial = store_name[0].upper()
                             store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
-                            
-                            # Dynamically calculate collected items count
+
                             collected_count = 0
                             for idx, item in enumerate(items):
                                 chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                 if st.session_state.get(chk_key, False):
                                     collected_count += 1
-                            
+
                             with st.container(border=True):
                                 st.markdown(f'''
                                 <div style="background-color: {b_color}; color: white; padding: 15px; margin: -16px -16px 15px -16px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center;">
@@ -1540,7 +1593,7 @@ else:
                                     <div style="font-weight: 800; font-size: 18px;">${store_total:.2f}</div>
                                 </div>
                                 ''', unsafe_allow_html=True)
-                                
+
                                 for idx, item in enumerate(items):
                                     c1, c2 = st.columns([3, 1])
                                     chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
@@ -1548,19 +1601,19 @@ else:
                                         st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=chk_key)
                                     with c2:
                                         st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
-                                    
+
                                     if idx < len(items) - 1:
                                         st.markdown("<hr style='margin: 0px 0 10px 0; opacity: 0.1;'>", unsafe_allow_html=True)
-                    
+
                     # -----------------------------------------------
                     # SUB-VIEW: OVERVIEW (DEFAULT)
                     # -----------------------------------------------
                     else:
                         st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
-                        
+
                         single_best = report["comparison_modes"]["single_store_best"]
                         split_opt = report["comparison_modes"]["split_store_optimal"]
-                        
+
                         single_is_recommended = (
                             single_best["is_complete"]
                             and single_best["total_cost"] <= split_opt["total_cost"]
@@ -1583,8 +1636,7 @@ else:
                             if single_best["is_complete"]
                             else "Lowest partial store total"
                         )
-                        
-                        # SINGLE STORE OPTION
+
                         c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
                         c1_border_width = "2px" if single_is_recommended else "1px"
                         c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
@@ -1601,65 +1653,64 @@ else:
                             f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
                             f'</div></div>'
                         )
-                        
+
                         st.markdown(html_single, unsafe_allow_html=True)
                         if single_best["is_complete"]:
                             st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
                             if st.button(" ", use_container_width=True, key="btn_single"):
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
-                        
-                        # SPLIT STORES OPTION
-                        c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
-                        c2_border_width = "2px" if not single_is_recommended else "1px"
-                        c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
-                        html_split = (
-                            f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
-                            f'{c2_badge}'
-                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
-                            f'<div style="display: flex; align-items: center; gap: 15px;">'
-                            f'<div style="font-size: 26px;">🛍️</div>'
-                            f'<div style="line-height: 1.3;">'
-                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>'
-                            f'<div style="font-size: 13px; color: #666;">Buy each item where it\'s cheapest</div>'
-                            f'</div></div>'
-                            f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
-                            f'</div></div>'
-                        )
-                        
-                        st.markdown(html_split, unsafe_allow_html=True)
-                        st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
-                        if st.button(" ", use_container_width=True, key="btn_split"):
-                            st.session_state["shop_mode"] = "split"
-                            st.rerun()
-                            
+
+                        if split_available:
+                            c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
+                            c2_border_width = "2px" if not single_is_recommended else "1px"
+                            c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
+                            html_split = (
+                                f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
+                                f'{c2_badge}'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
+                                f'<div style="display: flex; align-items: center; gap: 15px;">'
+                                f'<div style="font-size: 26px;">🛍️</div>'
+                                f'<div style="line-height: 1.3;">'
+                                f'<div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>'
+                                f'<div style="font-size: 13px; color: #666;">Buy each item where it\'s cheapest</div>'
+                                f'</div></div>'
+                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                                f'</div></div>'
+                            )
+
+                            st.markdown(html_split, unsafe_allow_html=True)
+                            st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
+                            if st.button(" ", use_container_width=True, key="btn_split"):
+                                st.session_state["shop_mode"] = "split"
+                                st.rerun()
+
                         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — PRICE COVERAGE</p>", unsafe_allow_html=True)
-                        
+
                         brand_colors = {
                             "Woolworths": "#005A36",
                             "Coles": "#E31837",
-                            "Aldi": "#002D62"
+                            "Aldi": "#002D62",
                         }
-                        
+
                         max_cost = report["store_rankings"][-1]["total_cost"] if report["store_rankings"] else 1
-                        
+
                         for store in report["store_rankings"]:
                             s_name = store['store']
-                            s_rank = store['rank']
                             s_cost = store['total_cost']
                             b_color = brand_colors.get(s_name, "#555")
                             s_initial = s_name[0].upper()
                             is_best = store["is_complete"] and s_name == single_best["store_name"]
                             border_color = "#005A36" if is_best else "#E0E0E0"
                             border_width = "2px" if is_best else "1px"
-                            
+
                             if is_best:
                                 diff_html = "<div style='color: #666; font-size: 12px; margin-top: 2px;'>Best price ✓</div>"
                                 trophy = "🏆 "
                             else:
                                 diff_html = f"<div style='color: #666; font-size: 12px; margin-top: 2px;'>{store['difference_from_best']}</div>"
                                 trophy = ""
-                                
+
                             bar_width = min(100, int((s_cost / max_cost) * 100)) if max_cost > 0 else 100
                             html_card = (
                                 f'<div style="border: {border_width} solid {border_color}; border-radius: 12px; padding: 15px; margin-bottom: 12px; background-color: #FFF;">'
@@ -1681,7 +1732,7 @@ else:
                                 f'</div></div>'
                             )
                             st.markdown(html_card, unsafe_allow_html=True)
-                            
+
                 elif tab_choice == "Breakdown":
                     st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
                     
