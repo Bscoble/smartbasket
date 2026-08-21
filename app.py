@@ -1100,8 +1100,26 @@ else:
                     stored_unit = config.UNIT_VALUES[unit]
                     if stored_unit == "auto":
                         stored_unit = infer_unit(item_name)
-                    sheets_manager.save_product(user_id, item_name)
-                    if sheets_manager.add_item_to_list(item_name, int(qty), stored_unit, user_id=user_id):
+                    scraped_matches = sheets_manager.search_scraped_products(item_name)
+                    scraped_product = next(
+                        (match for match in scraped_matches if match.get("image_url")),
+                        None,
+                    )
+                    product_image = scraped_product["image_url"] if scraped_product else ""
+                    sheets_manager.save_product(
+                        user_id,
+                        item_name,
+                        product_image,
+                        category=scraped_product.get("category", "") if scraped_product else "",
+                        subcategory=scraped_product.get("subcategory", "") if scraped_product else "",
+                    )
+                    if sheets_manager.add_item_to_list(
+                        item_name,
+                        int(qty),
+                        stored_unit,
+                        product_image,
+                        user_id,
+                    ):
                         st.session_state["search_performed"] = False
                         st.session_state["search_results"] = []
                         st.rerun()
