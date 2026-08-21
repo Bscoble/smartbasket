@@ -30,9 +30,9 @@ def test_aggregate_catalog_size_over_time_pivots_by_store_and_keeps_max_per_day(
 
     table = aggregate_catalog_size_over_time(rows)
 
-    assert table[0] == ["Date", "Aldi", "Coles", "Woolworths"]
-    assert table[1] == ["2026-08-20", "", "80", "120"]
-    assert table[2] == ["2026-08-21", "40", "", "130"]
+    assert table[0] == ["Date", "Aldi", "Coles", "Woolworths", "Total"]
+    assert table[1] == ["2026-08-20", "", "80", "120", "200"]
+    assert table[2] == ["2026-08-21", "40", "", "130", "170"]
 
 
 def test_aggregate_scrape_cost_by_day_sums_per_store():

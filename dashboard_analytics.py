@@ -50,9 +50,10 @@ def aggregate_catalog_size_over_time(rows: List[List[str]]) -> List[List[str]]:
         # A store can be crawled more than once a day; keep the largest count seen.
         by_date[date][store] = max(count, by_date[date].get(store, 0))
 
-    table = [["Date"] + stores]
+    table = [["Date"] + stores + ["Total"]]
     for date in sorted(by_date.keys()):
-        table.append([date] + [str(by_date[date].get(store, "")) for store in stores])
+        store_counts = [by_date[date].get(store, 0) for store in stores]
+        table.append([date] + [str(count) if count else "" for count in store_counts] + [str(sum(store_counts))])
     return table
 
 
