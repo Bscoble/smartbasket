@@ -61,22 +61,36 @@ div[data-testid="stCheckbox"] label p {
 /* Keep recommendation cards clickable without displaying their controls. */
 div:has(> .single-store-choice-marker) + div[data-testid="element-container"] button,
 div:has(> .split-store-choice-marker) + div[data-testid="element-container"] button {
-    position: absolute !important;
-    left: 15px !important;
-    right: 15px !important;
-    bottom: 15px !important;
-    width: calc(100% - 30px) !important;
-    height: 95px !important;
-    min-height: 95px !important;
+    display: none !important;
+}
+
+div:has(> .single-store-choice-marker) + div[data-testid="element-container"],
+div:has(> .split-store-choice-marker) + div[data-testid="element-container"] {
+    display: none !important;
+}
+
+div:has(> .single-store-choice-marker),
+div:has(> .split-store-choice-marker) {
     margin: 0 !important;
-    padding: 0 !important;
-    opacity: 0 !important;
-    background: transparent !important;
-    border: 0 !important;
-    color: transparent !important;
-    box-shadow: none !important;
-    z-index: 3 !important;
-    cursor: pointer !important;
+    height: 0 !important;
+}
+
+.breakdown-store-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(145px, 0.95fr);
+    gap: 12px;
+    align-items: start;
+    padding: 6px 0;
+}
+
+.breakdown-store-name,
+.breakdown-store-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.breakdown-store-value {
+    text-align: right;
 }
 
 /* ========================================================================

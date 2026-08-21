@@ -1592,9 +1592,10 @@ else:
                                 )
                                 
                                 html_row = (
-                                    f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">'
-                                    f'<div><b>{store_initial}</b> &nbsp; {store_name}</div>'
-                                    f'<div>'
+                                    f'<div class="breakdown-store-row">'
+                                    f'<div class="breakdown-store-name"><b>{store_initial}</b> &nbsp; {store_name}'
+                                    f'<div class="breakdown-product-name">{store_data.get("product_name") or "Matched product unavailable"}</div></div>'
+                                    f'<div class="breakdown-store-value">'
                                     f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
                                     f'<b>{display_total}</b>'
                                     f'{best_badge}'
