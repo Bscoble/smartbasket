@@ -5,6 +5,7 @@ Handles price lookups from various supermarket websites using APIs and web scrap
 
 import logging
 import re
+import time
 from datetime import timedelta
 from typing import Optional, Dict, Any
 from urllib.parse import quote
@@ -24,6 +25,8 @@ from config import (
     MIN_VALID_PRICE,
     MAX_VALID_PRICE,
     PRICE_VALIDITY_THRESHOLD,
+    BULK_SCRAPE_MAX_RETRIES,
+    BULK_SCRAPE_RETRY_DELAY_SECS,
 )
 from helpers import (
     extract_price_from_text,
@@ -128,37 +131,52 @@ class PriceScraper:
         in scope. Returns size-aware names plus standard/special price info,
         since bulk listings (unlike single-item lookups) can contain several
         sizes of the same base product name.
+
+        Retries a few times on a zero-result SUCCEEDED run: retailer anti-bot/
+        JS-challenge pages can silently return an empty dataset even though the
+        actor reports success, and retrying often recovers real results.
         """
         if not self.apify_token:
             return []
 
         url_list = [urls] if isinstance(urls, str) else list(urls)
+        query_label = "|".join(url_list)
 
-        try:
-            store_config = STORES[store]
-            client = ApifyClient(self.apify_token)
-            run_input = {
-                "urls": url_list,
-                **{**APIFY_DEFAULT_CONFIG, "max_items_per_url": max_items},
-            }
-            run = client.actor(store_config["api_actor"]).call(
-                run_input=run_input,
-                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-            )
-            if run is None or run.status != "SUCCEEDED":
-                self._log_apify_usage(store, "|".join(url_list), run)
+        for attempt in range(1, BULK_SCRAPE_MAX_RETRIES + 2):
+            try:
+                store_config = STORES[store]
+                client = ApifyClient(self.apify_token)
+                run_input = {
+                    "urls": url_list,
+                    **{**APIFY_DEFAULT_CONFIG, "max_items_per_url": max_items},
+                }
+                run = client.actor(store_config["api_actor"]).call(
+                    run_input=run_input,
+                    wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                )
+                if run is None or run.status != "SUCCEEDED":
+                    self._log_apify_usage(store, query_label, run)
+                    return []
+
+                results = []
+                for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+                    info = self._extract_bulk_product_info(store, product)
+                    if info and is_valid_price(info["price"]) and info["price"] < PRICE_VALIDITY_THRESHOLD:
+                        results.append(info)
+                self._log_apify_usage(store, query_label, run, len(results))
+
+                if results or attempt > BULK_SCRAPE_MAX_RETRIES:
+                    return results
+
+                logger.info(
+                    f"Zero results for {store}/{query_label} on attempt {attempt}; retrying"
+                )
+                time.sleep(BULK_SCRAPE_RETRY_DELAY_SECS)
+            except Exception as e:
+                logger.error(f"Bulk category scrape failed for {store}/{url_list}: {e}", exc_info=True)
                 return []
 
-            results = []
-            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
-                info = self._extract_bulk_product_info(store, product)
-                if info and is_valid_price(info["price"]) and info["price"] < PRICE_VALIDITY_THRESHOLD:
-                    results.append(info)
-            self._log_apify_usage(store, "|".join(url_list), run, len(results))
-            return results
-        except Exception as e:
-            logger.error(f"Bulk category scrape failed for {store}/{url_list}: {e}", exc_info=True)
-            return []
+        return []
 
     @staticmethod
     def _extract_bulk_product_info(store: str, product: Dict) -> Optional[Dict[str, Any]]:

@@ -79,6 +79,10 @@ REQUEST_TIMEOUT = 60  # seconds, ZenRows (Aldi) HTTP request timeout
 APIFY_RUN_TIMEOUT = 90  # seconds, observed actor runs can take over a minute
 THREAD_POOL_MAX_WORKERS = 4
 THREAD_POOL_TIMEOUT = 150  # seconds, allows bounded retailer query retries
+# Bulk category/keyword scrapes occasionally return 0 results due to
+# retailer-side anti-bot/JS-challenge failures rather than a real empty page.
+BULK_SCRAPE_MAX_RETRIES = 2
+BULK_SCRAPE_RETRY_DELAY_SECS = 8
 
 # ============================================================================
 # PRODUCT DATABASE
