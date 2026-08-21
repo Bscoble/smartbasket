@@ -75,6 +75,14 @@ div:has(> .split-store-choice-marker) {
     height: 0 !important;
 }
 
+div[data-testid="element-container"]:has(div[data-testid="stButton"] button p:empty) {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 .breakdown-store-row {
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(138px, 0.95fr);
