@@ -23,6 +23,7 @@ from google.oauth2.service_account import Credentials
 from config import SPREADSHEET_ID, GOOGLE_SCOPES, WORKSHEET_NAMES, WORKSHEET_CONFIG, STORE_NAMES
 from modules.sheets import SheetsManager
 from dashboard_analytics import (
+    aggregate_category_coverage,
     aggregate_catalog_size_over_time,
     aggregate_scrape_cost_by_day,
     aggregate_scrape_issues_by_day,
@@ -93,12 +94,15 @@ def build_dashboard_tables(spreadsheet: gspread.Spreadsheet) -> list:
     """
     _refresh_todays_catalog_size(spreadsheet)
     catalog_rows = _read_rows(spreadsheet, "catalog_size_history")
+    standard_rows = _read_rows(spreadsheet, "standard_prices")
+    daily_special_rows = _read_rows(spreadsheet, "daily_specials")
     scrape_rows = _read_rows(spreadsheet, "scrape_log")
     event_rows = _read_rows(spreadsheet, "user_events")
     user_rows = _read_rows(spreadsheet, "users")
 
     return [
         ("Catalog Size Over Time", aggregate_catalog_size_over_time(catalog_rows), "LINE"),
+        ("Category Coverage - Standard Prices & Daily Specials", aggregate_category_coverage(standard_rows, daily_special_rows), "COLUMN"),
         ("Daily Scrape Cost by Store (USD)", aggregate_scrape_cost_by_day(scrape_rows), "COLUMN"),
         ("Scraping Issues per Day", aggregate_scrape_issues_by_day(scrape_rows), "COLUMN"),
         ("Store Health - Issue Rate %", aggregate_store_health(scrape_rows), "COLUMN"),

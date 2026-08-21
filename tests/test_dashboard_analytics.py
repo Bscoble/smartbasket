@@ -6,6 +6,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from dashboard_analytics import (
+    aggregate_category_coverage,
     aggregate_catalog_size_over_time,
     aggregate_scrape_cost_by_day,
     aggregate_scrape_issues_by_day,
@@ -33,6 +34,32 @@ def test_aggregate_catalog_size_over_time_pivots_by_store_and_keeps_max_per_day(
     assert table[0] == ["Date", "Aldi", "Coles", "Woolworths", "Total"]
     assert table[1] == ["2026-08-20", "", "80", "120", "200"]
     assert table[2] == ["2026-08-21", "40", "", "130", "170"]
+
+
+def test_aggregate_category_coverage_counts_standard_and_specials_by_store():
+    standard_rows = [
+        ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+        ["Aldi", "milk 2l", "4.50", "Milk 2L", "2026-08-21 10:00:00", "", "", "", "Dairy", "Milk"],
+        ["Aldi", "cheese 250g", "5.00", "Cheese 250g", "2026-08-21 10:00:00", "", "", "", "Dairy", "Cheese"],
+        ["Coles", "milk 2l", "5.50", "Milk 2L", "2026-08-21 10:00:00", "", "", "", "Dairy", "Milk"],
+        ["Woolworths", "biscuits 250g", "3.50", "Biscuits 250g", "2026-08-21 10:00:00", "", "", "", "Pantry", "Biscuits"],
+    ]
+    special_rows = [
+        ["Store", "Item", "Price", "Product Name", "Date"],
+        ["Aldi", "milk 2l", "4.00", "Milk 2L", "2026-08-21"],
+        ["Coles", "milk 2l", "4.50", "Milk 2L", "2026-08-21"],
+        ["Coles", "unmatched product", "2.00", "Unmatched Product", "2026-08-21"],
+    ]
+
+    table = aggregate_category_coverage(standard_rows, special_rows)
+
+    assert table[0] == [
+        "Category", "Aldi Standard", "Aldi Specials", "Coles Standard", "Coles Specials",
+        "Woolworths Standard", "Woolworths Specials", "Total Standard", "Total Specials",
+    ]
+    assert table[1] == ["Dairy", "2", "1", "1", "1", "0", "0", "3", "2"]
+    assert table[2] == ["Pantry", "0", "0", "0", "0", "1", "0", "1", "0"]
+    assert table[3] == ["Uncategorised", "0", "0", "0", "1", "0", "0", "0", "1"]
 
 
 def test_aggregate_scrape_cost_by_day_sums_per_store():

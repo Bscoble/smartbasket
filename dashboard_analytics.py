@@ -57,6 +57,51 @@ def aggregate_catalog_size_over_time(rows: List[List[str]]) -> List[List[str]]:
     return table
 
 
+def aggregate_category_coverage(standard_rows: List[List[str]], daily_special_rows: List[List[str]]) -> List[List[str]]:
+    """Build current Standard Prices and Daily Specials counts by category and store."""
+    standard_data = standard_rows[1:] if standard_rows else []
+    specials_data = daily_special_rows[1:] if daily_special_rows else []
+    stores = sorted({row[0].strip() for row in standard_data + specials_data if len(row) >= 2 and row[0].strip()})
+    categories_by_product = {}
+    counts: dict = defaultdict(lambda: defaultdict(lambda: {"standard": 0, "specials": 0}))
+
+    for row in standard_data:
+        if len(row) < 2 or not row[0].strip() or not row[1].strip():
+            continue
+        store = row[0].strip()
+        item = row[1].strip().lower()
+        category = row[8].strip() if len(row) >= 9 and row[8].strip() else "Uncategorised"
+        categories_by_product[(store, item)] = category
+        counts[category][store]["standard"] += 1
+
+    for row in specials_data:
+        if len(row) < 2 or not row[0].strip() or not row[1].strip():
+            continue
+        store = row[0].strip()
+        item = row[1].strip().lower()
+        category = categories_by_product.get((store, item), "Uncategorised")
+        counts[category][store]["specials"] += 1
+
+    headers = ["Category"]
+    for store in stores:
+        headers.extend([f"{store} Standard", f"{store} Specials"])
+    headers.extend(["Total Standard", "Total Specials"])
+
+    table = [headers]
+    for category in sorted(counts.keys()):
+        row = [category]
+        total_standard = 0
+        total_specials = 0
+        for store in stores:
+            standard_count = counts[category][store]["standard"]
+            special_count = counts[category][store]["specials"]
+            row.extend([str(standard_count), str(special_count)])
+            total_standard += standard_count
+            total_specials += special_count
+        table.append(row + [str(total_standard), str(total_specials)])
+    return table
+
+
 def aggregate_scrape_cost_by_day(rows: List[List[str]]) -> List[List[str]]:
     """Build a Date x Store scrape-cost table for the daily cost chart."""
     data_rows = rows[1:] if rows else []
