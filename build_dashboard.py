@@ -3,6 +3,10 @@ Builds/refreshes the "Performance Dashboard" tab in Google Sheets: writes a
 set of small summary tables (computed by dashboard_analytics.py from the raw
 log sheets) and adds native Google Sheets charts anchored next to each table.
 
+Every run also re-derives today's catalog size straight from Standard Prices
+and logs it to Catalog Size History, so that chart never has a gap purely
+because the overnight crawl workflow failed to log it that day.
+
 Run this locally or on a schedule, any time after the log sheets (Catalog
 Size History, Scrape Log, User Events, Users) have real data in them:
 
@@ -16,7 +20,8 @@ import tomllib
 import gspread
 from google.oauth2.service_account import Credentials
 
-from config import SPREADSHEET_ID, GOOGLE_SCOPES, WORKSHEET_NAMES, WORKSHEET_CONFIG
+from config import SPREADSHEET_ID, GOOGLE_SCOPES, WORKSHEET_NAMES, WORKSHEET_CONFIG, STORE_NAMES
+from modules.sheets import SheetsManager
 from dashboard_analytics import (
     aggregate_catalog_size_over_time,
     aggregate_scrape_cost_by_day,
@@ -66,11 +71,27 @@ def _read_rows(spreadsheet: gspread.Spreadsheet, worksheet_key: str) -> list:
     return ws.get_all_values()
 
 
+def _refresh_todays_catalog_size(spreadsheet: gspread.Spreadsheet) -> None:
+    """
+    Log today's per-store catalog size straight from Standard Prices (the
+    only source of truth for current holdings) before charting. Standard
+    Prices itself has no history, so it can't replace Catalog Size History
+    as the chart's data source - but this keeps that history gap-free even
+    on a day the crawl workflow fails to log it.
+    """
+    sheets_manager = SheetsManager(spreadsheet)
+    standard_prices = sheets_manager.load_standard_prices()
+    for store in STORE_NAMES:
+        store_count = sum(1 for (s, _) in standard_prices if s == store)
+        sheets_manager.log_catalog_size(store, store_count)
+
+
 def build_dashboard_tables(spreadsheet: gspread.Spreadsheet) -> list:
     """
     Read all source log sheets and compute each dashboard table.
     Returns a list of (title, table, chart_type) tuples in display order.
     """
+    _refresh_todays_catalog_size(spreadsheet)
     catalog_rows = _read_rows(spreadsheet, "catalog_size_history")
     scrape_rows = _read_rows(spreadsheet, "scrape_log")
     event_rows = _read_rows(spreadsheet, "user_events")
