@@ -65,7 +65,7 @@ def get_live_price(store, item_name, api_keys):
             run_input = {
                 "urls": [search_url],
                 "ignore_url_failures": True,
-                "max_items_per_url": 1,
+                "max_items_per_url": 20,
                 "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]}
             }
             

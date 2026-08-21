@@ -6,6 +6,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from modules.pricing import PriceScraper
+from config import APIFY_DEFAULT_CONFIG
 from helpers import build_store_search_candidates, build_store_search_query
 
 
@@ -30,6 +31,10 @@ def test_extract_apify_price_supports_nested_price_shapes():
 
     assert scraper._extract_apify_price({"price": {"amount": "4.99"}}) == 4.99
     assert scraper._extract_apify_price({"offers": [{"price": "$6.50"}]}) == 6.5
+
+
+def test_apify_search_returns_multiple_results_for_relevance_matching():
+    assert APIFY_DEFAULT_CONFIG["max_items_per_url"] > 1
 
 
 def test_build_store_search_query_keeps_brand_and_size():

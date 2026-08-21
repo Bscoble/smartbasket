@@ -63,7 +63,7 @@ ZENROWS_PARAMS = {
 
 APIFY_DEFAULT_CONFIG = {
     "ignore_url_failures": True,
-    "max_items_per_url": 1,
+    "max_items_per_url": 20,
     "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
 }
 
