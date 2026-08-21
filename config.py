@@ -19,6 +19,7 @@ STORES = {
         "initial": "C",
         "api_actor": "stealth_mode/coles-product-search-scraper",
         "search_url": "https://www.coles.com.au/search/products?q={}",
+        "image_base_url": "https://productimages.coles.com.au/productimages",
     },
     "Aldi": {
         "color": "#002D62",
@@ -109,6 +110,7 @@ WORKSHEET_NAMES = {
     "product_catalog": "Product Catalog",
     "standard_prices": "Standard Prices",
     "daily_specials": "Daily Specials",
+    "crawl_state": "Crawl State",
 }
 
 WORKSHEET_CONFIG = {
@@ -116,8 +118,9 @@ WORKSHEET_CONFIG = {
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
     "product_catalog": {"rows": "5000", "cols": "5"},
-    "standard_prices": {"rows": "5000", "cols": "5"},
+    "standard_prices": {"rows": "5000", "cols": "8"},
     "daily_specials": {"rows": "2000", "cols": "5"},
+    "crawl_state": {"rows": "500", "cols": "4"},
 }
 
 # ============================================================================

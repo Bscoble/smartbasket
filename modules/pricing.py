@@ -95,6 +95,94 @@ class PriceScraper:
             logger.error(f"Error fetching structured price for {store}/{item_name}: {e}", exc_info=True)
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
 
+    def get_bulk_products(self, store: str, urls, max_items: int = 20) -> "list[Dict[str, Any]]":
+        """
+        Scrape one or more listing/search-result pages in a single Apify run and
+        return every valid product found (accepts a single URL string or a list,
+        e.g. several &pageNumber= variants of the same search for pagination).
+
+        Unlike _get_apify_price_result, this has no query to match against, so
+        it skips relevance filtering entirely - every product on the page is
+        in scope. Returns size-aware names plus standard/special price info,
+        since bulk listings (unlike single-item lookups) can contain several
+        sizes of the same base product name.
+        """
+        if not self.apify_token:
+            return []
+
+        url_list = [urls] if isinstance(urls, str) else list(urls)
+
+        try:
+            store_config = STORES[store]
+            client = ApifyClient(self.apify_token)
+            run_input = {
+                "urls": url_list,
+                **{**APIFY_DEFAULT_CONFIG, "max_items_per_url": max_items},
+            }
+            run = client.actor(store_config["api_actor"]).call(
+                run_input=run_input,
+                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+            )
+            if run is None or run.status != "SUCCEEDED":
+                return []
+
+            results = []
+            for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
+                info = self._extract_bulk_product_info(store, product)
+                if info and is_valid_price(info["price"]) and info["price"] < PRICE_VALIDITY_THRESHOLD:
+                    results.append(info)
+            return results
+        except Exception as e:
+            logger.error(f"Bulk category scrape failed for {store}/{url_list}: {e}", exc_info=True)
+            return []
+
+    @staticmethod
+    def _extract_bulk_product_info(store: str, product: Dict) -> Optional[Dict[str, Any]]:
+        """Build a size-aware product record from a category/listing item, per store schema."""
+        if store == "Woolworths":
+            product_name = (product.get("display_name") or product.get("name") or "").strip()
+            price = PriceScraper._coerce_apify_price(product.get("price"))
+            standard_price = PriceScraper._coerce_apify_price(product.get("was_price")) or price
+            is_special = bool(product.get("is_on_special"))
+            brand = None
+            unit_price = PriceScraper._coerce_apify_price(product.get("cup_price"))
+            unit_label = product.get("cup_measure") or ""
+            image_url = product.get("medium_image_file") or product.get("large_image_file") or ""
+        elif store == "Coles":
+            name = (product.get("name") or "").strip()
+            size = (product.get("size") or "").strip()
+            product_name = f"{name} {size}".strip() if size else name
+            pricing = product.get("pricing") or {}
+            price = PriceScraper._coerce_apify_price(pricing.get("now"))
+            was = PriceScraper._coerce_apify_price(pricing.get("was"))
+            standard_price = was if was else price
+            is_special = bool(pricing.get("online_special")) or bool(was)
+            brand = product.get("brand")
+            unit_info = pricing.get("unit") or {}
+            unit_price = PriceScraper._coerce_apify_price(unit_info.get("price"))
+            measure_qty = unit_info.get("of_measure_quantity")
+            measure_units = unit_info.get("of_measure_units")
+            unit_label = f"{measure_qty}{measure_units}" if measure_qty and measure_units else ""
+            image_uris = product.get("image_uris") or []
+            image_path = image_uris[0].get("uri") if image_uris and isinstance(image_uris[0], dict) else ""
+            image_url = f"{STORES['Coles']['image_base_url']}{image_path}" if image_path else ""
+        else:
+            return None
+
+        if not product_name or price is None:
+            return None
+
+        return {
+            "product_name": product_name,
+            "brand": brand,
+            "price": price,
+            "standard_price": standard_price,
+            "is_special": is_special,
+            "unit_price": unit_price,
+            "unit_label": unit_label,
+            "image_url": image_url,
+        }
+
     def _get_apify_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
         if not self.apify_token:
             return {"price": None, "status": "configuration", "message": "Apify is not configured"}

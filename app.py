@@ -71,7 +71,7 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
             [
                 "Confirm SPREADSHEET_ID is correct in config.py.",
                 "Share the spreadsheet with the service-account client_email as Editor.",
-                "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
+             "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
             ],
         )
 

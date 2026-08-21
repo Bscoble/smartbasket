@@ -269,7 +269,7 @@ class SheetsManager:
             )
 
             if ws.row_count == 1:
-                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified"])
+                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"])
                 return prices
 
             data = self._cached_values(worksheet_name, ws)
@@ -277,10 +277,16 @@ class SheetsManager:
                 if len(row) >= 5:
                     store, item, price_str, product_name, verified_str = row[0], row[1], row[2], row[3], row[4]
                     try:
+                        unit_price = float(row[5]) if len(row) >= 6 and row[5] else None
+                        unit_label = row[6] if len(row) >= 7 else ""
+                        image_url = row[7] if len(row) >= 8 else ""
                         prices[(store, item.lower())] = {
                             "price": float(price_str),
                             "product_name": product_name,
                             "last_verified": datetime.strptime(verified_str, DATETIME_TIME_FORMAT),
+                            "unit_price": unit_price,
+                            "unit_label": unit_label,
+                            "image_url": image_url,
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
@@ -297,7 +303,16 @@ class SheetsManager:
             return False
         return (datetime.now() - last_verified) < timedelta(days=STANDARD_PRICE_MAX_AGE_DAYS)
 
-    def upsert_standard_price(self, store: str, item_name: str, price: float, product_name: str = "") -> bool:
+    def upsert_standard_price(
+        self,
+        store: str,
+        item_name: str,
+        price: float,
+        product_name: str = "",
+        unit_price: Optional[float] = None,
+        unit_label: str = "",
+        image_url: str = "",
+    ) -> bool:
         """Add or update a single standard price entry, e.g. from an admin/population tool."""
         try:
             worksheet_name = WORKSHEET_NAMES["standard_prices"]
@@ -307,7 +322,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
             data = self._cached_values(worksheet_name, ws)
-            headers = ["Store", "Item", "Price", "Product Name", "Last Verified"]
+            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"]
             if not data:
                 ws.append_row(headers)
                 data = [headers]
@@ -319,6 +334,9 @@ class SheetsManager:
                 str(price),
                 product_name or item_name,
                 datetime.now().strftime(DATETIME_TIME_FORMAT),
+                str(unit_price) if unit_price is not None else "",
+                unit_label,
+                image_url,
             ]
 
             existing_row = None
@@ -328,7 +346,7 @@ class SheetsManager:
                     break
 
             if existing_row:
-                ws.update(f"A{existing_row}:E{existing_row}", [values])
+                ws.update(f"A{existing_row}:H{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -347,8 +365,9 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
 
-            rows = [["Store", "Item", "Price", "Product Name", "Last Verified"]]
+            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL"]]
             for (store, item), data in prices.items():
+                unit_price = data.get("unit_price")
                 rows.append(
                     [
                         store,
@@ -356,6 +375,9 @@ class SheetsManager:
                         str(data["price"]),
                         data.get("product_name", ""),
                         data["last_verified"].strftime(DATETIME_TIME_FORMAT),
+                        str(unit_price) if unit_price is not None else "",
+                        data.get("unit_label", ""),
+                        data.get("image_url", ""),
                     ]
                 )
 
@@ -427,6 +449,65 @@ class SheetsManager:
             return True
         except Exception as e:
             logger.error(f"Error saving daily specials: {e}", exc_info=True)
+            return False
+
+    # ========================================================================
+    # CRAWL STATE (resumable pagination cursor for bulk category crawls)
+    # ========================================================================
+
+    def load_crawl_state(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
+        """Load the last page scraped per (store, category) so crawls can resume."""
+        state = {}
+        try:
+            worksheet_name = WORKSHEET_NAMES["crawl_state"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["crawl_state"]["rows"],
+                cols=WORKSHEET_CONFIG["crawl_state"]["cols"],
+            )
+
+            if ws.row_count == 1:
+                ws.append_row(["Store", "Category", "Last Page Scraped", "Last Run"])
+                return state
+
+            data = self._cached_values(worksheet_name, ws)
+            for row in data[1:]:
+                if len(row) >= 3:
+                    store, category, last_page_str = row[0], row[1], row[2]
+                    try:
+                        state[(store, category)] = {
+                            "last_page": int(last_page_str),
+                            "last_run": row[3] if len(row) >= 4 else "",
+                        }
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Skipping invalid crawl state row: {row}, error: {e}")
+
+            logger.info(f"Loaded {len(state)} crawl state entries")
+        except Exception as e:
+            logger.error(f"Error loading crawl state: {e}", exc_info=True)
+        return state
+
+    def save_crawl_state(self, state: Dict[Tuple[str, str], Dict[str, Any]]) -> bool:
+        """Bulk-overwrite the crawl state table with updated pagination cursors."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["crawl_state"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["crawl_state"]["rows"],
+                cols=WORKSHEET_CONFIG["crawl_state"]["cols"],
+            )
+
+            rows = [["Store", "Category", "Last Page Scraped", "Last Run"]]
+            for (store, category), data in state.items():
+                rows.append([store, category, str(data["last_page"]), data.get("last_run", "")])
+
+            ws.clear()
+            ws.append_rows(rows)
+            self._invalidate_values_cache(worksheet_name)
+            logger.info(f"Saved {len(state)} crawl state entries")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving crawl state: {e}", exc_info=True)
             return False
     
     # ========================================================================
