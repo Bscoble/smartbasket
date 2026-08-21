@@ -71,7 +71,7 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
             [
                 "Confirm SPREADSHEET_ID is correct in config.py.",
                 "Share the spreadsheet with the service-account client_email as Editor.",
-             "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
+                "Ensure the Users, Shopping List, and Price Cache sheets are accessible.",
             ],
         )
 
@@ -266,6 +266,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     daily_specials = sheets_manager.load_daily_specials()
     standard_prices = sheets_manager.load_standard_prices()
     cache_updated = False
+    standard_prices_updated = False
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
@@ -398,12 +399,20 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
                     item_store_prices[store] = price
                     if price is not None:
+                        confirmed_product_name = item_store_status.get(store, {}).get("product_name") or item_name
                         price_cache[(store, item_lower)] = {
                             "price": price,
                             "timestamp": datetime.now(),
-                            "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
+                            "product_name": confirmed_product_name,
                         }
                         cache_updated = True
+                        # Promote confirmed live prices into the standard-price reference table.
+                        standard_prices[(store, item_lower)] = {
+                            "price": price,
+                            "product_name": confirmed_product_name,
+                            "last_verified": datetime.now(),
+                        }
+                        standard_prices_updated = True
             except concurrent.futures.TimeoutError:
                 pending_stores = set(stores_needing_scrape) - completed_stores
                 logger.warning(
@@ -485,6 +494,10 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     if cache_updated:
         status_text.text("Saving updated prices to cache...")
         sheets_manager.save_price_cache(price_cache)
+
+    if standard_prices_updated:
+        status_text.text("Updating standard price reference table...")
+        sheets_manager.save_standard_prices(standard_prices)
     
     status_text.empty()
     progress_bar.empty()

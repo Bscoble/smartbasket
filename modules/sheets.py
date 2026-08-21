@@ -337,6 +337,37 @@ class SheetsManager:
             logger.error(f"Error upserting standard price: {e}", exc_info=True)
             return False
 
+    def save_standard_prices(self, prices: Dict[Tuple[str, str], Dict[str, Any]]) -> bool:
+        """Bulk-overwrite the standard price table from an in-memory dict (avoids one write per item)."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["standard_prices"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
+                cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
+            )
+
+            rows = [["Store", "Item", "Price", "Product Name", "Last Verified"]]
+            for (store, item), data in prices.items():
+                rows.append(
+                    [
+                        store,
+                        item,
+                        str(data["price"]),
+                        data.get("product_name", ""),
+                        data["last_verified"].strftime(DATETIME_TIME_FORMAT),
+                    ]
+                )
+
+            ws.clear()
+            ws.append_rows(rows)
+            self._invalidate_values_cache(worksheet_name)
+            logger.info(f"Saved {len(prices)} standard price entries")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving standard prices: {e}", exc_info=True)
+            return False
+
     # ========================================================================
     # DAILY SPECIALS (short-lived, refreshed once per day)
     # ========================================================================
