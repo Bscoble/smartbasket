@@ -87,6 +87,7 @@ def revalidate_stale_prices() -> None:
             "product_name": result.get("product_name") or entry.get("product_name") or item,
             "last_verified": datetime.now(),
             **merge_brand_metadata(entry, result),
+            "barcode": result.get("barcode") or entry.get("barcode", ""),
         }
         successful += 1
 

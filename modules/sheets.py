@@ -19,8 +19,15 @@ from config import (
     SHEETS_READ_CACHE_SECONDS,
     STANDARD_PRICE_MAX_AGE_DAYS,
 )
+from helpers import normalize_gtin
 
 logger = logging.getLogger(__name__)
+
+STANDARD_PRICE_HEADERS = [
+    "Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price",
+    "Unit Label", "Image URL", "Category", "Subcategory", "Brand",
+    "Brand Source", "Brand Confidence", "Barcode",
+]
 
 
 class SheetsManager:
@@ -274,7 +281,7 @@ class SheetsManager:
             )
 
             if ws.row_count == 1:
-                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"])
+                ws.append_row(STANDARD_PRICE_HEADERS)
                 return prices
 
             data = self._cached_values(worksheet_name, ws)
@@ -290,6 +297,7 @@ class SheetsManager:
                         brand = row[10] if len(row) >= 11 else ""
                         brand_source = row[11] if len(row) >= 12 else ""
                         brand_confidence = row[12] if len(row) >= 13 else ""
+                        barcode = normalize_gtin(row[13]) if len(row) >= 14 else ""
                         prices[(store, item.lower())] = {
                             "price": float(price_str),
                             "product_name": product_name,
@@ -302,6 +310,7 @@ class SheetsManager:
                             "brand": brand,
                             "brand_source": brand_source,
                             "brand_confidence": brand_confidence,
+                            "barcode": barcode,
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
@@ -332,6 +341,7 @@ class SheetsManager:
         brand: str = "",
         brand_source: str = "",
         brand_confidence: str = "",
+        barcode: str = "",
     ) -> bool:
         """Add or update a single standard price entry, e.g. from an admin/population tool."""
         try:
@@ -342,12 +352,12 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
             data = self._cached_values(worksheet_name, ws)
-            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"]
+            headers = STANDARD_PRICE_HEADERS
             if not data:
                 ws.append_row(headers)
                 data = [headers]
             elif data[0] != headers:
-                ws.update("A1:M1", [headers])
+                ws.update("A1:N1", [headers])
                 data[0] = headers
 
             item_lower = item_name.strip().lower()
@@ -365,6 +375,7 @@ class SheetsManager:
                 brand,
                 brand_source,
                 brand_confidence,
+                normalize_gtin(barcode),
             ]
 
             existing_row = None
@@ -374,7 +385,7 @@ class SheetsManager:
                     break
 
             if existing_row:
-                ws.update(f"A{existing_row}:M{existing_row}", [values])
+                ws.update(f"A{existing_row}:N{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -393,7 +404,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
 
-            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"]]
+            rows = [STANDARD_PRICE_HEADERS]
             for (store, item), data in prices.items():
                 unit_price = data.get("unit_price")
                 rows.append(
@@ -411,6 +422,7 @@ class SheetsManager:
                         data.get("brand", ""),
                         data.get("brand_source", ""),
                         data.get("brand_confidence", ""),
+                        normalize_gtin(data.get("barcode", "")),
                     ]
                 )
 
@@ -422,6 +434,42 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error saving standard prices: {e}", exc_info=True)
             return False
+
+    def find_product_by_barcode(self, barcode: str) -> Optional[Dict[str, Any]]:
+        """Return the best locally scraped product with an exact barcode match."""
+        normalized_barcode = normalize_gtin(barcode)
+        if not normalized_barcode:
+            return None
+
+        try:
+            worksheet_name = WORKSHEET_NAMES["standard_prices"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
+                cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
+            )
+            matches = []
+            for row in self._cached_values(worksheet_name, ws)[1:]:
+                if len(row) < 14 or normalize_gtin(row[13]) != normalized_barcode:
+                    continue
+                matches.append({
+                    "title": (row[3] or row[1]).strip(),
+                    "image_url": row[7].strip(),
+                    "category": row[8].strip(),
+                    "subcategory": row[9].strip(),
+                    "brand": row[10].strip(),
+                    "barcode": normalized_barcode,
+                    "store": row[0].strip(),
+                })
+
+            if not matches:
+                return None
+            best = max(matches, key=lambda match: bool(match["image_url"]))
+            best["stores"] = sorted({match["store"] for match in matches if match["store"]})
+            return best
+        except Exception as e:
+            logger.error(f"Error searching local product barcode: {e}", exc_info=True)
+            return None
 
     # ========================================================================
     # DAILY SPECIALS (short-lived, refreshed once per day)

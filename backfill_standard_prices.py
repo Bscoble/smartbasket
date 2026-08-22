@@ -181,6 +181,7 @@ def backfill() -> None:
                     "product_name": result.get("product_name") or item_name,
                     "last_verified": datetime.now(),
                     **merge_brand_metadata(existing, result),
+                    "barcode": result.get("barcode") or existing.get("barcode", ""),
                 }
                 succeeded += 1
                 print(f"  OK    {store:<12} ${price:.2f}")

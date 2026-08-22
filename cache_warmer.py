@@ -97,6 +97,7 @@ def warm_the_cache():
                             "product_name": product_name,
                             "last_verified": now,
                             **merge_brand_metadata(existing, result),
+                            "barcode": result.get("barcode") or existing.get("barcode", ""),
                         }
                         print(f"✅ {store} updated {item}: ${price}")
                     else:

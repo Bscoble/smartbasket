@@ -35,6 +35,7 @@ from helpers import (
     get_greeting,
     validate_email,
     infer_unit,
+    normalize_gtin,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.brands import merge_brand_metadata
@@ -245,6 +246,40 @@ def split_shopping_available(report: dict) -> bool:
     return len(cheapest_stores) > 1
 
 
+def resolve_scanned_product(sheets: SheetsManager, barcode: str) -> Optional[dict]:
+    """Resolve a barcode locally first, then reconcile an external fallback locally."""
+    normalized_barcode = normalize_gtin(barcode)
+    if not normalized_barcode:
+        return None
+
+    local_product = sheets.find_product_by_barcode(normalized_barcode)
+    if local_product:
+        return {**local_product, "source": "local_barcode"}
+
+    product_name, product_image = ProductLookup.lookup_barcode_product(normalized_barcode)
+    if not product_name:
+        return None
+
+    local_matches = sheets.search_scraped_products(product_name, limit=1)
+    if local_matches:
+        return {
+            **local_matches[0],
+            "barcode": normalized_barcode,
+            "source": "local_name_match",
+        }
+
+    return {
+        "title": product_name,
+        "image_url": product_image or "",
+        "category": "",
+        "subcategory": "",
+        "brand": "",
+        "stores": [],
+        "barcode": normalized_barcode,
+        "source": "open_food_facts",
+    }
+
+
 def summarize_store_health(diagnostics: list) -> dict:
     """Return a concise per-store health summary for scraper diagnostics."""
     summary = {}
@@ -399,6 +434,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                                 "brand": result.get("brand", ""),
                                 "brand_source": result.get("brand_source", ""),
                                 "brand_confidence": result.get("brand_confidence", ""),
+                                "barcode": result.get("barcode", ""),
                             }
                         else:
                             price = result
@@ -447,6 +483,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             "product_name": confirmed_product_name,
                             "last_verified": datetime.now(),
                             **merge_brand_metadata(existing, item_store_status.get(store)),
+                            "barcode": item_store_status.get(store, {}).get("barcode") or existing.get("barcode", ""),
                         }
                         standard_prices_updated = True
             except concurrent.futures.TimeoutError:
@@ -1275,16 +1312,13 @@ else:
                         barcode_number = BarcodeScanner.decode_barcode(camera_photo)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
-                            product_name, product_image = ProductLookup.lookup_barcode_product(barcode_number)
-                            if product_name:
-                                scraped_matches = sheets_manager.search_scraped_products(product_name)
-                                scraped_product = next(
-                                    (match for match in scraped_matches if match.get("image_url")),
-                                    None,
-                                )
-                                if scraped_product:
-                                    product_image = scraped_product["image_url"]
+                            scanned_product = resolve_scanned_product(sheets_manager, barcode_number)
+                            if scanned_product:
+                                product_name = scanned_product["title"]
+                                product_image = scanned_product.get("image_url", "")
                                 st.info(f"Found: **{product_name}**")
+                                if scanned_product.get("stores"):
+                                    st.caption(f"Available in catalogue: {', '.join(scanned_product['stores'])}")
                                 if product_image:
                                     st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
@@ -1292,8 +1326,8 @@ else:
                                         user_id,
                                         product_name,
                                         product_image or "",
-                                        category=scraped_product.get("category", "") if scraped_product else "",
-                                        subcategory=scraped_product.get("subcategory", "") if scraped_product else "",
+                                        category=scanned_product.get("category", ""),
+                                        subcategory=scanned_product.get("subcategory", ""),
                                     )
                                     if sheets_manager.add_item_to_list(
                                         product_name, 1, "each", product_image or "", user_id

@@ -76,6 +76,7 @@ def test_load_standard_prices_keeps_brand_metadata_and_supports_legacy_rows():
     assert prices[("Aldi", "milk")]["brand"] == ""
     assert prices[("Aldi", "milk")]["brand_source"] == ""
     assert prices[("Aldi", "milk")]["brand_confidence"] == ""
+    assert prices[("Aldi", "milk")]["barcode"] == ""
 
 
 def test_save_standard_prices_writes_brand_metadata_columns():
@@ -90,11 +91,12 @@ def test_save_standard_prices_writes_brand_metadata_columns():
             "brand": "Choceur",
             "brand_source": "retailer",
             "brand_confidence": "high",
+            "barcode": "4000417025005",
         }
     })
 
-    assert spreadsheet.worksheet_value.values[0][-3:] == ["Brand", "Brand Source", "Brand Confidence"]
-    assert spreadsheet.worksheet_value.values[1][-3:] == ["Choceur", "retailer", "high"]
+    assert spreadsheet.worksheet_value.values[0][-4:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode"]
+    assert spreadsheet.worksheet_value.values[1][-4:] == ["Choceur", "retailer", "high", "4000417025005"]
 
 
 def test_upsert_standard_price_migrates_legacy_header():
@@ -112,7 +114,24 @@ def test_upsert_standard_price_migrates_legacy_header():
         brand="Coles",
         brand_source="retailer",
         brand_confidence="high",
+        barcode="9300601433247",
     )
 
-    assert spreadsheet.worksheet_value.values[0][-3:] == ["Brand", "Brand Source", "Brand Confidence"]
-    assert spreadsheet.worksheet_value.values[1][-3:] == ["Coles", "retailer", "high"]
+    assert spreadsheet.worksheet_value.values[0][-4:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode"]
+    assert spreadsheet.worksheet_value.values[1][-4:] == ["Coles", "retailer", "high", "9300601433247"]
+
+
+def test_find_product_by_barcode_returns_local_product_and_store_coverage():
+    spreadsheet = FakeSpreadsheet([
+        ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence", "Barcode"],
+        ["Coles", "tim tam original 200g", "4.50", "Arnott's Tim Tam Original 200g", "2026-08-21 12:00:00", "", "", "", "Snacks", "Biscuits", "Arnott's", "retailer", "high", "9310072026817"],
+        ["Woolworths", "tim tam original 200g", "4.80", "Arnott's Tim Tam Original 200g", "2026-08-21 12:00:00", "", "", "https://scraped.test/tim-tam.png", "Snacks", "Biscuits", "Arnott's", "retailer", "high", "9310072026817"],
+    ])
+    manager = SheetsManager(spreadsheet)
+
+    result = manager.find_product_by_barcode("9310 0720 2681 7")
+
+    assert result["title"] == "Arnott's Tim Tam Original 200g"
+    assert result["image_url"] == "https://scraped.test/tim-tam.png"
+    assert result["stores"] == ["Coles", "Woolworths"]
+    assert manager.find_product_by_barcode("9999999999999") is None

@@ -129,6 +129,7 @@ def test_extract_woolworths_bulk_product_keeps_explicit_brand():
         "display_name": "Dairy Farmers Full Cream Milk 2L",
         "brand_name": "Dairy Farmers",
         "price": 4.80,
+        "gtin": "9300601433247",
     }
 
     result = scraper._extract_bulk_product_info("Woolworths", product)
@@ -136,6 +137,13 @@ def test_extract_woolworths_bulk_product_keeps_explicit_brand():
     assert result["brand"] == "Dairy Farmers"
     assert result["brand_source"] == "retailer"
     assert result["brand_confidence"] == "high"
+    assert result["barcode"] == "9300601433247"
+
+
+def test_extract_product_barcode_accepts_gtin_fields_but_not_internal_skus():
+    assert PriceScraper._extract_product_barcode({"barcodes": [{"ean13": "9310072026817"}]}) == "9310072026817"
+    assert PriceScraper._extract_product_barcode({"sku": "9310072026817"}) == ""
+    assert PriceScraper._extract_product_barcode({"barcode": "9310072026818"}) == ""
 
 
 def test_split_shopping_available_requires_multiple_cheapest_stores():
@@ -150,6 +158,79 @@ def test_split_shopping_available_requires_multiple_cheapest_stores():
 
     assert split_shopping_available(single_store_report) is False
     assert split_shopping_available(multi_store_report) is True
+
+
+def test_resolve_scanned_product_uses_exact_local_barcode_without_remote_lookup(monkeypatch):
+    import app
+
+    class FakeSheets:
+        def find_product_by_barcode(self, barcode):
+            assert barcode == "9310072026817"
+            return {
+                "title": "Arnott's Tim Tam Original 200g",
+                "image_url": "https://scraped.test/tim-tam.png",
+                "category": "Snacks",
+                "subcategory": "Biscuits",
+                "stores": ["Coles", "Woolworths"],
+            }
+
+    monkeypatch.setattr(
+        app.ProductLookup,
+        "lookup_barcode_product",
+        lambda _barcode: (_ for _ in ()).throw(AssertionError("remote lookup should not run")),
+    )
+
+    result = app.resolve_scanned_product(FakeSheets(), "9310072026817")
+
+    assert result["title"] == "Arnott's Tim Tam Original 200g"
+    assert result["source"] == "local_barcode"
+
+
+def test_resolve_scanned_product_reconciles_remote_name_to_local_catalogue(monkeypatch):
+    import app
+
+    class FakeSheets:
+        def find_product_by_barcode(self, _barcode):
+            return None
+
+        def search_scraped_products(self, query, limit):
+            assert query == "Arnott's Tim Tam"
+            assert limit == 1
+            return [{
+                "title": "Arnott's Tim Tam Original 200g",
+                "image_url": "https://scraped.test/tim-tam.png",
+                "category": "Snacks",
+                "subcategory": "Biscuits",
+                "stores": ["Coles"],
+            }]
+
+    monkeypatch.setattr(
+        app.ProductLookup,
+        "lookup_barcode_product",
+        lambda _barcode: ("Arnott's Tim Tam", "https://off.test/tim-tam.png"),
+    )
+
+    result = app.resolve_scanned_product(FakeSheets(), "9310072026817")
+
+    assert result["title"] == "Arnott's Tim Tam Original 200g"
+    assert result["image_url"] == "https://scraped.test/tim-tam.png"
+    assert result["source"] == "local_name_match"
+
+
+def test_resolve_scanned_product_rejects_invalid_gtin_before_any_lookup(monkeypatch):
+    import app
+
+    class FakeSheets:
+        def find_product_by_barcode(self, _barcode):
+            raise AssertionError("local lookup should not run")
+
+    monkeypatch.setattr(
+        app.ProductLookup,
+        "lookup_barcode_product",
+        lambda _barcode: (_ for _ in ()).throw(AssertionError("remote lookup should not run")),
+    )
+
+    assert app.resolve_scanned_product(FakeSheets(), "9310072026818") is None
 
 
 def test_save_product_keeps_category_metadata():

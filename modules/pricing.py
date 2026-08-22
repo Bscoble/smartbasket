@@ -35,6 +35,7 @@ from helpers import (
     is_valid_price,
     clean_price_text,
     build_store_search_candidates,
+    normalize_gtin,
 )
 from modules.brands import resolve_brand
 
@@ -358,6 +359,7 @@ class PriceScraper:
         return {
             "product_name": product_name,
             **brand_metadata,
+            "barcode": PriceScraper._extract_product_barcode(record),
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -433,6 +435,7 @@ class PriceScraper:
         return {
             "product_name": product_name,
             **brand_metadata,
+            "barcode": PriceScraper._extract_product_barcode(product),
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -486,6 +489,7 @@ class PriceScraper:
                         "price": price,
                         "product_name": product_name,
                         **brand_metadata,
+                        "barcode": self._extract_product_barcode(product),
                         "status": "ok",
                         "message": f"Price found: {product_name}",
                     }
@@ -498,6 +502,36 @@ class PriceScraper:
         except Exception as e:
             logger.error(f"Apify error for {store}/{item_name}: {e}", exc_info=True)
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
+
+    @staticmethod
+    def _extract_product_barcode(product: Dict[str, Any]) -> str:
+        """Extract a validated consumer GTIN without treating retailer SKUs as barcodes."""
+        field_names = (
+            "barcode", "barcodes", "gtin", "gtin8", "gtin12", "gtin13", "gtin14",
+            "ean", "ean8", "ean13", "upc", "upca",
+        )
+
+        def find_valid(value: Any) -> str:
+            if isinstance(value, dict):
+                for nested_value in value.values():
+                    barcode = find_valid(nested_value)
+                    if barcode:
+                        return barcode
+                return ""
+            if isinstance(value, (list, tuple)):
+                for nested_value in value:
+                    barcode = find_valid(nested_value)
+                    if barcode:
+                        return barcode
+                return ""
+            return normalize_gtin(value)
+
+        for field_name in field_names:
+            if field_name in product:
+                barcode = find_valid(product[field_name])
+                if barcode:
+                    return barcode
+        return ""
 
     def _get_zenrows_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
         if not self.zenrows_key:
