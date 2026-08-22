@@ -99,10 +99,6 @@ STALE_REVALIDATION_BATCH_LIMITS = {
 # ============================================================================
 
 OPEN_FOOD_FACTS_BARCODE_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
-# search-a-licious powers the search box on openfoodfacts.org; the legacy cgi/search.pl
-# endpoint only does literal per-word matching and misses many real products (e.g. it
-# fails on "Arnotts Tim Tam" because of the apostrophe in "Arnott's").
-OPEN_FOOD_FACTS_SEARCH_URL = "https://search.openfoodfacts.org/search"
 OPEN_FOOD_FACTS_USER_AGENT = "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"
 
 # ============================================================================

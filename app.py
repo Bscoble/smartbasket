@@ -1143,24 +1143,18 @@ else:
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             local_results = sheets_manager.search_saved_products(user_id, item_name)
-                            scraped_results = sheets_manager.search_scraped_products(item_name)
-                            remote_results = (
-                                ProductLookup.search_product_by_name(item_name)
-                                if len(local_results) + len(scraped_results) < 5
-                                else []
-                            )
+                            scraped_results = sheets_manager.search_scraped_products(item_name, limit=10)
                             seen_titles = {
-                                result["title"].lower()
-                                for result in local_results + scraped_results
+                                result["title"].strip().lower()
+                                for result in local_results
                             }
+                            unique_scraped_results = [
+                                result
+                                for result in scraped_results
+                                if result["title"].strip().lower() not in seen_titles
+                            ]
                             st.session_state["search_results"] = (
-                                local_results
-                                + scraped_results
-                                + [
-                                    result
-                                    for result in remote_results
-                                    if result["title"].lower() not in seen_titles
-                                ]
+                                local_results + unique_scraped_results
                             )[:5]
                     else:
                         st.session_state["search_results"] = []
@@ -1245,6 +1239,8 @@ else:
                                 metadata.append(res["category"])
                             if res.get("subcategory"):
                                 metadata.append(res["subcategory"])
+                            if res.get("stores"):
+                                metadata.append(", ".join(res["stores"]))
                             if metadata:
                                 st.markdown(
                                     f"<div style='font-size: 11px; color: #666; margin-top: 4px; line-height: 1.4;'>{' · '.join(metadata)}</div>",

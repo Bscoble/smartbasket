@@ -4,13 +4,11 @@ Handles barcode scanning, decoding, and product lookup from Open Food Facts.
 """
 
 import logging
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple
 from PIL import Image, ImageEnhance, ImageOps
 import requests
-import streamlit as st
 from config import (
     OPEN_FOOD_FACTS_BARCODE_URL,
-    OPEN_FOOD_FACTS_SEARCH_URL,
     OPEN_FOOD_FACTS_USER_AGENT,
     REQUEST_TIMEOUT,
     BARCODE_BRIGHTNESS_THRESHOLD,
@@ -172,65 +170,3 @@ class ProductLookup:
             logger.error(f"Error looking up barcode {barcode}: {e}", exc_info=True)
             return None, None
     
-    @staticmethod
-    @st.cache_data(ttl=86400, show_spinner=False)
-    def search_product_by_name(query: str) -> List[Dict[str, str]]:
-        """
-        Search Open Food Facts database by product name.
-        
-        Args:
-            query: Product name search query
-            
-        Returns:
-            List of matching products with title and image_url
-        """
-        try:
-            query = query.strip()
-            logger.debug(f"Searching Open Food Facts for: {query}")
-            
-            params = {
-                "q": query,
-                "page_size": 5,
-            }
-            
-            headers = {"User-Agent": OPEN_FOOD_FACTS_USER_AGENT}
-            
-            response = requests.get(
-                OPEN_FOOD_FACTS_SEARCH_URL,
-                params=params,
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            results = []
-            seen_titles = set()
-            
-            for product in data.get("hits", []):
-                name = product.get("product_name_en") or product.get("product_name")
-                if not name:
-                    continue
-                brands = product.get("brands")
-                # search-a-licious returns brands as a list rather than a comma-separated string
-                brand = ", ".join(brands) if isinstance(brands, list) else brands
-                image_url = product.get("image_front_url") or product.get("image_url") or ""
-                
-                if brand and not name.lower().startswith(brand.lower()):
-                    title = f"{brand} {name}".strip()
-                else:
-                    title = name
-                
-                # Deduplicate results
-                if title and title not in seen_titles:
-                    results.append({"title": title, "image_url": image_url})
-                    seen_titles.add(title)
-            
-            logger.info(f"Found {len(results)} products for query: {query}")
-            return results
-        except requests.RequestException as e:
-            logger.error(f"Request error searching for products: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"Error searching for products: {e}", exc_info=True)
-            return []

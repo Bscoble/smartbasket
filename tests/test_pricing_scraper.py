@@ -226,6 +226,7 @@ def test_search_scraped_products_uses_stored_product_images():
     assert results[0]["title"] == "Milk 2L"
     assert results[0]["image_url"] == "https://scraped.test/milk.png"
     assert results[0]["category"] == "dairy"
+    assert results[0]["stores"] == ["Woolworths"]
 
 
 def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
@@ -249,7 +250,52 @@ def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
         "image_url": "https://scraped.test/fruit-loaf.png",
         "category": "",
         "subcategory": "",
+        "brand": "",
+        "stores": ["Woolworths"],
     }]
+
+
+def test_search_scraped_products_ranks_metadata_and_deduplicates_retailers():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"],
+                ["Aldi", "Fresh Full Cream Milk 2L", "3.20", "Fresh Full Cream Milk 2L", "2026-08-21 12:00:00", "", "", "", "Dairy", "Milk", "Farmdale", "retailer", "high"],
+                ["Coles", "Arnott's Tim Tam Original 200g", "4.50", "Arnott's Tim Tam Original 200g", "2026-08-21 12:00:00", "", "", "", "Snacks", "Biscuits", "Arnott's", "retailer", "high"],
+                ["Woolworths", "Arnott's Tim Tam Original 200g", "4.80", "Arnott's Tim Tam Original 200g", "2026-08-21 12:00:00", "", "", "https://scraped.test/tim-tam.png", "Snacks", "Biscuits", "Arnott's", "retailer", "high"],
+                ["Coles", "Arnott's Tim Tam Dark 200g", "4.50", "Arnott's Tim Tam Dark 200g", "2026-08-21 12:00:00", "", "", "", "Snacks", "Biscuits", "Arnott's", "retailer", "high"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, name):
+            assert name == "Standard Prices"
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("original tim tam 200g")
+
+    assert results[0]["title"] == "Arnott's Tim Tam Original 200g"
+    assert results[0]["image_url"] == "https://scraped.test/tim-tam.png"
+    assert results[0]["stores"] == ["Coles", "Woolworths"]
+    assert sum(result["title"] == "Arnott's Tim Tam Original 200g" for result in results) == 1
+
+
+def test_search_scraped_products_can_match_brand_and_category_metadata():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"],
+                ["Aldi", "Organic Milk 1L", "3.20", "Organic Milk 1L", "2026-08-21 12:00:00", "", "", "", "Dairy", "Fresh Milk", "Farmdale", "retailer", "high"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    assert manager.search_scraped_products("farmdale dairy")[0]["title"] == "Organic Milk 1L"
 
 
 def _build_aldi_nuxt_html(products: list) -> str:

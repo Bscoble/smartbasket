@@ -4,6 +4,7 @@ Handles all interactions with Google Sheets for data persistence.
 """
 
 import logging
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import gspread
@@ -888,7 +889,7 @@ class SheetsManager:
             return []
 
     def search_scraped_products(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
-        """Search the retailer catalog that was scraped and stored in standard price data."""
+        """Search and rank products from the locally scraped retailer catalogue."""
         try:
             worksheet_name = WORKSHEET_NAMES["standard_prices"]
             ws = self._get_or_create_worksheet(
@@ -896,11 +897,16 @@ class SheetsManager:
                 rows=WORKSHEET_CONFIG["standard_prices"]["rows"],
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
-            terms = [term for term in query.strip().lower().split() if term]
+            def normalize(value: str) -> str:
+                value = value.lower().replace("'", "")
+                return re.sub(r"[^a-z0-9]+", " ", value).strip()
+
+            normalized_query = normalize(query)
+            terms = normalized_query.split()
             if not terms:
                 return []
 
-            matches = []
+            matches = {}
             for row in self._cached_values(worksheet_name, ws)[1:]:
                 if len(row) < 2:
                     continue
@@ -909,19 +915,92 @@ class SheetsManager:
                 if not title:
                     continue
 
-                search_key = title.lower()
-                if all(term in search_key for term in terms):
-                    image_url = row[7].strip() if len(row) >= 8 else ""
-                    category = row[8].strip() if len(row) >= 9 else ""
-                    subcategory = row[9].strip() if len(row) >= 10 else ""
-                    matches.append({
+                product_name = row[3].strip() if len(row) >= 4 else ""
+                image_url = row[7].strip() if len(row) >= 8 else ""
+                category = row[8].strip() if len(row) >= 9 else ""
+                subcategory = row[9].strip() if len(row) >= 10 else ""
+                brand = row[10].strip() if len(row) >= 11 else ""
+                store = row[0].strip()
+
+                normalized_title = normalize(f"{title} {product_name}")
+                normalized_brand = normalize(brand)
+                normalized_categories = normalize(f"{category} {subcategory}")
+                matched_terms = []
+                score = 0
+                for term in terms:
+                    if term in normalized_title.split():
+                        matched_terms.append(term)
+                        score += 6
+                    elif term in normalized_brand.split():
+                        matched_terms.append(term)
+                        score += 5
+                    elif term in normalized_categories.split():
+                        matched_terms.append(term)
+                        score += 2
+
+                size_terms = [term for term in terms if any(char.isdigit() for char in term)]
+                if any(term not in normalized_title.split() for term in size_terms):
+                    continue
+
+                coverage = len(set(matched_terms)) / len(set(terms))
+                if coverage < 0.5:
+                    continue
+
+                normalized_item = normalize(title)
+                if normalized_query == normalized_item:
+                    score += 50
+                elif normalized_query in normalized_item:
+                    score += 30
+                elif all(term in normalized_item.split() for term in terms):
+                    score += 20
+                score += coverage * 20
+                if image_url:
+                    score += 1
+
+                dedupe_key = normalized_item
+                existing = matches.get(dedupe_key)
+                if existing is None:
+                    matches[dedupe_key] = {
                         "title": title,
                         "image_url": image_url,
                         "category": category,
                         "subcategory": subcategory,
-                    })
+                        "brand": brand,
+                        "stores": {store} if store else set(),
+                        "_score": score,
+                    }
+                else:
+                    if store:
+                        existing["stores"].add(store)
+                    if not existing["image_url"] and image_url:
+                        existing["image_url"] = image_url
+                    if not existing["category"] and category:
+                        existing["category"] = category
+                    if not existing["subcategory"] and subcategory:
+                        existing["subcategory"] = subcategory
+                    if not existing["brand"] and brand:
+                        existing["brand"] = brand
+                    existing["_score"] = max(existing["_score"], score)
 
-            return matches[:limit]
+            ranked = sorted(
+                matches.values(),
+                key=lambda match: (
+                    -match["_score"],
+                    -len(match["stores"]),
+                    match["title"].lower(),
+                ),
+            )
+            return [
+                {
+                    "title": match["title"],
+                    "image_url": match["image_url"],
+                    "category": match["category"],
+                    "subcategory": match["subcategory"],
+                    "brand": match["brand"],
+                    "stores": sorted(match["stores"]),
+                }
+                for match in ranked[:limit]
+            ]
         except Exception as e:
             logger.error(f"Error searching scraped product catalogue: {e}", exc_info=True)
             return []
