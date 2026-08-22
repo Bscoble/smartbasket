@@ -77,6 +77,15 @@ def test_write_dashboard_places_tables_and_builds_charts():
     ]
     assert len(chart_requests) == 2
 
+    bold_requests = [
+        req for call in spreadsheet.batch_update_calls for req in call["requests"] if "repeatCell" in req
+    ]
+    assert len(bold_requests) == 5
+    assert all(
+        req["repeatCell"]["cell"]["userEnteredFormat"]["textFormat"]["bold"]
+        for req in bold_requests
+    )
+
     line_chart = chart_requests[0]["addChart"]["chart"]["spec"]
     assert line_chart["title"] == "Catalog Size Over Time"
     assert "basicChart" in line_chart

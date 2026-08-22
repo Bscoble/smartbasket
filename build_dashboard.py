@@ -215,6 +215,23 @@ def _pie_chart_request(sheet_id: int, title: str, table: list, start_row: int) -
     }
 
 
+def _bold_row_request(sheet_id: int, row_index: int, column_count: int) -> dict:
+    """Build a native Sheets request that bolds one dashboard row."""
+    return {
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": row_index,
+                "endRowIndex": row_index + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": column_count,
+            },
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }
+    }
+
+
 def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
     """Write each table to the dashboard sheet in column A and add a chart for each."""
     ws = _get_or_create_worksheet(
@@ -227,13 +244,18 @@ def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
     _clear_existing_charts(spreadsheet, ws.id)
 
     chart_requests = []
+    format_requests = []
     cursor_row = 0  # 0-indexed row for the API; row (cursor_row + 1) in A1 notation
 
     for title, table, chart_type in tables:
         ws.update(values=[[title]], range_name=f"A{cursor_row + 1}")
+        format_requests.append(_bold_row_request(ws.id, cursor_row, len(table[0])))
         data_start_row = cursor_row + 1
         if len(table) > 1:
             ws.update(values=table, range_name=f"A{data_start_row + 1}")
+            format_requests.append(_bold_row_request(ws.id, data_start_row, len(table[0])))
+            if table[-1][0] == "Total":
+                format_requests.append(_bold_row_request(ws.id, data_start_row + len(table) - 1, len(table[0])))
             if chart_type == "PIE":
                 chart_requests.append(_pie_chart_request(ws.id, title, table, data_start_row))
             else:
@@ -243,8 +265,8 @@ def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
 
         cursor_row = data_start_row + len(table) + TABLE_GAP_ROWS
 
-    if chart_requests:
-        spreadsheet.batch_update({"requests": chart_requests})
+    if format_requests or chart_requests:
+        spreadsheet.batch_update({"requests": format_requests + chart_requests})
 
 
 def build_dashboard() -> None:

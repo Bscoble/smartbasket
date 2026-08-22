@@ -60,6 +60,7 @@ def test_aggregate_category_coverage_counts_standard_and_specials_by_store():
     assert table[1] == ["Dairy", "2", "1", "1", "1", "0", "0", "3", "2"]
     assert table[2] == ["Pantry", "0", "0", "0", "0", "1", "0", "1", "0"]
     assert table[3] == ["Uncategorised", "0", "0", "0", "1", "0", "0", "0", "1"]
+    assert table[4] == ["Total", "2", "1", "1", "2", "1", "0", "4", "3"]
 
 
 def test_aggregate_scrape_cost_by_day_sums_per_store():

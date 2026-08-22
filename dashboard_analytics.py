@@ -88,6 +88,8 @@ def aggregate_category_coverage(standard_rows: List[List[str]], daily_special_ro
     headers.extend(["Total Standard", "Total Specials"])
 
     table = [headers]
+    grand_standard = defaultdict(int)
+    grand_specials = defaultdict(int)
     for category in sorted(counts.keys()):
         row = [category]
         total_standard = 0
@@ -98,7 +100,14 @@ def aggregate_category_coverage(standard_rows: List[List[str]], daily_special_ro
             row.extend([str(standard_count), str(special_count)])
             total_standard += standard_count
             total_specials += special_count
+            grand_standard[store] += standard_count
+            grand_specials[store] += special_count
         table.append(row + [str(total_standard), str(total_specials)])
+
+    total_row = ["Total"]
+    for store in stores:
+        total_row.extend([str(grand_standard[store]), str(grand_specials[store])])
+    table.append(total_row + [str(sum(grand_standard.values())), str(sum(grand_specials.values()))])
     return table
 
 
