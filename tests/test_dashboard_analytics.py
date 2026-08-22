@@ -8,6 +8,7 @@ if ROOT not in sys.path:
 from dashboard_analytics import (
     aggregate_category_coverage,
     aggregate_catalog_size_over_time,
+    aggregate_oldest_price_age_by_category,
     aggregate_scrape_cost_by_day,
     aggregate_scrape_issues_by_day,
     aggregate_store_health,
@@ -61,6 +62,23 @@ def test_aggregate_category_coverage_counts_standard_and_specials_by_store():
     assert table[2] == ["Pantry", "0", "0", "0", "0", "1", "0", "1", "0"]
     assert table[3] == ["Uncategorised", "0", "0", "0", "1", "0", "0", "0", "1"]
     assert table[4] == ["Total", "2", "1", "1", "2", "1", "0", "4", "3"]
+
+
+def test_aggregate_oldest_price_age_by_category_returns_max_age_per_store():
+    now = datetime(2026, 8, 22, 12, 0, 0)
+    standard_rows = [
+        ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+        ["Aldi", "milk", "4.50", "Milk", "2026-08-19 11:00:00", "", "", "", "Dairy", "Milk"],
+        ["Aldi", "cheese", "5.00", "Cheese", "2026-08-16 12:00:00", "", "", "", "Dairy", "Cheese"],
+        ["Coles", "milk", "5.50", "Milk", "2026-08-20 12:00:00", "", "", "", "Dairy", "Milk"],
+        ["Woolworths", "pasta", "2.50", "Pasta", "2026-08-08 12:00:00", "", "", "", "Pantry", "Pasta"],
+    ]
+
+    table = aggregate_oldest_price_age_by_category(standard_rows, now=now)
+
+    assert table[0] == ["Category", "Aldi", "Coles", "Woolworths", "Overall Oldest"]
+    assert table[1] == ["Dairy", "6", "2", "", "6"]
+    assert table[2] == ["Pantry", "", "", "14", "14"]
 
 
 def test_aggregate_scrape_cost_by_day_sums_per_store():

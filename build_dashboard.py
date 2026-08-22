@@ -25,6 +25,7 @@ from modules.sheets import SheetsManager
 from dashboard_analytics import (
     aggregate_category_coverage,
     aggregate_catalog_size_over_time,
+    aggregate_oldest_price_age_by_category,
     aggregate_scrape_cost_by_day,
     aggregate_scrape_issues_by_day,
     aggregate_store_health,
@@ -103,6 +104,7 @@ def build_dashboard_tables(spreadsheet: gspread.Spreadsheet) -> list:
     return [
         ("Catalog Size Over Time", aggregate_catalog_size_over_time(catalog_rows), "LINE"),
         ("Category Coverage - Standard Prices & Daily Specials", aggregate_category_coverage(standard_rows, daily_special_rows), "COLUMN"),
+        ("Oldest Standard Price by Category (Days)", aggregate_oldest_price_age_by_category(standard_rows), "COLUMN"),
         ("Daily Scrape Cost by Store (USD)", aggregate_scrape_cost_by_day(scrape_rows), "COLUMN"),
         ("Scraping Issues per Day", aggregate_scrape_issues_by_day(scrape_rows), "COLUMN"),
         ("Store Health - Issue Rate %", aggregate_store_health(scrape_rows), "COLUMN"),

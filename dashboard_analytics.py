@@ -111,6 +111,40 @@ def aggregate_category_coverage(standard_rows: List[List[str]], daily_special_ro
     return table
 
 
+def aggregate_oldest_price_age_by_category(
+    standard_rows: List[List[str]],
+    now: datetime = None,
+) -> List[List[str]]:
+    """Build a category/store matrix of the oldest Standard Prices age in whole days."""
+    now = now or datetime.now()
+    standard_data = standard_rows[1:] if standard_rows else []
+    stores = sorted({row[0].strip() for row in standard_data if len(row) >= 5 and row[0].strip()})
+    ages: dict = defaultdict(dict)
+
+    for row in standard_data:
+        if len(row) < 5 or not row[0].strip():
+            continue
+        store = row[0].strip()
+        category = row[8].strip() if len(row) >= 9 and row[8].strip() else "Uncategorised"
+        try:
+            last_verified = datetime.strptime(row[4].strip(), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+        age_days = max(0, (now - last_verified).days)
+        ages[category][store] = max(age_days, ages[category].get(store, 0))
+
+    table = [["Category"] + stores + ["Overall Oldest"]]
+    for category in sorted(ages.keys()):
+        store_ages = [ages[category].get(store) for store in stores]
+        overall_age = max(age for age in store_ages if age is not None)
+        table.append(
+            [category]
+            + [str(age) if age is not None else "" for age in store_ages]
+            + [str(overall_age)]
+        )
+    return table
+
+
 def aggregate_scrape_cost_by_day(rows: List[List[str]]) -> List[List[str]]:
     """Build a Date x Store scrape-cost table for the daily cost chart."""
     data_rows = rows[1:] if rows else []
