@@ -37,6 +37,30 @@ def test_apify_search_returns_multiple_results_for_relevance_matching():
     assert APIFY_DEFAULT_CONFIG["max_items_per_url"] > 1
 
 
+def test_live_price_result_allows_revalidation_to_limit_search_candidates(monkeypatch):
+    scraper = PriceScraper(apify_token="token", zenrows_key="key")
+    captured = {}
+
+    def fake_apify_result(store, item_name, max_search_candidates):
+        captured.update({
+            "store": store,
+            "item_name": item_name,
+            "max_search_candidates": max_search_candidates,
+        })
+        return {"price": 4.50, "status": "ok"}
+
+    monkeypatch.setattr(scraper, "_get_apify_price_result", fake_apify_result)
+
+    result = scraper.get_live_price_result("Coles", "Milk 2L", max_search_candidates=1)
+
+    assert result["price"] == 4.50
+    assert captured == {
+        "store": "Coles",
+        "item_name": "Milk 2L",
+        "max_search_candidates": 1,
+    }
+
+
 def test_log_zenrows_usage_uses_configured_per_request_cost():
     scraper = PriceScraper(
         apify_token="",

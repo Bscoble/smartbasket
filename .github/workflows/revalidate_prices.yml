@@ -1,0 +1,53 @@
+name: Stale Price Revalidation
+
+on:
+  schedule:
+    # Runs after the cache warmer and category crawl have completed.
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  revalidate_prices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo xargs -a packages.txt apt-get install -y
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate required secrets
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$ZENROWS_KEY" || (echo "Missing GitHub Actions secret: ZENROWS_KEY" && exit 1)
+          test -n "$APIFY_TOKEN" || (echo "Missing GitHub Actions secret: APIFY_TOKEN" && exit 1)
+          test -n "$GCP_SERVICE_ACCOUNT" || (echo "Missing GitHub Actions secret: GCP_SERVICE_ACCOUNT" && exit 1)
+
+      - name: Revalidate Stale Prices
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
+        run: python revalidate_stale_prices.py
+
+      - name: Refresh Performance Dashboard
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python build_dashboard.py

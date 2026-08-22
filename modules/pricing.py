@@ -139,14 +139,19 @@ class PriceScraper:
             logger.error(f"Error fetching price for {store}/{item_name}: {e}", exc_info=True)
             return DEFAULT_PRICE_FALLBACK
 
-    def get_live_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
+    def get_live_price_result(
+        self,
+        store: str,
+        item_name: str,
+        max_search_candidates: int = 3,
+    ) -> Dict[str, Any]:
         """Return a price together with a reason when it is unavailable."""
         if store not in STORES:
             return {"price": None, "status": "configuration", "message": "Unknown supermarket"}
 
         try:
             if store in ["Woolworths", "Coles"]:
-                return self._get_apify_price_result(store, item_name)
+                return self._get_apify_price_result(store, item_name, max_search_candidates)
             if store == "Aldi":
                 return self._get_zenrows_price_result(store, item_name)
             return {"price": None, "status": "configuration", "message": "Unsupported supermarket"}
@@ -435,14 +440,19 @@ class PriceScraper:
             "image_url": image_url,
         }
 
-    def _get_apify_price_result(self, store: str, item_name: str) -> Dict[str, Any]:
+    def _get_apify_price_result(
+        self,
+        store: str,
+        item_name: str,
+        max_search_candidates: int = 3,
+    ) -> Dict[str, Any]:
         if not self.apify_token:
             return {"price": None, "status": "configuration", "message": "Apify is not configured"}
 
         try:
             store_config = STORES[store]
             client = ApifyClient(self.apify_token)
-            search_candidates = build_store_search_candidates(item_name, store)[:3]
+            search_candidates = build_store_search_candidates(item_name, store)[:max_search_candidates]
             for search_query in search_candidates:
                 search_url = store_config["search_url"].format(quote(search_query))
                 run = client.actor(store_config["api_actor"]).call(

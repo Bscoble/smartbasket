@@ -85,6 +85,15 @@ THREAD_POOL_TIMEOUT = 300  # seconds, exceeds the per-actor wait budget
 BULK_SCRAPE_MAX_RETRIES = 2
 BULK_SCRAPE_RETRY_DELAY_SECS = 8
 
+# The stale-price job runs independently of the discovery crawl. These limits
+# keep its daily runtime and provider spend bounded while progressively cycling
+# through entries that are older than STANDARD_PRICE_MAX_AGE_DAYS.
+STALE_REVALIDATION_BATCH_LIMITS = {
+    "Woolworths": 15,
+    "Coles": 5,
+    "Aldi": 15,
+}
+
 # ============================================================================
 # PRODUCT DATABASE
 # ============================================================================
