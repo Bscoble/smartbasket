@@ -13,6 +13,7 @@ from helpers import (
     build_store_search_query,
     infer_quantity_and_unit,
     price_quantity_multiplier,
+    shopping_pack_count,
 )
 
 
@@ -123,6 +124,45 @@ def test_measurable_sizes_are_one_shelf_priced_pack():
     assert price_quantity_multiplier(250, "g") == 1
     assert price_quantity_multiplier(2, "L") == 1
     assert price_quantity_multiplier(3, "each") == 3
+
+
+def test_shopping_pack_count_separates_package_size_from_item_count():
+    assert shopping_pack_count(750, "g") == 1
+    assert shopping_pack_count(3, "each") == 3
+    assert shopping_pack_count(750, "g", "2") == 2
+
+
+def test_shopping_list_persists_pack_count_separately_from_package_size():
+    class FakeWorksheet:
+        col_count = 5
+
+        def __init__(self):
+            self.values = [["Mixed Vegetables 750g", "750", "g", "image", "user@test.com"]]
+
+        def get_all_values(self):
+            return [row[:] for row in self.values]
+
+        def resize(self, cols):
+            self.col_count = cols
+
+        def append_row(self, row):
+            self.values.append([str(value) for value in row])
+
+    class FakeSpreadsheet:
+        def __init__(self):
+            self.ws = FakeWorksheet()
+
+        def worksheet(self, _name):
+            return self.ws
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    assert manager.get_shopping_list("user@test.com")[0][4] == "1"
+    assert manager.add_item_to_list("Mixed Vegetables 750g", 750, "g", "image", "user@test.com")
+    assert manager.sh.ws.values[-1] == [
+        "Mixed Vegetables 750g", "750", "g", "image", "user@test.com", "1",
+    ]
+    assert manager.sh.ws.col_count == 6
 
 
 def test_extract_bulk_product_info_keeps_category_metadata():

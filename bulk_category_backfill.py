@@ -32,6 +32,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES, STORES
+from build_dashboard import refresh_performance_dashboard
 from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
@@ -254,13 +255,18 @@ def backfill() -> None:
                 "last_run": datetime.now().isoformat(timespec="seconds"),
             }
 
-    sheets_manager.save_standard_prices(standard_prices)
-    sheets_manager.save_daily_specials(daily_specials)
-    sheets_manager.save_crawl_state(crawl_state)
+    prices_saved = sheets_manager.save_standard_prices(standard_prices)
+    specials_saved = sheets_manager.save_daily_specials(daily_specials)
+    state_saved = sheets_manager.save_crawl_state(crawl_state)
 
     for store in STORES_TO_CRAWL:
         store_count = sum(1 for (s, _) in standard_prices if s == store)
         sheets_manager.log_catalog_size(store, store_count)
+
+    if prices_saved and specials_saved and state_saved:
+        refresh_performance_dashboard(sheets_manager.sh)
+    else:
+        raise RuntimeError("Catalogue data was not fully saved; dashboard refresh skipped.")
 
     print(
         f"\nDone. +{total_added} product scrapes this run. "

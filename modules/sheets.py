@@ -8,6 +8,7 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import gspread
+from helpers import shopping_pack_count
 from config import (
     WORKSHEET_NAMES,
     WORKSHEET_CONFIG,
@@ -813,13 +814,28 @@ class SheetsManager:
         """
         try:
             worksheet_name = WORKSHEET_NAMES["shopping_list"]
-            ws = self._get_or_create_worksheet(worksheet_name)
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
             normalized_user_id = user_id.strip().lower()
-            return [
-                row[:4]
-                for row in self._cached_values(worksheet_name, ws)
-                if len(row) >= 5 and row[4].strip().lower() == normalized_user_id
-            ]
+            items = []
+            for row in self._cached_values(worksheet_name, ws):
+                if len(row) < 5 or row[4].strip().lower() != normalized_user_id:
+                    continue
+                try:
+                    quantity = int(row[1])
+                except (ValueError, IndexError):
+                    quantity = 1
+                unit = row[2] if len(row) >= 3 else "each"
+                pack_count = shopping_pack_count(
+                    quantity,
+                    unit,
+                    row[5] if len(row) >= 6 else None,
+                )
+                items.append(row[:4] + [str(pack_count)])
+            return items
         except Exception as e:
             logger.error(f"Error getting shopping list: {e}", exc_info=True)
             return []
@@ -831,6 +847,7 @@ class SheetsManager:
         unit: str,
         image_url: str = "",
         user_id: str = "",
+        pack_count: Optional[int] = None,
     ) -> bool:
         """
         Add an item to the shopping list.
@@ -847,8 +864,20 @@ class SheetsManager:
         """
         try:
             worksheet_name = WORKSHEET_NAMES["shopping_list"]
-            ws = self._get_or_create_worksheet(worksheet_name)
-            ws.append_row([item_name, qty, unit, image_url, user_id.strip().lower()])
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
+            stored_pack_count = shopping_pack_count(qty, unit, pack_count)
+            ws.append_row([
+                item_name,
+                qty,
+                unit,
+                image_url,
+                user_id.strip().lower(),
+                stored_pack_count,
+            ])
             self._invalidate_values_cache(worksheet_name)
             logger.info(f"Added item to shopping list: {item_name}")
             return True
@@ -865,7 +894,11 @@ class SheetsManager:
         """
         try:
             worksheet_name = WORKSHEET_NAMES["shopping_list"]
-            ws = self._get_or_create_worksheet(worksheet_name)
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 row_number
@@ -894,7 +927,11 @@ class SheetsManager:
         """
         try:
             worksheet_name = WORKSHEET_NAMES["shopping_list"]
-            ws = self._get_or_create_worksheet(worksheet_name)
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 sheet_row
@@ -925,7 +962,11 @@ class SheetsManager:
         """
         try:
             worksheet_name = WORKSHEET_NAMES["shopping_list"]
-            ws = self._get_or_create_worksheet(worksheet_name)
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
             normalized_user_id = user_id.strip().lower()
             matching_rows = [
                 sheet_row
@@ -934,7 +975,7 @@ class SheetsManager:
             ]
             if not 1 <= row_index <= len(matching_rows):
                 return False
-            ws.update(f"B{matching_rows[row_index - 1]}", [[qty]])
+            ws.update(f"F{matching_rows[row_index - 1]}", [[qty]])
             self._invalidate_values_cache(worksheet_name)
             logger.info("Updated quantity for row %s for user %s", row_index, normalized_user_id)
             return True
@@ -1205,10 +1246,10 @@ class SheetsManager:
             
             history_data = self._cached_values(worksheet_name, history_ws)
             if not history_data:
-                history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID"])
+                history_ws.append_row(["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID", "Pack Count"])
                 self._invalidate_values_cache(worksheet_name)
             elif history_data[0][:5] == ["Item", "Qty", "Unit", "Image_URL", "Date"]:
-                history_ws.update("A1:F1", [["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID"]])
+                history_ws.update("A1:G1", [["Item", "Qty", "Unit", "Image_URL", "Date", "User_ID", "Pack Count"]])
                 self._invalidate_values_cache(worksheet_name)
             
             current_date = datetime.now().strftime(DATETIME_FORMAT)
@@ -1222,7 +1263,20 @@ class SheetsManager:
                     qty = row[1]
                     unit = row[2]
                     img = row[3].strip() if len(row) >= 4 else ""
-                    rows_to_add.append([item_name, qty, unit, img, current_date, user_id.strip().lower()])
+                    pack_count = shopping_pack_count(
+                        int(qty),
+                        unit,
+                        row[4] if len(row) >= 5 else None,
+                    )
+                    rows_to_add.append([
+                        item_name,
+                        qty,
+                        unit,
+                        img,
+                        current_date,
+                        user_id.strip().lower(),
+                        pack_count,
+                    ])
             
             if rows_to_add:
                 history_ws.append_rows(rows_to_add)
@@ -1276,6 +1330,7 @@ class SheetsManager:
                                 "qty": row[1],
                                 "unit": row[2],
                                 "img": row[3],
+                                "pack_count": row[6] if len(row) >= 7 else "",
                             }
                     except ValueError as e:
                         logger.debug(f"Skipping row with invalid date: {row}, error: {e}")

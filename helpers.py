@@ -141,9 +141,19 @@ def infer_unit(item_name: str) -> str:
 
 def price_quantity_multiplier(quantity: int, unit: str) -> int:
     """Return how many shelf-priced packs contribute to a shopping-list total."""
+    return shopping_pack_count(quantity, unit)
+
+
+def shopping_pack_count(quantity: int, unit: str, stored_pack_count=None) -> int:
+    """Return item count separately from a product's measurable package size."""
+    if stored_pack_count not in (None, ""):
+        try:
+            return max(1, int(stored_pack_count))
+        except (TypeError, ValueError):
+            pass
     if unit in {"g", "kg", "L"}:
         return 1
-    return quantity
+    return max(1, int(quantity))
 
 
 def build_product_search_query(item_name: str, quantity, unit: str) -> str:

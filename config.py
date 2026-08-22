@@ -133,8 +133,9 @@ WORKSHEET_NAMES = {
 
 WORKSHEET_CONFIG = {
     "users": {"rows": "1000", "cols": "9"},
+    "shopping_list": {"rows": "1000", "cols": "6"},
     "price_cache": {"rows": "1000", "cols": "4"},
-    "recent_shops": {"rows": "1000", "cols": "6"},
+    "recent_shops": {"rows": "1000", "cols": "7"},
     "product_catalog": {"rows": "5000", "cols": "7"},
     "standard_prices": {"rows": "5000", "cols": "15"},
     "daily_specials": {"rows": "2000", "cols": "5"},

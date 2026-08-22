@@ -47,7 +47,3 @@ jobs:
           ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
         run: python revalidate_stale_prices.py
 
-      - name: Refresh Performance Dashboard
-        env:
-          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        run: python build_dashboard.py

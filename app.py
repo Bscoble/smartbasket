@@ -35,7 +35,7 @@ from helpers import (
     get_greeting,
     validate_email,
     infer_quantity_and_unit,
-    price_quantity_multiplier,
+    shopping_pack_count,
     build_product_search_query,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
@@ -341,6 +341,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         except ValueError:
             qty = 1
         unit = row[2]
+        pack_count = shopping_pack_count(qty, unit, row[4] if len(row) >= 5 else None)
         
         item_lower = item_name.lower()
         stores_to_search = selected_stores.copy()
@@ -528,7 +529,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 }
                 continue
 
-            pack_count = price_quantity_multiplier(qty, unit)
             total_price = unit_price * pack_count
             store_totals[store] += total_price
             store_price_counts[store] += 1
@@ -697,7 +697,10 @@ if not st.session_state["app_started"]:
         <div style="background: rgba(255, 255, 255, 0.15); width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 25px auto; font-size: 38px; backdrop-filter: blur(5px);">
             🛒
         </div>
-        <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0 0 10px 0; color: white;">SmartBasket</h1>
+        <div class="splash-brand-title">
+            <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0; color: white;">SmartBasket</h1>
+            <span class="splash-beta-badge">BETA</span>
+        </div>
         <p style="font-size: 15px; opacity: 0.9; margin: 0 0 40px 0; font-weight: 400;">Shop smarter. Save every week.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1253,7 +1256,16 @@ else:
                                     sr = recent_items[i]
                                     sheets_manager.save_product(user_id, sr["name"], sr["img"])
                                     sheets_manager.add_item_to_list(
-                                        sr["name"], int(sr["qty"]), sr["unit"], sr["img"], user_id
+                                        sr["name"],
+                                        int(sr["qty"]),
+                                        sr["unit"],
+                                        sr["img"],
+                                        user_id,
+                                        shopping_pack_count(
+                                            int(sr["qty"]),
+                                            sr["unit"],
+                                            sr.get("pack_count"),
+                                        ),
                                     )
                                     sheets_manager.log_user_event(user_id, "item_added", mode="recent_shops")
                                 
@@ -1420,6 +1432,11 @@ else:
                 except ValueError: i_qty = 1
                 i_unit = row[2]
                 i_img = row[3].strip() if len(row) >= 4 and row[3] else ""
+                i_pack_count = shopping_pack_count(
+                    i_qty,
+                    i_unit,
+                    row[4] if len(row) >= 5 else None,
+                )
                 cols = st.columns([0.55, 1.9, 1.65, 0.55])
                 with cols[0]:
                     if i_img:
@@ -1433,15 +1450,15 @@ else:
                     with sub_c1:
                         st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
                         if st.button("−", key=f"sub_{sheet_idx}"):
-                            if i_qty > 1:
-                                sheets_manager.update_list_quantity(sheet_idx, i_qty - 1, user_id)
+                            if i_pack_count > 1:
+                                sheets_manager.update_list_quantity(sheet_idx, i_pack_count - 1, user_id)
                                 st.rerun()
                     with sub_c2:
-                        st.markdown(f'<div class="qty-value">{i_qty}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="qty-value">{i_pack_count}</div>', unsafe_allow_html=True)
                     with sub_c3:
                         st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
                         if st.button("+", key=f"add_{sheet_idx}"):
-                            sheets_manager.update_list_quantity(sheet_idx, i_qty + 1, user_id)
+                            sheets_manager.update_list_quantity(sheet_idx, i_pack_count + 1, user_id)
                             st.rerun()
                 with cols[3]:
                     st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
@@ -1719,7 +1736,7 @@ else:
                         c1_border_width = "2px" if single_is_recommended else "1px"
                         c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
                         html_single = (
-                            f'<div style="border: {c1_border_width} solid {c1_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
+                            f'<div class="shopping-mode-banner" style="border: {c1_border_width} solid {c1_border};">'
                             f'{c1_badge}'
                             f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
                             f'<div style="display: flex; align-items: center; gap: 15px;">'
@@ -1734,8 +1751,11 @@ else:
 
                         st.markdown(html_single, unsafe_allow_html=True)
                         if single_best["is_complete"]:
-                            st.markdown('<div class="single-store-choice-marker"></div>', unsafe_allow_html=True)
-                            if st.button(" ", use_container_width=True, key="btn_single"):
+                            if st.button(
+                                f"Choose {single_title}: {single_subtitle}, ${single_best['total_cost']:.2f}",
+                                use_container_width=True,
+                                key="btn_single",
+                            ):
                                 sheets_manager.log_user_event(user_id, "shop_mode_selected", mode="single")
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
@@ -1745,7 +1765,7 @@ else:
                             c2_border_width = "2px" if not single_is_recommended else "1px"
                             c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
                             html_split = (
-                                f'<div style="border: {c2_border_width} solid {c2_border}; border-radius: 12px; padding: 15px; position: relative; background-color: #FAFAFA; height: 95px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor=\'#F5F5F5\';" onmouseout="this.style.backgroundColor=\'#FAFAFA\';">'
+                                f'<div class="shopping-mode-banner" style="border: {c2_border_width} solid {c2_border};">'
                                 f'{c2_badge}'
                                 f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
                                 f'<div style="display: flex; align-items: center; gap: 15px;">'
@@ -1759,8 +1779,11 @@ else:
                             )
 
                             st.markdown(html_split, unsafe_allow_html=True)
-                            st.markdown('<div class="split-store-choice-marker"></div>', unsafe_allow_html=True)
-                            if st.button(" ", use_container_width=True, key="btn_split"):
+                            if st.button(
+                                f"Choose split shopping across preferred stores, ${split_opt['total_cost']:.2f}",
+                                use_container_width=True,
+                                key="btn_split",
+                            ):
                                 sheets_manager.log_user_event(user_id, "shop_mode_selected", mode="split")
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
@@ -1846,9 +1869,13 @@ else:
                                 )
                                 st.markdown(html_row, unsafe_allow_html=True)
                                 
-                # --- NEW FINISH SHOP BUTTON ---
-                st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
-                if st.button("✅ Finish Shop & Save History", type="primary", use_container_width=True):
+                can_finish_shop = (
+                    tab_choice == "Overview"
+                    and st.session_state.get("shop_mode") in {"single", "split"}
+                )
+                if can_finish_shop:
+                    st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                if can_finish_shop and st.button("✅ Finish Shop", type="primary", use_container_width=True):
                     selected_purchase_names = set()
                     grouped_item_names = {}
                     if st.session_state.get("shop_mode") == "split":

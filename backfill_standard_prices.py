@@ -18,6 +18,7 @@ from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES
 from modules.brands import merge_brand_metadata
+from build_dashboard import refresh_performance_dashboard
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
 
@@ -194,7 +195,9 @@ def backfill() -> None:
             sheets_manager.save_standard_prices(standard_prices)
             print(f"  -- checkpoint saved at item {idx}/{len(STAPLES)} --")
 
-    sheets_manager.save_standard_prices(standard_prices)
+    if not sheets_manager.save_standard_prices(standard_prices):
+        raise RuntimeError("Standard prices were not saved; dashboard refresh skipped.")
+    refresh_performance_dashboard(sheets_manager.sh)
     print(
         f"\nDone. {succeeded} priced, {failed} missing, {skipped} already fresh. "
         f"{len(standard_prices)} entries saved."

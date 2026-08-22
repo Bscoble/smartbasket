@@ -78,6 +78,12 @@ python3 cache_warmer.py
 | 20:00 | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
 | 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
 
+Each job refreshes the `Performance Dashboard` after its source data has been
+successfully saved. This behavior lives in the Python job entry points, so it
+also applies when a job is run manually rather than through GitHub Actions.
+If persistence fails, the job exits with an error and skips the dashboard
+refresh instead of presenting a partial snapshot.
+
 Product metadata is written to the `Product Metadata` worksheet. Complete and
 partial records are refreshed after 180 days; unavailable pages retry after 14
 days. The job requires `ZENROWS_KEY` and `GCP_SERVICE_ACCOUNT`, and uses the

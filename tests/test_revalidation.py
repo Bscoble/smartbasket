@@ -62,12 +62,14 @@ def test_revalidation_preserves_stronger_existing_brand_metadata(monkeypatch):
 
     class FakeSheetsManager:
         saved = None
+        sh = object()
 
         def load_standard_prices(self):
             return {("Coles", "tim tam"): entry}
 
         def save_standard_prices(self, prices):
             self.saved = prices
+            return True
 
     class FakeScraper:
         def get_live_price_result(self, _store, _item, max_search_candidates):
@@ -81,6 +83,7 @@ def test_revalidation_preserves_stronger_existing_brand_metadata(monkeypatch):
             }
 
     sheets_manager = FakeSheetsManager()
+    refreshed = []
     monkeypatch.setattr(
         revalidation_job,
         "build_dependencies",
@@ -91,6 +94,11 @@ def test_revalidation_preserves_stronger_existing_brand_metadata(monkeypatch):
         "STALE_REVALIDATION_BATCH_LIMITS",
         {"Coles": 1},
     )
+    monkeypatch.setattr(
+        revalidation_job,
+        "refresh_performance_dashboard",
+        lambda spreadsheet: refreshed.append(spreadsheet),
+    )
 
     revalidation_job.revalidate_stale_prices()
 
@@ -98,3 +106,4 @@ def test_revalidation_preserves_stronger_existing_brand_metadata(monkeypatch):
     assert saved["price"] == 4.5
     assert saved["brand_source"] == "retailer"
     assert saved["brand_confidence"] == "high"
+    assert refreshed == [sheets_manager.sh]

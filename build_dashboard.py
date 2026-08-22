@@ -271,12 +271,17 @@ def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
         spreadsheet.batch_update({"requests": format_requests + chart_requests})
 
 
-def build_dashboard() -> None:
-    secrets = load_secrets()
-    spreadsheet = build_spreadsheet(secrets)
+def refresh_performance_dashboard(spreadsheet: gspread.Spreadsheet) -> None:
+    """Rebuild the dashboard using an already authenticated spreadsheet."""
     tables = build_dashboard_tables(spreadsheet)
     write_dashboard(spreadsheet, tables)
     print(f"Performance Dashboard updated with {len(tables)} tables/charts.")
+
+
+def build_dashboard() -> None:
+    secrets = load_secrets()
+    spreadsheet = build_spreadsheet(secrets)
+    refresh_performance_dashboard(spreadsheet)
 
 
 if __name__ == "__main__":

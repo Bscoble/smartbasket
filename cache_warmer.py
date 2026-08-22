@@ -15,6 +15,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES
+from build_dashboard import refresh_performance_dashboard
 from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
@@ -107,8 +108,11 @@ def warm_the_cache():
                     print(f"❌ Failed {store} for {item}: {e}")
 
     print("Saving updated prices to Google Sheets...")
-    sheets_manager.save_price_cache(cache)
-    sheets_manager.save_standard_prices(standard_prices)
+    cache_saved = sheets_manager.save_price_cache(cache)
+    prices_saved = sheets_manager.save_standard_prices(standard_prices)
+    if not cache_saved or not prices_saved:
+        raise RuntimeError("Cache data was not fully saved; dashboard refresh skipped.")
+    refresh_performance_dashboard(spreadsheet)
     print("Cache warmup complete!")
 
 

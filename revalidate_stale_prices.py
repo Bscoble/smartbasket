@@ -15,6 +15,7 @@ from config import (
     STANDARD_PRICE_MAX_AGE_DAYS,
     THREAD_POOL_MAX_WORKERS,
 )
+from build_dashboard import refresh_performance_dashboard
 from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.revalidation import select_stale_standard_prices
@@ -93,7 +94,9 @@ def revalidate_stale_prices() -> None:
         successful += 1
 
     if successful:
-        sheets_manager.save_standard_prices(standard_prices)
+        if not sheets_manager.save_standard_prices(standard_prices):
+            raise RuntimeError("Revalidated prices were not saved; dashboard refresh skipped.")
+        refresh_performance_dashboard(sheets_manager.sh)
     print(f"Completed {successful}/{len(targets)} stale-price revalidations.")
 
 

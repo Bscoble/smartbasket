@@ -14,6 +14,7 @@ from config import (
     PRODUCT_METADATA_MAX_AGE_DAYS,
     SPREADSHEET_ID,
 )
+from build_dashboard import refresh_performance_dashboard
 from modules.product_metadata import fetch_woolworths_product_metadata, select_metadata_candidates
 from modules.sheets import SheetsManager
 
@@ -87,6 +88,7 @@ def enrich_product_metadata() -> None:
                 cost_usd=cost_per_request,
             )
 
+    refresh_performance_dashboard(sheets_manager.sh)
     print(f"Completed {completed}/{len(candidates)} Woolworths metadata enrichments.")
 
 
