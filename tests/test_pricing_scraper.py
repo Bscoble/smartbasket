@@ -7,7 +7,13 @@ if ROOT not in sys.path:
 
 from modules.pricing import PriceScraper
 from config import APIFY_DEFAULT_CONFIG
-from helpers import build_product_search_query, build_store_search_candidates, build_store_search_query
+from helpers import (
+    build_product_search_query,
+    build_store_search_candidates,
+    build_store_search_query,
+    infer_quantity_and_unit,
+    price_quantity_multiplier,
+)
 
 
 def test_iter_apify_products_flattens_result_payloads():
@@ -104,6 +110,19 @@ def test_build_product_search_query_adds_selected_measurable_size():
     assert build_product_search_query("shaved ham", 250, "Gram") == "shaved ham 250g"
     assert build_product_search_query("milk", 2, "Litre") == "milk 2L"
     assert build_product_search_query("bananas", 3, "Each") == "bananas"
+
+
+def test_infer_quantity_and_unit_uses_product_size():
+    assert infer_quantity_and_unit("Shaved Ham 250g") == (250, "g")
+    assert infer_quantity_and_unit("Leg Ham Shaved 250 grams") == (250, "g")
+    assert infer_quantity_and_unit("Full Cream Milk 2L") == (2, "L")
+    assert infer_quantity_and_unit("Bananas") == (1, "each")
+
+
+def test_measurable_sizes_are_one_shelf_priced_pack():
+    assert price_quantity_multiplier(250, "g") == 1
+    assert price_quantity_multiplier(2, "L") == 1
+    assert price_quantity_multiplier(3, "each") == 3
 
 
 def test_extract_bulk_product_info_keeps_category_metadata():

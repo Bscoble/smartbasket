@@ -34,7 +34,8 @@ from helpers import (
     get_store_initial,
     get_greeting,
     validate_email,
-    infer_unit,
+    infer_quantity_and_unit,
+    price_quantity_multiplier,
     build_product_search_query,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
@@ -527,7 +528,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 }
                 continue
 
-            total_price = unit_price * qty
+            pack_count = price_quantity_multiplier(qty, unit)
+            total_price = unit_price * pack_count
             store_totals[store] += total_price
             store_price_counts[store] += 1
             item_store_data[store] = {
@@ -559,7 +561,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             "item_name": item_name,
             "quantity": f"{qty} {unit}",
             "cheapest_store": cheapest_store,
-            "unit_price": f"{format_price(best_price/qty)}/{unit}",
+            "unit_price": format_price(best_price / pack_count),
             "total_price": format_price(best_price),
             "all_stores": sorted_item_stores,
         })
@@ -1146,9 +1148,10 @@ else:
                 find_submitted = st.form_submit_button("🔍 Find matches", use_container_width=True)
                 
                 if add_submitted and item_name:
+                    stored_qty = int(qty)
                     stored_unit = config.UNIT_VALUES[unit]
                     if stored_unit == "auto":
-                        stored_unit = infer_unit(item_name)
+                        stored_qty, stored_unit = infer_quantity_and_unit(item_name)
                     scraped_matches = sheets_manager.search_scraped_products(item_name)
                     scraped_product = next(
                         (match for match in scraped_matches if match.get("image_url")),
@@ -1164,7 +1167,7 @@ else:
                     )
                     if sheets_manager.add_item_to_list(
                         item_name,
-                        int(qty),
+                        stored_qty,
                         stored_unit,
                         product_image,
                         user_id,
@@ -1289,6 +1292,7 @@ else:
                                 )
                         with sc3:
                             if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
+                                matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
                                 sheets_manager.save_product(
                                     user_id,
                                     res["title"],
@@ -1297,7 +1301,7 @@ else:
                                     subcategory=res.get("subcategory", ""),
                                 )
                                 if sheets_manager.add_item_to_list(
-                                    res["title"], 1, "each", res["image_url"], user_id
+                                    res["title"], matched_qty, matched_unit, res["image_url"], user_id
                                 ):
                                     sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
                                     st.session_state["search_performed"] = False
@@ -1326,6 +1330,7 @@ else:
                                 if product_image:
                                     st.image(product_image, width=100)
                                 if st.button(f"➕ Add '{product_name}' to List", type="primary"):
+                                    scanned_qty, scanned_unit = infer_quantity_and_unit(product_name)
                                     sheets_manager.save_product(
                                         user_id,
                                         product_name,
@@ -1334,7 +1339,7 @@ else:
                                         subcategory=scanned_product.get("subcategory", ""),
                                     )
                                     if sheets_manager.add_item_to_list(
-                                        product_name, 1, "each", product_image or "", user_id
+                                        product_name, scanned_qty, scanned_unit, product_image or "", user_id
                                     ):
                                         sheets_manager.log_user_event(user_id, "item_added", mode="barcode")
                                         st.success(f"Added {product_name} to your list!")

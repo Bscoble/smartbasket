@@ -112,18 +112,38 @@ def parse_quantity(qty_str: str, default: int = 1) -> int:
         return default
 
 
+def infer_quantity_and_unit(item_name: str) -> Tuple[int, str]:
+    """Infer an integer product size and stored unit from a product title."""
+    text = item_name.lower().strip()
+    unit_patterns = (
+        ("L", r"\b(\d+)\s*(?:litre|litres|liter|liters|l)\b"),
+        ("kg", r"\b(\d+)\s*(?:kilogram|kilograms|kilo|kilos|kg)\b"),
+        ("g", r"\b(\d+)\s*(?:gram|grams|g)\b"),
+    )
+    for unit, pattern in unit_patterns:
+        match = re.search(pattern, text)
+        if match:
+            return int(match.group(1)), unit
+
+    return 1, "each"
+
+
 def infer_unit(item_name: str) -> str:
     """Infer a stored unit from common product-size and packaging terms."""
     text = item_name.lower().strip()
-    if re.search(r"\b\d+(?:\.\d+)?\s*(?:litre|litres|liter|liters|l)\b", text):
-        return "L"
-    if re.search(r"\b\d+(?:\.\d+)?\s*(?:kilogram|kilograms|kilo|kilos|kg)\b", text):
-        return "kg"
-    if re.search(r"\b\d+(?:\.\d+)?\s*(?:gram|grams|g)\b", text):
-        return "g"
+    inferred_quantity, inferred_unit = infer_quantity_and_unit(item_name)
+    if inferred_unit != "each":
+        return inferred_unit
     if re.search(r"\b\d+\s*(?:pack|packs|packet|packets|pk)\b", text):
         return "Pk"
     return "each"
+
+
+def price_quantity_multiplier(quantity: int, unit: str) -> int:
+    """Return how many shelf-priced packs contribute to a shopping-list total."""
+    if unit in {"g", "kg", "L"}:
+        return 1
+    return quantity
 
 
 def build_product_search_query(item_name: str, quantity, unit: str) -> str:
