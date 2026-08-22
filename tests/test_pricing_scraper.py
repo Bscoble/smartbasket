@@ -455,6 +455,8 @@ def test_search_scraped_products_requires_selected_weight():
                 ["Aldi", "Australian Leg Ham Off The Bone Shaved 150g", "5.49", "Australian Leg Ham Off The Bone Shaved 150g", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
                 ["Aldi", "Leg Ham Shaved 100 g", "3.99", "Leg Ham Shaved 100 g", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
                 ["Aldi", "Leg Honey Ham Shaved 250 grams", "5.29", "Leg Honey Ham Shaved 250 grams", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
+                ["Woolworths", "Woolworths Beef Rump Steak 250g", "8.00", "Woolworths Beef Rump Steak 250g", "2026-08-21 12:00:00", "", "", "", "Meat", "Beef"],
+                ["Woolworths", "Woolworths Beef T Bone Steak Medium 250g - 700g", "12.00", "Woolworths Beef T Bone Steak Medium 250g - 700g", "2026-08-21 12:00:00", "", "", "", "Meat", "Beef"],
             ]
 
     class FakeSpreadsheet:
@@ -463,7 +465,7 @@ def test_search_scraped_products_requires_selected_weight():
 
     manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
 
-    results = manager.search_scraped_products("shaved ham 250g")
+    results = manager.search_scraped_products("woolworths shaved ham 250g")
 
     assert [result["title"] for result in results] == [
         "Leg Shaved Ham 250g",

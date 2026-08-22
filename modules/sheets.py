@@ -1068,10 +1068,14 @@ class SheetsManager:
                 normalized = re.sub(r"[^a-z0-9]+", " ", value).strip()
                 return re.sub(r"\bcoca cola\b", "coke", normalized)
 
-            normalized_query = normalize(query)
-            terms = normalized_query.split()
+            retailer_terms = {"aldi", "coles", "woolworths"}
+            terms = [
+                term for term in normalize(query).split()
+                if term not in retailer_terms
+            ]
             if not terms:
                 return []
+            normalized_query = " ".join(terms)
 
             matches = {}
             for row in self._cached_values(worksheet_name, ws)[1:]:
