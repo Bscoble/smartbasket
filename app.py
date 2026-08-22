@@ -35,10 +35,10 @@ from helpers import (
     get_greeting,
     validate_email,
     infer_unit,
-    normalize_gtin,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.brands import merge_brand_metadata
+from modules.gtin import normalize_gtin
 
 # ============================================================================
 # LOGGING SETUP

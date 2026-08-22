@@ -35,9 +35,9 @@ from helpers import (
     is_valid_price,
     clean_price_text,
     build_store_search_candidates,
-    normalize_gtin,
 )
 from modules.brands import resolve_brand
+from modules.gtin import normalize_gtin
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from config import (
     SHEETS_READ_CACHE_SECONDS,
     STANDARD_PRICE_MAX_AGE_DAYS,
 )
-from helpers import normalize_gtin
+from modules.gtin import normalize_gtin
 
 logger = logging.getLogger(__name__)
 
