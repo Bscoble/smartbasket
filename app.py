@@ -1118,6 +1118,9 @@ else:
         display_name = current_user.get("first_name") or current_user.get("name", "there").split()[0]
         user_id = current_user.get("email", "")
         greeting = get_greeting(current_user.get("country", config.DEFAULT_COUNTRY))
+
+        if st.session_state.pop("clear_add_item_description", False):
+            st.session_state["add_item_description"] = ""
             
         st.markdown(f"""
         <div class="app-header">
@@ -1137,6 +1140,7 @@ else:
                     "What do you need?",
                     placeholder="e.g., Helga's white bread 700g",
                     label_visibility="collapsed",
+                    key="add_item_description",
                 )
                 c1, c2, c3 = st.columns([1.2, 2, 1.4])
                 with c1:
@@ -1304,6 +1308,7 @@ else:
                                     res["title"], matched_qty, matched_unit, res["image_url"], user_id
                                 ):
                                     sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
+                                    st.session_state["clear_add_item_description"] = True
                                     st.session_state["search_performed"] = False
                                     st.session_state["search_results"] = []
                                     st.rerun()
