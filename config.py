@@ -43,6 +43,9 @@ DEFAULT_PRICE_FALLBACK = 99.99  # Fallback for scraping failures
 APIFY_DEFAULT_PRICE = 5.00  # Fallback for Apify scraping failures
 SHEETS_READ_CACHE_SECONDS = 20  # Reduce duplicate reads across Streamlit reruns
 STANDARD_PRICE_MAX_AGE_DAYS = 14  # Re-verify shelf prices at least this often
+PRODUCT_METADATA_MAX_AGE_DAYS = 180
+PRODUCT_METADATA_FAILED_RETRY_DAYS = 14
+PRODUCT_METADATA_BATCH_LIMIT = 20
 
 # ============================================================================
 # PRICE CONSTRAINTS & VALIDATION
@@ -125,6 +128,7 @@ WORKSHEET_NAMES = {
     "scrape_log": "Scrape Log",
     "catalog_size_history": "Catalog Size History",
     "performance_dashboard": "Performance Dashboard",
+    "product_metadata": "Product Metadata",
 }
 
 WORKSHEET_CONFIG = {
@@ -132,13 +136,14 @@ WORKSHEET_CONFIG = {
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
     "product_catalog": {"rows": "5000", "cols": "7"},
-    "standard_prices": {"rows": "5000", "cols": "14"},
+    "standard_prices": {"rows": "5000", "cols": "15"},
     "daily_specials": {"rows": "2000", "cols": "5"},
     "crawl_state": {"rows": "500", "cols": "4"},
     "user_events": {"rows": "20000", "cols": "7"},
     "scrape_log": {"rows": "20000", "cols": "7"},
     "catalog_size_history": {"rows": "5000", "cols": "3"},
     "performance_dashboard": {"rows": "200", "cols": "20"},
+    "product_metadata": {"rows": "5000", "cols": "14"},
 }
 
 # ============================================================================

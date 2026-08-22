@@ -92,11 +92,12 @@ def test_save_standard_prices_writes_brand_metadata_columns():
             "brand_source": "retailer",
             "brand_confidence": "high",
             "barcode": "4000417025005",
+            "source_url": "https://aldi.test/choceur",
         }
     })
 
-    assert spreadsheet.worksheet_value.values[0][-4:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode"]
-    assert spreadsheet.worksheet_value.values[1][-4:] == ["Choceur", "retailer", "high", "4000417025005"]
+    assert spreadsheet.worksheet_value.values[0][-5:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode", "Source URL"]
+    assert spreadsheet.worksheet_value.values[1][-5:] == ["Choceur", "retailer", "high", "4000417025005", "https://aldi.test/choceur"]
 
 
 def test_upsert_standard_price_migrates_legacy_header():
@@ -115,10 +116,38 @@ def test_upsert_standard_price_migrates_legacy_header():
         brand_source="retailer",
         brand_confidence="high",
         barcode="9300601433247",
+        source_url="https://coles.test/milk",
     )
 
-    assert spreadsheet.worksheet_value.values[0][-4:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode"]
-    assert spreadsheet.worksheet_value.values[1][-4:] == ["Coles", "retailer", "high", "9300601433247"]
+    assert spreadsheet.worksheet_value.values[0][-5:] == ["Brand", "Brand Source", "Brand Confidence", "Barcode", "Source URL"]
+    assert spreadsheet.worksheet_value.values[1][-5:] == ["Coles", "retailer", "high", "9300601433247", "https://coles.test/milk"]
+
+
+def test_upsert_and_load_product_metadata_keeps_explicit_allergen_claims():
+    spreadsheet = FakeSpreadsheet([])
+    manager = SheetsManager(spreadsheet)
+    entry = {
+        "barcode": "9310072026817",
+        "canonical_name": "Arnott's Tim Tam Original 200g",
+        "brand": "Arnott's",
+        "ingredients_raw": "Wheat flour, sugar",
+        "allergens_raw": "Contains: Wheat May contain: Milk",
+        "allergens_contains": "Wheat",
+        "allergens_may_contain": "Milk",
+        "nutrition_json": '{"servingSize":"20g"}',
+        "country_of_origin": "Australia",
+        "source_retailer": "Woolworths",
+        "source_url": "https://woolworths.test/tim-tam",
+        "last_verified": datetime(2026, 8, 22, 12, 0, 0),
+        "extraction_status": "complete",
+    }
+
+    assert manager.upsert_product_metadata(entry)
+    metadata = manager.load_product_metadata()["9310072026817"]
+
+    assert metadata["allergens_contains"] == "Wheat"
+    assert metadata["allergens_may_contain"] == "Milk"
+    assert metadata["source_retailer"] == "Woolworths"
 
 
 def test_find_product_by_barcode_returns_local_product_and_store_coverage():

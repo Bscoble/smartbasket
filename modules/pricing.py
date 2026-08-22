@@ -10,7 +10,7 @@ import re
 import time
 from datetime import timedelta
 from typing import Optional, Dict, Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from apify_client import ApifyClient
@@ -360,6 +360,7 @@ class PriceScraper:
             "product_name": product_name,
             **brand_metadata,
             "barcode": PriceScraper._extract_product_barcode(record),
+            "source_url": PriceScraper._extract_product_source_url("Aldi", record),
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -436,6 +437,7 @@ class PriceScraper:
             "product_name": product_name,
             **brand_metadata,
             "barcode": PriceScraper._extract_product_barcode(product),
+            "source_url": PriceScraper._extract_product_source_url(store, product),
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -490,6 +492,7 @@ class PriceScraper:
                         "product_name": product_name,
                         **brand_metadata,
                         "barcode": self._extract_product_barcode(product),
+                        "source_url": self._extract_product_source_url(store, product),
                         "status": "ok",
                         "message": f"Price found: {product_name}",
                     }
@@ -531,6 +534,38 @@ class PriceScraper:
                 barcode = find_valid(product[field_name])
                 if barcode:
                     return barcode
+        return ""
+
+    @staticmethod
+    def _extract_product_source_url(store: str, product: Dict[str, Any]) -> str:
+        """Return an absolute retailer product-detail URL from common actor fields."""
+        base_urls = {
+            "Woolworths": "https://www.woolworths.com.au",
+            "Coles": "https://www.coles.com.au",
+            "Aldi": "https://www.aldi.com.au",
+        }
+        if store == "Woolworths":
+            stockcode = str(product.get("stockcode") or "").strip()
+            slug = str(product.get("url_friendly_name") or "").strip().strip("/")
+            if stockcode.isdigit() and slug:
+                return f"https://www.woolworths.com.au/shop/productdetails/{stockcode}/{slug}"
+
+        for field_name in (
+            "product_url", "productUrl", "product_uri", "productUri",
+            "canonical_url", "canonicalUrl", "url", "link",
+        ):
+            value = product.get(field_name)
+            if isinstance(value, dict):
+                value = value.get("url") or value.get("href") or value.get("uri")
+            if not isinstance(value, str) or not value.strip():
+                continue
+            absolute_url = urljoin(base_urls.get(store, ""), value.strip())
+            parsed = urlparse(absolute_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                continue
+            if "/search/" in parsed.path or parsed.path.rstrip("/") == "/results":
+                continue
+            return absolute_url
         return ""
 
     def _get_zenrows_price_result(self, store: str, item_name: str) -> Dict[str, Any]:

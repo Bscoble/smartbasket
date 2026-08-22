@@ -204,6 +204,7 @@ def crawl_keyword(
             "subcategory": product.get("subcategory", ""),
             **merge_brand_metadata(existing, product),
             "barcode": product.get("barcode") or existing.get("barcode", ""),
+            "source_url": product.get("source_url") or existing.get("source_url", ""),
         }
         if product["is_special"] and product["price"] < product["standard_price"]:
             daily_specials[key] = {

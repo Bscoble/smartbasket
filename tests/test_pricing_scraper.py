@@ -136,6 +136,7 @@ def test_extract_woolworths_bulk_product_keeps_explicit_brand():
         "brand_name": "Dairy Farmers",
         "price": 4.80,
         "gtin": "9300601433247",
+        "product_url": "/shop/productdetails/123/dairy-farmers-milk",
     }
 
     result = scraper._extract_bulk_product_info("Woolworths", product)
@@ -144,12 +145,25 @@ def test_extract_woolworths_bulk_product_keeps_explicit_brand():
     assert result["brand_source"] == "retailer"
     assert result["brand_confidence"] == "high"
     assert result["barcode"] == "9300601433247"
+    assert result["source_url"] == "https://www.woolworths.com.au/shop/productdetails/123/dairy-farmers-milk"
 
 
 def test_extract_product_barcode_accepts_gtin_fields_but_not_internal_skus():
     assert PriceScraper._extract_product_barcode({"barcodes": [{"ean13": "9310072026817"}]}) == "9310072026817"
     assert PriceScraper._extract_product_barcode({"sku": "9310072026817"}) == ""
     assert PriceScraper._extract_product_barcode({"barcode": "9310072026818"}) == ""
+
+
+def test_extract_product_source_url_rejects_search_pages():
+    assert PriceScraper._extract_product_source_url(
+        "Coles", {"productUrl": "/product/coles-milk-123"}
+    ) == "https://www.coles.com.au/product/coles-milk-123"
+    assert PriceScraper._extract_product_source_url(
+        "Woolworths", {"url": "/shop/search/products?searchTerm=milk"}
+    ) == ""
+    assert PriceScraper._extract_product_source_url(
+        "Woolworths", {"stockcode": 208064, "url_friendly_name": "a2-milk-full-cream-milk"}
+    ) == "https://www.woolworths.com.au/shop/productdetails/208064/a2-milk-full-cream-milk"
 
 
 def test_split_shopping_available_requires_multiple_cheapest_stores():

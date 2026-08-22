@@ -26,7 +26,13 @@ logger = logging.getLogger(__name__)
 STANDARD_PRICE_HEADERS = [
     "Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price",
     "Unit Label", "Image URL", "Category", "Subcategory", "Brand",
-    "Brand Source", "Brand Confidence", "Barcode",
+    "Brand Source", "Brand Confidence", "Barcode", "Source URL",
+]
+PRODUCT_METADATA_HEADERS = [
+    "Metadata Key", "Barcode", "Canonical Name", "Brand", "Ingredients Raw",
+    "Allergens Raw", "Allergens Contains", "Allergens May Contain",
+    "Nutrition JSON", "Country of Origin", "Source Retailer", "Source URL",
+    "Last Verified", "Extraction Status",
 ]
 
 
@@ -298,6 +304,7 @@ class SheetsManager:
                         brand_source = row[11] if len(row) >= 12 else ""
                         brand_confidence = row[12] if len(row) >= 13 else ""
                         barcode = normalize_gtin(row[13]) if len(row) >= 14 else ""
+                        source_url = row[14] if len(row) >= 15 else ""
                         prices[(store, item.lower())] = {
                             "price": float(price_str),
                             "product_name": product_name,
@@ -311,6 +318,7 @@ class SheetsManager:
                             "brand_source": brand_source,
                             "brand_confidence": brand_confidence,
                             "barcode": barcode,
+                            "source_url": source_url,
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
@@ -342,6 +350,7 @@ class SheetsManager:
         brand_source: str = "",
         brand_confidence: str = "",
         barcode: str = "",
+        source_url: str = "",
     ) -> bool:
         """Add or update a single standard price entry, e.g. from an admin/population tool."""
         try:
@@ -357,7 +366,7 @@ class SheetsManager:
                 ws.append_row(headers)
                 data = [headers]
             elif data[0] != headers:
-                ws.update("A1:N1", [headers])
+                ws.update("A1:O1", [headers])
                 data[0] = headers
 
             item_lower = item_name.strip().lower()
@@ -376,6 +385,7 @@ class SheetsManager:
                 brand_source,
                 brand_confidence,
                 normalize_gtin(barcode),
+                source_url,
             ]
 
             existing_row = None
@@ -385,7 +395,7 @@ class SheetsManager:
                     break
 
             if existing_row:
-                ws.update(f"A{existing_row}:N{existing_row}", [values])
+                ws.update(f"A{existing_row}:O{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -423,6 +433,7 @@ class SheetsManager:
                         data.get("brand_source", ""),
                         data.get("brand_confidence", ""),
                         normalize_gtin(data.get("barcode", "")),
+                        data.get("source_url", ""),
                     ]
                 )
 
@@ -433,6 +444,105 @@ class SheetsManager:
             return True
         except Exception as e:
             logger.error(f"Error saving standard prices: {e}", exc_info=True)
+            return False
+
+    def load_product_metadata(self) -> Dict[str, Dict[str, Any]]:
+        """Load slow-changing ingredients, allergens, nutrition, and provenance."""
+        metadata = {}
+        try:
+            worksheet_name = WORKSHEET_NAMES["product_metadata"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["product_metadata"]["rows"],
+                cols=WORKSHEET_CONFIG["product_metadata"]["cols"],
+            )
+            data = self._cached_values(worksheet_name, ws)
+            if not data:
+                ws.append_row(PRODUCT_METADATA_HEADERS)
+                self._invalidate_values_cache(worksheet_name)
+                return metadata
+
+            for row in data[1:]:
+                if not row or not row[0].strip():
+                    continue
+                padded = row + [""] * (len(PRODUCT_METADATA_HEADERS) - len(row))
+                last_verified = None
+                if padded[12]:
+                    try:
+                        last_verified = datetime.strptime(padded[12], DATETIME_TIME_FORMAT)
+                    except ValueError:
+                        logger.debug(f"Invalid product metadata timestamp: {padded[12]}")
+                metadata[padded[0]] = {
+                    "barcode": normalize_gtin(padded[1]),
+                    "canonical_name": padded[2],
+                    "brand": padded[3],
+                    "ingredients_raw": padded[4],
+                    "allergens_raw": padded[5],
+                    "allergens_contains": padded[6],
+                    "allergens_may_contain": padded[7],
+                    "nutrition_json": padded[8],
+                    "country_of_origin": padded[9],
+                    "source_retailer": padded[10],
+                    "source_url": padded[11],
+                    "last_verified": last_verified,
+                    "extraction_status": padded[13],
+                }
+        except Exception as e:
+            logger.error(f"Error loading product metadata: {e}", exc_info=True)
+        return metadata
+
+    def upsert_product_metadata(self, entry: Dict[str, Any]) -> bool:
+        """Insert or replace one product metadata record by GTIN or source URL."""
+        barcode = normalize_gtin(entry.get("barcode", ""))
+        source_url = str(entry.get("source_url") or "").strip()
+        metadata_key = barcode or source_url
+        if not metadata_key:
+            return False
+
+        try:
+            worksheet_name = WORKSHEET_NAMES["product_metadata"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["product_metadata"]["rows"],
+                cols=WORKSHEET_CONFIG["product_metadata"]["cols"],
+            )
+            data = self._cached_values(worksheet_name, ws)
+            if not data:
+                ws.append_row(PRODUCT_METADATA_HEADERS)
+                data = [PRODUCT_METADATA_HEADERS]
+            elif data[0] != PRODUCT_METADATA_HEADERS:
+                ws.update("A1:N1", [PRODUCT_METADATA_HEADERS])
+                data[0] = PRODUCT_METADATA_HEADERS
+
+            last_verified = entry.get("last_verified") or datetime.now()
+            values = [
+                metadata_key,
+                barcode,
+                entry.get("canonical_name", ""),
+                entry.get("brand", ""),
+                entry.get("ingredients_raw", ""),
+                entry.get("allergens_raw", ""),
+                entry.get("allergens_contains", ""),
+                entry.get("allergens_may_contain", ""),
+                entry.get("nutrition_json", ""),
+                entry.get("country_of_origin", ""),
+                entry.get("source_retailer", ""),
+                source_url,
+                last_verified.strftime(DATETIME_TIME_FORMAT),
+                entry.get("extraction_status", "partial"),
+            ]
+            existing_row = next(
+                (row_number for row_number, row in enumerate(data[1:], start=2) if row and row[0] == metadata_key),
+                None,
+            )
+            if existing_row:
+                ws.update(f"A{existing_row}:N{existing_row}", [values])
+            else:
+                ws.append_row(values)
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error upserting product metadata: {e}", exc_info=True)
             return False
 
     def find_product_by_barcode(self, barcode: str) -> Optional[Dict[str, Any]]:

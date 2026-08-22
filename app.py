@@ -436,6 +436,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                                 "brand_source": result.get("brand_source", ""),
                                 "brand_confidence": result.get("brand_confidence", ""),
                                 "barcode": result.get("barcode", ""),
+                                "source_url": result.get("source_url", ""),
                             }
                         else:
                             price = result
@@ -485,6 +486,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                             "last_verified": datetime.now(),
                             **merge_brand_metadata(existing, item_store_status.get(store)),
                             "barcode": item_store_status.get(store, {}).get("barcode") or existing.get("barcode", ""),
+                            "source_url": item_store_status.get(store, {}).get("source_url") or existing.get("source_url", ""),
                         }
                         standard_prices_updated = True
             except concurrent.futures.TimeoutError:

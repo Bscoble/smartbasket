@@ -1,0 +1,40 @@
+name: Product Metadata Enrichment
+
+on:
+  schedule:
+    # Runs after catalogue discovery and before stale-price revalidation.
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  enrich_product_metadata:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate required secrets
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$ZENROWS_KEY" || (echo "Missing GitHub Actions secret: ZENROWS_KEY" && exit 1)
+          test -n "$GCP_SERVICE_ACCOUNT" || (echo "Missing GitHub Actions secret: GCP_SERVICE_ACCOUNT" && exit 1)
+
+      - name: Enrich Product Metadata
+        env:
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
+        run: python enrich_product_metadata.py

@@ -69,6 +69,20 @@ python3 cache_warmer.py
 
 ## Monitoring & Logs
 
+### Daily Jobs
+
+| UTC | Job | Purpose |
+|-----|-----|---------|
+| 18:00 | Cache warmer | Refresh common staple prices |
+| 18:30 | Category crawl | Discover retailer catalogue products and detail URLs |
+| 20:00 | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
+| 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
+
+Product metadata is written to the `Product Metadata` worksheet. Complete and
+partial records are refreshed after 180 days; unavailable pages retry after 14
+days. The job requires `ZENROWS_KEY` and `GCP_SERVICE_ACCOUNT`, and uses the
+optional `ZENROWS_COST_PER_REQUEST_USD` repository variable for cost reporting.
+
 ### View Workflow Runs
 https://github.com/Bscoble/smartbasket/actions
 
