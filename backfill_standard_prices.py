@@ -17,6 +17,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES
+from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
 
@@ -173,10 +174,13 @@ def backfill() -> None:
             result = scraper.get_live_price_result(store, item_name)
             price = result.get("price")
             if price is not None:
+                existing = standard_prices.get(key, {})
                 standard_prices[key] = {
+                    **existing,
                     "price": price,
                     "product_name": result.get("product_name") or item_name,
                     "last_verified": datetime.now(),
+                    **merge_brand_metadata(existing, result),
                 }
                 succeeded += 1
                 print(f"  OK    {store:<12} ${price:.2f}")

@@ -15,6 +15,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES
+from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
 
@@ -88,10 +89,14 @@ def warm_the_cache():
                             "timestamp": now,
                             "product_name": product_name,
                         }
-                        standard_prices[(store, item_lower)] = {
+                        key = (store, item_lower)
+                        existing = standard_prices.get(key, {})
+                        standard_prices[key] = {
+                            **existing,
                             "price": price,
                             "product_name": product_name,
                             "last_verified": now,
+                            **merge_brand_metadata(existing, result),
                         }
                         print(f"✅ {store} updated {item}: ${price}")
                     else:

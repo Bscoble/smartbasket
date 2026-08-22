@@ -15,6 +15,7 @@ from config import (
     STANDARD_PRICE_MAX_AGE_DAYS,
     THREAD_POOL_MAX_WORKERS,
 )
+from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.revalidation import select_stale_standard_prices
 from modules.sheets import SheetsManager
@@ -85,6 +86,7 @@ def revalidate_stale_prices() -> None:
             "price": price,
             "product_name": result.get("product_name") or entry.get("product_name") or item,
             "last_verified": datetime.now(),
+            **merge_brand_metadata(entry, result),
         }
         successful += 1
 

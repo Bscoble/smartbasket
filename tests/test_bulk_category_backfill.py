@@ -8,6 +8,7 @@ if ROOT not in sys.path:
 from bulk_category_backfill import (
     COLES_CATALOG_TARGETS,
     COLES_TARGETS_PER_RUN,
+    crawl_keyword,
     get_coles_catalog_targets,
 )
 
@@ -29,3 +30,26 @@ def test_coles_catalog_targets_resume_from_saved_cursor_and_wrap():
     assert targets[0] == COLES_CATALOG_TARGETS[-2]
     assert targets[1] == COLES_CATALOG_TARGETS[-1]
     assert targets[2] == COLES_CATALOG_TARGETS[0]
+
+
+def test_crawl_keyword_persists_resolved_brand_metadata():
+    class FakeScraper:
+        def get_bulk_products(self, _store, _urls, max_items):
+            assert max_items > 0
+            return [{
+                "product_name": "Choceur Milk Chocolate 200g",
+                "price": 3.99,
+                "standard_price": 3.99,
+                "is_special": False,
+                "brand": "Choceur",
+                "brand_source": "retailer",
+                "brand_confidence": "high",
+            }]
+
+    standard_prices = {}
+    crawl_keyword(FakeScraper(), "Aldi", "chocolate", {}, standard_prices, {})
+
+    saved = standard_prices[("Aldi", "choceur milk chocolate 200g")]
+    assert saved["brand"] == "Choceur"
+    assert saved["brand_source"] == "retailer"
+    assert saved["brand_confidence"] == "high"

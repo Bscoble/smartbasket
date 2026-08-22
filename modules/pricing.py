@@ -36,6 +36,7 @@ from helpers import (
     clean_price_text,
     build_store_search_candidates,
 )
+from modules.brands import resolve_brand
 
 logger = logging.getLogger(__name__)
 
@@ -353,9 +354,10 @@ class PriceScraper:
         if preferred_asset and preferred_asset.get("url"):
             image_url = preferred_asset["url"].replace("{width}", "300").replace("{slug}", "")
 
+        brand_metadata = resolve_brand(product_name, record.get("brandName"), "Aldi")
         return {
             "product_name": product_name,
-            "brand": record.get("brandName"),
+            **brand_metadata,
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -383,7 +385,7 @@ class PriceScraper:
             price = PriceScraper._coerce_apify_price(product.get("price"))
             standard_price = PriceScraper._coerce_apify_price(product.get("was_price")) or price
             is_special = bool(product.get("is_on_special"))
-            brand = None
+            brand = product.get("brand") or product.get("brandName") or product.get("brand_name")
             unit_price = PriceScraper._coerce_apify_price(product.get("cup_price"))
             unit_label = product.get("cup_measure") or ""
             image_url = product.get("medium_image_file") or product.get("large_image_file") or ""
@@ -427,9 +429,10 @@ class PriceScraper:
         if not product_name or price is None:
             return None
 
+        brand_metadata = resolve_brand(product_name, brand, store)
         return {
             "product_name": product_name,
-            "brand": brand,
+            **brand_metadata,
             "category": category,
             "subcategory": subcategory,
             "price": price,
@@ -472,10 +475,17 @@ class PriceScraper:
                 if candidates:
                     _, price, product = max(candidates, key=lambda candidate: candidate[0])
                     product_name = self._extract_product_name(product) or item_name
+                    explicit_brand = (
+                        product.get("brand")
+                        or product.get("brandName")
+                        or product.get("brand_name")
+                    )
+                    brand_metadata = resolve_brand(product_name, explicit_brand, store)
                     self._log_apify_usage(store, search_query, run, len(candidates))
                     return {
                         "price": price,
                         "product_name": product_name,
+                        **brand_metadata,
                         "status": "ok",
                         "message": f"Price found: {product_name}",
                     }
@@ -519,10 +529,12 @@ class PriceScraper:
                 price = self._extract_price_from_page_text(soup.get_text(), store)
             if price and is_valid_price(price) and price < PRICE_VALIDITY_THRESHOLD:
                 product_name = self._extract_zenrows_product_name(soup, item_name)
+                brand_metadata = resolve_brand(product_name, store=store)
                 log_result("SUCCEEDED", 1)
                 return {
                     "price": price,
                     "product_name": product_name,
+                    **brand_metadata,
                     "status": "ok",
                     "message": f"Price found: {product_name}",
                 }

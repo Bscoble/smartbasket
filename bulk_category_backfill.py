@@ -32,6 +32,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES, STORES
+from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
 
@@ -190,7 +191,9 @@ def crawl_keyword(
 
     for product in products:
         key = (store, product["product_name"].strip().lower())
+        existing = standard_prices.get(key, {})
         standard_prices[key] = {
+            **existing,
             "price": product["standard_price"],
             "product_name": product["product_name"],
             "last_verified": datetime.now(),
@@ -199,6 +202,7 @@ def crawl_keyword(
             "image_url": product.get("image_url", ""),
             "category": product.get("category") or category_fallback or keyword,
             "subcategory": product.get("subcategory", ""),
+            **merge_brand_metadata(existing, product),
         }
         if product["is_special"] and product["price"] < product["standard_price"]:
             daily_specials[key] = {

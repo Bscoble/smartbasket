@@ -119,6 +119,23 @@ def test_extract_bulk_product_info_keeps_category_metadata():
     assert result["category"] == "dairy"
     assert result["subcategory"] == "fresh milk"
     assert result["brand"] == "Coles"
+    assert result["brand_source"] == "retailer"
+    assert result["brand_confidence"] == "high"
+
+
+def test_extract_woolworths_bulk_product_keeps_explicit_brand():
+    scraper = PriceScraper(apify_token="token", zenrows_key="key")
+    product = {
+        "display_name": "Dairy Farmers Full Cream Milk 2L",
+        "brand_name": "Dairy Farmers",
+        "price": 4.80,
+    }
+
+    result = scraper._extract_bulk_product_info("Woolworths", product)
+
+    assert result["brand"] == "Dairy Farmers"
+    assert result["brand_source"] == "retailer"
+    assert result["brand_confidence"] == "high"
 
 
 def test_split_shopping_available_requires_multiple_cheapest_stores():

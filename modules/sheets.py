@@ -76,6 +76,10 @@ class SheetsManager:
             logger.info(f"Creating new worksheet: {name}")
             ws = self.sh.add_worksheet(title=name, rows=rows, cols=cols)
 
+        requested_cols = int(cols)
+        if getattr(ws, "col_count", requested_cols) < requested_cols:
+            ws.resize(cols=requested_cols)
+
         self._worksheet_cache[name] = ws
         return ws
     
@@ -269,7 +273,7 @@ class SheetsManager:
             )
 
             if ws.row_count == 1:
-                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"])
+                ws.append_row(["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"])
                 return prices
 
             data = self._cached_values(worksheet_name, ws)
@@ -282,6 +286,9 @@ class SheetsManager:
                         image_url = row[7] if len(row) >= 8 else ""
                         category = row[8] if len(row) >= 9 else ""
                         subcategory = row[9] if len(row) >= 10 else ""
+                        brand = row[10] if len(row) >= 11 else ""
+                        brand_source = row[11] if len(row) >= 12 else ""
+                        brand_confidence = row[12] if len(row) >= 13 else ""
                         prices[(store, item.lower())] = {
                             "price": float(price_str),
                             "product_name": product_name,
@@ -291,6 +298,9 @@ class SheetsManager:
                             "image_url": image_url,
                             "category": category,
                             "subcategory": subcategory,
+                            "brand": brand,
+                            "brand_source": brand_source,
+                            "brand_confidence": brand_confidence,
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid standard price row: {row}, error: {e}")
@@ -318,6 +328,9 @@ class SheetsManager:
         image_url: str = "",
         category: str = "",
         subcategory: str = "",
+        brand: str = "",
+        brand_source: str = "",
+        brand_confidence: str = "",
     ) -> bool:
         """Add or update a single standard price entry, e.g. from an admin/population tool."""
         try:
@@ -328,10 +341,13 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
             data = self._cached_values(worksheet_name, ws)
-            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"]
+            headers = ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"]
             if not data:
                 ws.append_row(headers)
                 data = [headers]
+            elif data[0] != headers:
+                ws.update("A1:M1", [headers])
+                data[0] = headers
 
             item_lower = item_name.strip().lower()
             values = [
@@ -345,6 +361,9 @@ class SheetsManager:
                 image_url,
                 category,
                 subcategory,
+                brand,
+                brand_source,
+                brand_confidence,
             ]
 
             existing_row = None
@@ -354,7 +373,7 @@ class SheetsManager:
                     break
 
             if existing_row:
-                ws.update(f"A{existing_row}:J{existing_row}", [values])
+                ws.update(f"A{existing_row}:M{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -373,7 +392,7 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["standard_prices"]["cols"],
             )
 
-            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"]]
+            rows = [["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence"]]
             for (store, item), data in prices.items():
                 unit_price = data.get("unit_price")
                 rows.append(
@@ -388,6 +407,9 @@ class SheetsManager:
                         data.get("image_url", ""),
                         data.get("category", ""),
                         data.get("subcategory", ""),
+                        data.get("brand", ""),
+                        data.get("brand_source", ""),
+                        data.get("brand_confidence", ""),
                     ]
                 )
 

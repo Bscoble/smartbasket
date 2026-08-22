@@ -37,6 +37,7 @@ from helpers import (
     infer_unit,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
+from modules.brands import merge_brand_metadata
 
 # ============================================================================
 # LOGGING SETUP
@@ -395,6 +396,9 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                                 "status": result.get("status", "unavailable"),
                                 "message": result.get("message", "Price unavailable"),
                                 "product_name": result.get("product_name"),
+                                "brand": result.get("brand", ""),
+                                "brand_source": result.get("brand_source", ""),
+                                "brand_confidence": result.get("brand_confidence", ""),
                             }
                         else:
                             price = result
@@ -435,10 +439,14 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         }
                         cache_updated = True
                         # Promote confirmed live prices into the standard-price reference table.
-                        standard_prices[(store, item_lower)] = {
+                        key = (store, item_lower)
+                        existing = standard_prices.get(key, {})
+                        standard_prices[key] = {
+                            **existing,
                             "price": price,
                             "product_name": confirmed_product_name,
                             "last_verified": datetime.now(),
+                            **merge_brand_metadata(existing, item_store_status.get(store)),
                         }
                         standard_prices_updated = True
             except concurrent.futures.TimeoutError:
