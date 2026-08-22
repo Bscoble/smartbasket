@@ -35,6 +35,7 @@ from helpers import (
     get_greeting,
     validate_email,
     infer_unit,
+    build_product_search_query,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.brands import merge_brand_metadata
@@ -1179,8 +1180,9 @@ else:
                     st.session_state["search_performed"] = True
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
-                            local_results = sheets_manager.search_saved_products(user_id, item_name)
-                            scraped_results = sheets_manager.search_scraped_products(item_name, limit=10)
+                            search_query = build_product_search_query(item_name, qty, unit)
+                            local_results = sheets_manager.search_saved_products(user_id, search_query)
+                            scraped_results = sheets_manager.search_scraped_products(search_query, limit=10)
                             seen_titles = {
                                 result["title"].strip().lower()
                                 for result in local_results

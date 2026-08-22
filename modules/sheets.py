@@ -952,6 +952,9 @@ class SheetsManager:
             )
             def normalize(value: str) -> str:
                 value = value.lower().replace("'", "")
+                value = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:grams?|g)\b", r"\1g", value)
+                value = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:kilograms?|kilos?|kg)\b", r"\1kg", value)
+                value = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:litres?|liters?|l)\b", r"\1l", value)
                 normalized = re.sub(r"[^a-z0-9]+", " ", value).strip()
                 return re.sub(r"\bcoca cola\b", "coke", normalized)
 

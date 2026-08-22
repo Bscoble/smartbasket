@@ -7,7 +7,7 @@ if ROOT not in sys.path:
 
 from modules.pricing import PriceScraper
 from config import APIFY_DEFAULT_CONFIG
-from helpers import build_store_search_candidates, build_store_search_query
+from helpers import build_product_search_query, build_store_search_candidates, build_store_search_query
 
 
 def test_iter_apify_products_flattens_result_payloads():
@@ -98,6 +98,12 @@ def test_build_store_search_candidates_returns_alternative_queries():
 def test_brand_alias_expansion_uses_common_variants():
     candidates = build_store_search_candidates("Arnotts Tim Tam Original 250g", "Woolworths")
     assert any("Arnott's" in candidate for candidate in candidates)
+
+
+def test_build_product_search_query_adds_selected_measurable_size():
+    assert build_product_search_query("shaved ham", 250, "Gram") == "shaved ham 250g"
+    assert build_product_search_query("milk", 2, "Litre") == "milk 2L"
+    assert build_product_search_query("bananas", 3, "Each") == "bananas"
 
 
 def test_extract_bulk_product_info_keeps_category_metadata():
@@ -424,6 +430,31 @@ def test_search_scraped_products_coke_2l_rejects_size_only_milk_matches():
         "Coca-Cola No Sugar Soft Drink 2L",
     ]
     assert all("Milk" not in result["title"] for result in results)
+
+
+def test_search_scraped_products_requires_selected_weight():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+                ["Aldi", "Leg Shaved Ham 250g", "4.99", "Leg Shaved Ham 250g", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
+                ["Aldi", "Australian Leg Ham Off The Bone Shaved 150g", "5.49", "Australian Leg Ham Off The Bone Shaved 150g", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
+                ["Aldi", "Leg Ham Shaved 100 g", "3.99", "Leg Ham Shaved 100 g", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
+                ["Aldi", "Leg Honey Ham Shaved 250 grams", "5.29", "Leg Honey Ham Shaved 250 grams", "2026-08-21 12:00:00", "", "", "", "Deli", "Ham"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("shaved ham 250g")
+
+    assert [result["title"] for result in results] == [
+        "Leg Shaved Ham 250g",
+        "Leg Honey Ham Shaved 250 grams",
+    ]
 
 
 def _build_aldi_nuxt_html(products: list) -> str:

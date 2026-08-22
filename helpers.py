@@ -126,6 +126,26 @@ def infer_unit(item_name: str) -> str:
     return "each"
 
 
+def build_product_search_query(item_name: str, quantity, unit: str) -> str:
+    """Add an explicit measurable size to a product query when one is selected."""
+    unit_suffixes = {
+        "Gram": "g",
+        "Kilogram": "kg",
+        "Litre": "L",
+    }
+    suffix = unit_suffixes.get(unit)
+    if not suffix:
+        return item_name.strip()
+
+    numeric_quantity = float(quantity)
+    formatted_quantity = (
+        str(int(numeric_quantity))
+        if numeric_quantity.is_integer()
+        else str(numeric_quantity).rstrip("0").rstrip(".")
+    )
+    return f"{item_name.strip()} {formatted_quantity}{suffix}".strip()
+
+
 def item_key(store: str, item_name: str) -> Tuple[str, str]:
     """
     Create a cache key tuple for store/item combinations.
