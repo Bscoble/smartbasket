@@ -129,6 +129,7 @@ WORKSHEET_NAMES = {
     "catalog_size_history": "Catalog Size History",
     "performance_dashboard": "Performance Dashboard",
     "product_metadata": "Product Metadata",
+    "failed_barcode_scans": "Failed Barcode Scans",
 }
 
 WORKSHEET_CONFIG = {
@@ -145,6 +146,7 @@ WORKSHEET_CONFIG = {
     "catalog_size_history": {"rows": "5000", "cols": "3"},
     "performance_dashboard": {"rows": "200", "cols": "20"},
     "product_metadata": {"rows": "5000", "cols": "14"},
+    "failed_barcode_scans": {"rows": "5000", "cols": "7"},
 }
 
 # ============================================================================

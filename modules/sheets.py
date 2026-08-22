@@ -609,6 +609,48 @@ class SheetsManager:
             logger.error(f"Error searching local product barcode: {e}", exc_info=True)
             return None
 
+    def log_failed_barcode_scan(
+        self,
+        user_id: str,
+        drive_file_id: str,
+        image_size_bytes: int,
+        failure_reason: str = "barcode_not_detected",
+    ) -> bool:
+        """Associate a private failed-scan image with a customer profile."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["failed_barcode_scans"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["failed_barcode_scans"]["rows"],
+                cols=WORKSHEET_CONFIG["failed_barcode_scans"]["cols"],
+            )
+            data = self._cached_values(worksheet_name, ws)
+            headers = [
+                "User ID",
+                "Captured At",
+                "Drive File ID",
+                "MIME Type",
+                "Size Bytes",
+                "Failure Reason",
+                "Review Status",
+            ]
+            if not data:
+                ws.append_row(headers)
+            ws.append_row([
+                user_id.strip().lower(),
+                datetime.now().isoformat(timespec="seconds"),
+                drive_file_id,
+                "image/jpeg",
+                str(image_size_bytes),
+                failure_reason,
+                "pending",
+            ])
+            self._invalidate_values_cache(worksheet_name)
+            return True
+        except Exception as e:
+            logger.error(f"Error logging failed barcode scan: {e}", exc_info=True)
+            return False
+
     # ========================================================================
     # DAILY SPECIALS (short-lived, refreshed once per day)
     # ========================================================================

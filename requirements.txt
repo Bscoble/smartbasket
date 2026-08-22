@@ -1,4 +1,5 @@
 streamlit
+streamlit-webrtc==0.77.0
 requests
 gspread
 google-auth

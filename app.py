@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
 import streamlit as st
+from PIL import Image
+from streamlit_webrtc import WebRtcMode, webrtc_streamer
 import gspread
 from gspread.exceptions import APIError, SpreadsheetNotFound
 from google.oauth2.service_account import Credentials
@@ -35,6 +37,7 @@ from helpers import (
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.catalog_matching import find_local_price_matches
 from modules.dietary import GLUTEN_FREE, has_gluten_free_claim, product_is_gluten_free
+from modules.failed_scans import FailedScanStore, encode_failed_scan
 from modules.gtin import normalize_gtin
 from modules.shopping import infer_quantity_and_unit, shopping_pack_count
 
@@ -120,6 +123,7 @@ def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
 if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
     sheets_manager = None
     auth_manager = None
+    failed_scan_store = None
     logger.info("Running under pytest: skipping live Sheets initialization")
 else:
     try:
@@ -129,6 +133,7 @@ else:
         sh = gc.open_by_key(SPREADSHEET_ID)
         sheets_manager = SheetsManager(sh)
         auth_manager = AuthManager(sh)
+        failed_scan_store = FailedScanStore(creds)
         logger.info("Google Sheets authenticated successfully")
     except Exception as e:
         logger.error(f"Failed to authenticate with Google Sheets: {e}", exc_info=True)
@@ -985,10 +990,10 @@ else:
             <p>SmartBasket respects your privacy and is committed to protecting any personal data you share with us. This policy outlines how your information is handled.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">1. Information We Collect</h4>
-            <p>When you create an account or use SmartBasket, we collect your name, email address, postal location (postcode), store preferences, and custom shopping lists required to deliver accurate price comparisons.</p>
+            <p>When you create an account or use SmartBasket, we collect your name, email address, postal location (postcode), store preferences, custom shopping lists, and images from barcode scans that could not be decoded.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">2. How We Use Your Data</h4>
-            <p>Your data is used solely to provide and improve your app experience, such as saving your preferred shopping lists and configuring store comparisons. Feedback or problem reports submitted through the app are securely routed directly to our administrative team.</p>
+            <p>Your data is used solely to provide and improve your app experience, such as saving your preferred shopping lists and configuring store comparisons. Failed barcode images are linked to your account and retained privately for scan-quality analysis; successful barcode captures are not retained. Feedback or problem reports submitted through the app are securely routed directly to our administrative team.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">3. Data Security</h4>
             <p>We implement secure authentication standards and encrypted database connections to ensure your personal information remains confidential and protected against unauthorized access.</p>
@@ -1286,10 +1291,44 @@ else:
                     st.info("No products found. Try adding a brand or pack size.")
                         
             with st.expander("📷 Scan Barcode from Pantry"):
-                camera_photo = st.camera_input("Point camera at barcode", label_visibility="collapsed")
-                if camera_photo:
-                    with st.spinner("Reading barcode..."):
-                        barcode_number = BarcodeScanner.decode_barcode(camera_photo)
+                st.caption(
+                    "If a barcode cannot be decoded, the captured image is saved privately "
+                    "to your profile for scan-quality analysis."
+                )
+                camera_context = webrtc_streamer(
+                    key="barcode_camera",
+                    mode=WebRtcMode.SENDONLY,
+                    media_stream_constraints={
+                        "video": {
+                            "facingMode": {"ideal": "environment"},
+                            "width": {"ideal": 1280},
+                            "height": {"ideal": 720},
+                        },
+                        "audio": False,
+                    },
+                    video_html_attrs={
+                        "autoPlay": True,
+                        "controls": False,
+                        "muted": True,
+                    },
+                    async_processing=True,
+                )
+                if camera_context.state.playing and st.button(
+                    "Capture barcode",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    try:
+                        frames = camera_context.video_receiver.get_frames(timeout=2)
+                        captured_image = Image.fromarray(frames[-1].to_ndarray(format="rgb24"))
+                    except Exception as error:
+                        logger.warning("Could not capture barcode camera frame: %s", error)
+                        st.error("The camera frame could not be captured. Please try again.")
+                        captured_image = None
+
+                    if captured_image is not None:
+                        with st.spinner("Reading barcode..."):
+                            barcode_number = BarcodeScanner._try_all_decode_passes(captured_image)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
                             scanned_product = resolve_scanned_product(
@@ -1327,7 +1366,27 @@ else:
                             else:
                                 st.warning("Product not found in database. Please enter the name manually.")
                         else:
-                            st.error("No barcode detected in image. Try holding the camera closer and ensuring good lighting.")
+                            archived = False
+                            try:
+                                image_bytes = encode_failed_scan(captured_image)
+                                drive_file_id = failed_scan_store.upload(image_bytes)
+                                archived = sheets_manager.log_failed_barcode_scan(
+                                    user_id,
+                                    drive_file_id,
+                                    len(image_bytes),
+                                )
+                            except Exception as error:
+                                logger.error("Failed to archive barcode capture: %s", error, exc_info=True)
+                            if archived:
+                                st.warning(
+                                    "No barcode was detected. The captured image was saved privately "
+                                    "to your profile for later analysis."
+                                )
+                            else:
+                                st.error(
+                                    "No barcode was detected, and the image could not be saved. "
+                                    "Please try again."
+                                )
                             
         st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
