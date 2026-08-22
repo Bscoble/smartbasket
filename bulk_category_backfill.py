@@ -57,6 +57,64 @@ CATEGORY_KEYWORDS = [
     "biscuits",
 ]
 
+# Coles' actor only returns the first search page reliably. Use specific, mapped
+# queries instead of broad department terms so each successful search adds a
+# distinct slice of the catalogue and retains a useful category when the actor
+# does not return retailer category metadata.
+COLES_CATALOG_TARGETS = [
+    ("full cream milk", "Dairy"),
+    ("lactose free milk", "Dairy"),
+    ("cheese", "Dairy"),
+    ("yogurt", "Dairy"),
+    ("butter", "Dairy"),
+    ("eggs", "Dairy"),
+    ("bread", "Bakery"),
+    ("wraps", "Bakery"),
+    ("english muffins", "Bakery"),
+    ("crumpets", "Bakery"),
+    ("cakes", "Bakery"),
+    ("bananas", "Fruit & Vegetables"),
+    ("apples", "Fruit & Vegetables"),
+    ("potatoes", "Fruit & Vegetables"),
+    ("tomatoes", "Fruit & Vegetables"),
+    ("salad", "Fruit & Vegetables"),
+    ("chicken", "Meat & Seafood"),
+    ("beef", "Meat & Seafood"),
+    ("pork", "Meat & Seafood"),
+    ("lamb", "Meat & Seafood"),
+    ("sausages", "Meat & Seafood"),
+    ("seafood", "Meat & Seafood"),
+    ("rice", "Pantry"),
+    ("pasta", "Pantry"),
+    ("cereal", "Pantry"),
+    ("coffee", "Pantry"),
+    ("tea", "Pantry"),
+    ("canned tomatoes", "Pantry"),
+    ("cooking oil", "Pantry"),
+    ("flour", "Pantry"),
+    ("sugar", "Pantry"),
+    ("biscuits", "Pantry"),
+    ("chips", "Pantry"),
+    ("soft drinks", "Drinks"),
+    ("juice", "Drinks"),
+    ("water", "Drinks"),
+    ("sports drinks", "Drinks"),
+    ("frozen pizza", "Frozen"),
+    ("ice cream", "Frozen"),
+    ("frozen meals", "Frozen"),
+    ("frozen vegetables", "Frozen"),
+    ("laundry detergent", "Household"),
+    ("dishwashing", "Household"),
+    ("toilet paper", "Household"),
+    ("paper towels", "Household"),
+    ("cleaning products", "Household"),
+    ("bin bags", "Household"),
+    ("personal care", "Health & Beauty"),
+    ("baby products", "Baby"),
+    ("pet food", "Pet Care"),
+]
+COLES_TARGETS_PER_RUN = 10
+
 
 def load_secrets() -> dict:
     """Load secrets from environment variables (CI) or .streamlit/secrets.toml (local)."""
@@ -99,6 +157,15 @@ def build_page_urls(store: str, keyword: str, start_page: int, page_count: int) 
     return [base]
 
 
+def get_coles_catalog_targets(crawl_state: dict) -> list:
+    """Return the next bounded batch of mapped Coles queries, wrapping around."""
+    cursor = crawl_state.get(("Coles", "__catalog_cursor__"), {}).get("last_page", 0)
+    return [
+        COLES_CATALOG_TARGETS[(cursor + offset) % len(COLES_CATALOG_TARGETS)]
+        for offset in range(COLES_TARGETS_PER_RUN)
+    ]
+
+
 def crawl_keyword(
     scraper: PriceScraper,
     store: str,
@@ -106,6 +173,7 @@ def crawl_keyword(
     crawl_state: dict,
     standard_prices: dict,
     daily_specials: dict,
+    category_fallback: str = "",
 ) -> int:
     state_key = (store, keyword)
     start_page = (
@@ -129,7 +197,7 @@ def crawl_keyword(
             "unit_price": product.get("unit_price"),
             "unit_label": product.get("unit_label", ""),
             "image_url": product.get("image_url", ""),
-            "category": product.get("category") or keyword,
+            "category": product.get("category") or category_fallback or keyword,
             "subcategory": product.get("subcategory", ""),
         }
         if product["is_special"] and product["price"] < product["standard_price"]:
@@ -157,10 +225,28 @@ def backfill() -> None:
 
     total_added = 0
     for store in STORES_TO_CRAWL:
-        for keyword in CATEGORY_KEYWORDS:
+        targets = (
+            get_coles_catalog_targets(crawl_state)
+            if store == "Coles"
+            else [(keyword, keyword) for keyword in CATEGORY_KEYWORDS]
+        )
+        for keyword, category_fallback in targets:
             total_added += crawl_keyword(
-                scraper, store, keyword, crawl_state, standard_prices, daily_specials
+                scraper,
+                store,
+                keyword,
+                crawl_state,
+                standard_prices,
+                daily_specials,
+                category_fallback,
             )
+
+        if store == "Coles":
+            current_cursor = crawl_state.get((store, "__catalog_cursor__"), {}).get("last_page", 0)
+            crawl_state[(store, "__catalog_cursor__")] = {
+                "last_page": (current_cursor + COLES_TARGETS_PER_RUN) % len(COLES_CATALOG_TARGETS),
+                "last_run": datetime.now().isoformat(timespec="seconds"),
+            }
 
     sheets_manager.save_standard_prices(standard_prices)
     sheets_manager.save_daily_specials(daily_specials)

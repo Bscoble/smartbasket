@@ -74,11 +74,12 @@ APIFY_DEFAULT_CONFIG = {
 # ============================================================================
 
 REQUEST_TIMEOUT = 60  # seconds, ZenRows (Aldi) HTTP request timeout
-# Apify actor runs (Woolworths/Coles) have no timeout by default and can hang
-# well past the overall thread-pool budget, so bound how long we wait on them.
-APIFY_RUN_TIMEOUT = 90  # seconds, observed actor runs can take over a minute
+# Apify actor runs (particularly Coles) can exceed 90 seconds before reaching a
+# terminal state. Keep the wait bounded, but long enough to avoid discarding a
+# still-running actor as an empty result.
+APIFY_RUN_TIMEOUT = 240  # seconds
 THREAD_POOL_MAX_WORKERS = 4
-THREAD_POOL_TIMEOUT = 150  # seconds, allows bounded retailer query retries
+THREAD_POOL_TIMEOUT = 300  # seconds, exceeds the per-actor wait budget
 # Bulk category/keyword scrapes occasionally return 0 results due to
 # retailer-side anti-bot/JS-challenge failures rather than a real empty page.
 BULK_SCRAPE_MAX_RETRIES = 2
