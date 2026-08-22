@@ -35,6 +35,7 @@ def test_aggregate_catalog_size_over_time_pivots_by_store_and_keeps_max_per_day(
     assert table[0] == ["Date", "Aldi", "Coles", "Woolworths", "Total"]
     assert table[1] == ["2026-08-20", "", "80", "120", "200"]
     assert table[2] == ["2026-08-21", "40", "", "130", "170"]
+    assert table[3] == ["Total", "40", "80", "250", "370"]
 
 
 def test_aggregate_category_coverage_counts_standard_and_specials_by_store():
@@ -92,8 +93,9 @@ def test_aggregate_scrape_cost_by_day_sums_per_store():
 
     table = aggregate_scrape_cost_by_day(rows)
 
-    assert table[0] == ["Date", "Aldi", "Coles", "Woolworths"]
-    assert table[1] == ["2026-08-20", "", "0.0400", "0.0800"]
+    assert table[0] == ["Date", "Aldi", "Coles", "Woolworths", "Total"]
+    assert table[1] == ["2026-08-20", "", "0.0400", "0.0800", "0.1200"]
+    assert table[2] == ["Total", "", "0.0400", "0.0800", "0.1200"]
 
 
 def test_aggregate_scrape_issues_by_day_counts_non_ok_statuses():

@@ -49,7 +49,11 @@ class FakeSpreadsheet:
 def test_write_dashboard_places_tables_and_builds_charts():
     spreadsheet = FakeSpreadsheet()
     tables = [
-        ("Catalog Size Over Time", [["Date", "Woolworths"], ["2026-08-20", "100"]], "LINE"),
+        (
+            "Catalog Size Over Time",
+            [["Date", "Woolworths"], ["2026-08-20", "100"], ["Total", "100"]],
+            "LINE",
+        ),
         ("Single vs Split Shopping", [["Mode", "Count"], ["Single", "3"], ["Split", "1"]], "PIE"),
         ("Empty Table", [["Date", "New Signups"]], "COLUMN"),
     ]
@@ -60,12 +64,13 @@ def test_write_dashboard_places_tables_and_builds_charts():
     assert ws.cells[1] == ["Catalog Size Over Time"]
     assert ws.cells[2] == ["Date", "Woolworths"]
     assert ws.cells[3] == ["2026-08-20", "100"]
+    assert ws.cells[4] == ["Total", "100"]
 
-    # Second table starts after a gap: title(1) + header+data(2 rows) + gap(3) = row 7.
-    assert ws.cells[7] == ["Single vs Split Shopping"]
-    assert ws.cells[8] == ["Mode", "Count"]
-    assert ws.cells[9] == ["Single", "3"]
-    assert ws.cells[10] == ["Split", "1"]
+    # Second table starts after a gap: title(1) + table(3 rows) + gap(3) = row 8.
+    assert ws.cells[8] == ["Single vs Split Shopping"]
+    assert ws.cells[9] == ["Mode", "Count"]
+    assert ws.cells[10] == ["Single", "3"]
+    assert ws.cells[11] == ["Split", "1"]
 
     # Table with only a header row gets a placeholder instead of a chart.
     assert any(cells == ["Empty Table"] for cells in ws.cells.values())
@@ -80,7 +85,7 @@ def test_write_dashboard_places_tables_and_builds_charts():
     bold_requests = [
         req for call in spreadsheet.batch_update_calls for req in call["requests"] if "repeatCell" in req
     ]
-    assert len(bold_requests) == 5
+    assert len(bold_requests) == 6
     assert all(
         req["repeatCell"]["cell"]["userEnteredFormat"]["textFormat"]["bold"]
         for req in bold_requests
@@ -90,6 +95,8 @@ def test_write_dashboard_places_tables_and_builds_charts():
     assert line_chart["title"] == "Catalog Size Over Time"
     assert "basicChart" in line_chart
     assert line_chart["basicChart"]["chartType"] == "LINE"
+    line_domain = line_chart["basicChart"]["domains"][0]["domain"]["sourceRange"]["sources"][0]
+    assert line_domain["endRowIndex"] == 3
 
     pie_chart = chart_requests[1]["addChart"]["chart"]["spec"]
     assert pie_chart["title"] == "Single vs Split Shopping"

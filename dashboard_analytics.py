@@ -51,9 +51,13 @@ def aggregate_catalog_size_over_time(rows: List[List[str]]) -> List[List[str]]:
         by_date[date][store] = max(count, by_date[date].get(store, 0))
 
     table = [["Date"] + stores + ["Total"]]
+    column_totals = [0] * len(stores)
     for date in sorted(by_date.keys()):
         store_counts = [by_date[date].get(store, 0) for store in stores]
+        column_totals = [total + count for total, count in zip(column_totals, store_counts)]
         table.append([date] + [str(count) if count else "" for count in store_counts] + [str(sum(store_counts))])
+    if by_date:
+        table.append(["Total"] + [str(total) for total in column_totals] + [str(sum(column_totals))])
     return table
 
 
@@ -161,14 +165,28 @@ def aggregate_scrape_cost_by_day(rows: List[List[str]]) -> List[List[str]]:
             by_date[date][store] += _safe_float(cost_str)
             cost_recorded[date].add(store)
 
-    table = [["Date"] + stores]
+    table = [["Date"] + stores + ["Total"]]
+    store_totals = defaultdict(float)
+    stores_with_cost = set()
     for date in sorted(by_date.keys()):
+        date_costs = [by_date[date].get(store, 0.0) for store in stores]
+        for store, cost in zip(stores, date_costs):
+            if store in cost_recorded[date]:
+                store_totals[store] += cost
+                stores_with_cost.add(store)
         table.append(
             [date]
             + [
-                f"{by_date[date].get(store, 0.0):.4f}" if store in cost_recorded[date] else ""
-                for store in stores
+                f"{cost:.4f}" if store in cost_recorded[date] else ""
+                for store, cost in zip(stores, date_costs)
             ]
+            + [f"{sum(date_costs):.4f}"]
+        )
+    if by_date:
+        table.append(
+            ["Total"]
+            + [f"{store_totals[store]:.4f}" if store in stores_with_cost else "" for store in stores]
+            + [f"{sum(store_totals.values()):.4f}"]
         )
     return table
 

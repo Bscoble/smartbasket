@@ -131,7 +131,7 @@ def _clear_existing_charts(spreadsheet: gspread.Spreadsheet, sheet_id: int) -> N
 
 def _basic_chart_request(sheet_id: int, chart_type: str, title: str, table: list, start_row: int) -> dict:
     """Build an addChart request for a LINE/COLUMN/BAR chart from a table written at column A."""
-    num_rows = len(table)
+    num_rows = len(table) - (1 if table[-1][0] == "Total" else 0)
     num_cols = len(table[0])
     end_row = start_row + num_rows
 
