@@ -379,6 +379,31 @@ def test_search_scraped_products_can_match_brand_and_category_metadata():
     assert manager.search_scraped_products("farmdale dairy")[0]["title"] == "Organic Milk 1L"
 
 
+def test_search_scraped_products_coke_2l_rejects_size_only_milk_matches():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand", "Brand Source", "Brand Confidence", "Barcode"],
+                ["Aldi", "Full Cream Milk 2L", "3.20", "Full Cream Milk 2L", "2026-08-21 12:00:00", "", "", "https://scraped.test/milk.png", "Dairy", "Milk", "Farmdale", "retailer", "high", ""],
+                ["Coles", "Coca-Cola Classic Soft Drink 2L", "3.90", "Coca-Cola Classic Soft Drink 2L", "2026-08-21 12:00:00", "", "", "https://scraped.test/coke.png", "Drinks", "Soft Drinks", "Coca-Cola", "retailer", "high", ""],
+                ["Woolworths", "Coca-Cola No Sugar Soft Drink 2L", "3.90", "Coca-Cola No Sugar Soft Drink 2L", "2026-08-21 12:00:00", "", "", "", "Drinks", "Soft Drinks", "Coca-Cola", "retailer", "high", ""],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("coke 2L")
+
+    assert [result["title"] for result in results] == [
+        "Coca-Cola Classic Soft Drink 2L",
+        "Coca-Cola No Sugar Soft Drink 2L",
+    ]
+    assert all("Milk" not in result["title"] for result in results)
+
+
 def _build_aldi_nuxt_html(products: list) -> str:
     """
     Build a minimal HTML page embedding a script#__NUXT_DATA__ payload in the

@@ -947,7 +947,8 @@ class SheetsManager:
             )
             def normalize(value: str) -> str:
                 value = value.lower().replace("'", "")
-                return re.sub(r"[^a-z0-9]+", " ", value).strip()
+                normalized = re.sub(r"[^a-z0-9]+", " ", value).strip()
+                return re.sub(r"\bcoca cola\b", "coke", normalized)
 
             normalized_query = normalize(query)
             terms = normalized_query.split()
@@ -988,6 +989,10 @@ class SheetsManager:
 
                 size_terms = [term for term in terms if any(char.isdigit() for char in term)]
                 if any(term not in normalized_title.split() for term in size_terms):
+                    continue
+
+                descriptive_terms = [term for term in terms if term not in size_terms]
+                if descriptive_terms and not any(term in matched_terms for term in descriptive_terms):
                     continue
 
                 coverage = len(set(matched_terms)) / len(set(terms))
