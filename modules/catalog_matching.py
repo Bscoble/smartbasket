@@ -74,6 +74,7 @@ def find_local_price_matches(
     stores: Iterable[str],
     standard_prices: Dict[Tuple[str, str], dict],
     is_valid: Callable[[dict], bool],
+    is_eligible: Callable[[str, dict], bool] = None,
 ) -> Dict[str, Tuple[Tuple[str, str], dict]]:
     """Return the best fresh local catalogue entry for each requested store."""
     requested_stores = set(stores)
@@ -82,7 +83,11 @@ def find_local_price_matches(
 
     for key, entry in standard_prices.items():
         store, stored_item = key
-        if store not in requested_stores or not is_valid(entry):
+        if (
+            store not in requested_stores
+            or not is_valid(entry)
+            or (is_eligible is not None and not is_eligible(stored_item, entry))
+        ):
             continue
         candidate = f"{stored_item} {entry.get('product_name', '')}".strip()
         score = _match_score(item_name, candidate)

@@ -34,6 +34,7 @@ from helpers import (
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.catalog_matching import find_local_price_matches
+from modules.dietary import GLUTEN_FREE, has_gluten_free_claim, product_is_gluten_free
 from modules.gtin import normalize_gtin
 from modules.shopping import infer_quantity_and_unit, shopping_pack_count
 
@@ -196,6 +197,15 @@ if "prefs" not in st.session_state:
     except Exception as e:
         logger.error(f"Error loading store preferences: {e}")
         st.session_state["prefs"] = config.DEFAULT_STORE_PREFS
+if "dietary_prefs" not in st.session_state:
+    try:
+        if sheets_manager is not None:
+            st.session_state["dietary_prefs"] = sheets_manager.load_dietary_preferences()
+        else:
+            st.session_state["dietary_prefs"] = {GLUTEN_FREE: False}
+    except Exception as e:
+        logger.error(f"Error loading dietary preferences: {e}")
+        st.session_state["dietary_prefs"] = {GLUTEN_FREE: False}
 if "last_savings" not in st.session_state:
     st.session_state["last_savings"] = 0.0
 if "expander_toggle" not in st.session_state:
@@ -243,7 +253,11 @@ def split_shopping_available(report: dict) -> bool:
     return len(cheapest_stores) > 1
 
 
-def resolve_scanned_product(sheets: SheetsManager, barcode: str) -> Optional[dict]:
+def resolve_scanned_product(
+    sheets: SheetsManager,
+    barcode: str,
+    gluten_free_only: bool = False,
+) -> Optional[dict]:
     """Resolve a barcode locally first, then reconcile an external fallback locally."""
     normalized_barcode = normalize_gtin(barcode)
     if not normalized_barcode:
@@ -251,13 +265,26 @@ def resolve_scanned_product(sheets: SheetsManager, barcode: str) -> Optional[dic
 
     local_product = sheets.find_product_by_barcode(normalized_barcode)
     if local_product:
-        return {**local_product, "source": "local_barcode"}
+        if not gluten_free_only or product_is_gluten_free(
+            local_product["title"],
+            local_product,
+            sheets.load_product_metadata(),
+        ):
+            return {**local_product, "source": "local_barcode"}
+        return None
 
     product_name, product_image = ProductLookup.lookup_barcode_product(normalized_barcode)
     if not product_name:
         return None
 
-    local_matches = sheets.search_scraped_products(product_name, limit=1)
+    if gluten_free_only:
+        local_matches = sheets.search_scraped_products(
+            product_name,
+            limit=1,
+            gluten_free_only=True,
+        )
+    else:
+        local_matches = sheets.search_scraped_products(product_name, limit=1)
     if local_matches:
         return {
             **local_matches[0],
@@ -265,7 +292,7 @@ def resolve_scanned_product(sheets: SheetsManager, barcode: str) -> Optional[dic
             "source": "local_name_match",
         }
 
-    return {
+    fallback = {
         "title": product_name,
         "image_url": product_image or "",
         "category": "",
@@ -275,6 +302,7 @@ def resolve_scanned_product(sheets: SheetsManager, barcode: str) -> Optional[dic
         "barcode": normalized_barcode,
         "source": "open_food_facts",
     }
+    return fallback if not gluten_free_only or has_gluten_free_claim(product_name) else None
 
 
 def summarize_store_health(diagnostics: list) -> dict:
@@ -326,6 +354,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     price_cache = sheets_manager.load_price_cache()
     daily_specials = sheets_manager.load_daily_specials()
     standard_prices = sheets_manager.load_standard_prices()
+    gluten_free_only = st.session_state.get("dietary_prefs", {}).get(GLUTEN_FREE, False)
+    product_metadata = sheets_manager.load_product_metadata() if gluten_free_only else {}
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
@@ -354,6 +384,13 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             stores_to_search,
             standard_prices,
             sheets_manager.is_standard_price_valid,
+            is_eligible=(
+                lambda stored_item, entry: product_is_gluten_free(
+                    stored_item,
+                    entry,
+                    product_metadata,
+                )
+            ) if gluten_free_only else None,
         )
         
         # Check cache and determine which stores need fresh prices
@@ -364,6 +401,17 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 matched_key, standard_data = local_matches.get(store, (cache_key, None))
                 special_data = daily_specials.get(matched_key) or special_data
                 cached_data = price_cache.get(cache_key)
+                if gluten_free_only:
+                    if special_data and not has_gluten_free_claim(
+                        item_name,
+                        special_data.get("product_name"),
+                    ):
+                        special_data = None
+                    if cached_data and not has_gluten_free_claim(
+                        item_name,
+                        cached_data.get("product_name"),
+                    ):
+                        cached_data = None
                 
                 if special_data and special_data.get("price") is not None:
                     item_store_prices[store] = special_data["price"]
@@ -1048,7 +1096,11 @@ else:
                     stored_unit = config.UNIT_VALUES[unit]
                     if stored_unit == "auto":
                         stored_qty, stored_unit = infer_quantity_and_unit(item_name)
-                    scraped_matches = sheets_manager.search_scraped_products(item_name)
+                    gluten_free_only = st.session_state["dietary_prefs"].get(GLUTEN_FREE, False)
+                    scraped_matches = sheets_manager.search_scraped_products(
+                        item_name,
+                        gluten_free_only=gluten_free_only,
+                    )
                     scraped_product = next(
                         (match for match in scraped_matches if match.get("image_url")),
                         None,
@@ -1082,8 +1134,17 @@ else:
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             search_query = build_product_search_query(item_name, qty, unit)
-                            local_results = sheets_manager.search_saved_products(user_id, search_query)
-                            scraped_results = sheets_manager.search_scraped_products(search_query, limit=10)
+                            gluten_free_only = st.session_state["dietary_prefs"].get(GLUTEN_FREE, False)
+                            local_results = sheets_manager.search_saved_products(
+                                user_id,
+                                search_query,
+                                gluten_free_only=gluten_free_only,
+                            )
+                            scraped_results = sheets_manager.search_scraped_products(
+                                search_query,
+                                limit=10,
+                                gluten_free_only=gluten_free_only,
+                            )
                             seen_titles = {
                                 result["title"].strip().lower()
                                 for result in local_results
@@ -1117,6 +1178,11 @@ else:
                     recent_items = sheets_manager.get_recent_history(
                         st.session_state["current_user"]["email"]
                     )
+                if st.session_state["dietary_prefs"].get(GLUTEN_FREE, False):
+                    recent_items = [
+                        item for item in recent_items
+                        if has_gluten_free_claim(item.get("name"))
+                    ]
                 if not recent_items:
                     st.info("No shopping history found for the last 3 weeks. Once you run a price comparison and click 'Finish Shop', your items will be saved here!")
                 else:
@@ -1226,7 +1292,11 @@ else:
                         barcode_number = BarcodeScanner.decode_barcode(camera_photo)
                         if barcode_number:
                             st.success(f"Scanned Barcode: `{barcode_number}`")
-                            scanned_product = resolve_scanned_product(sheets_manager, barcode_number)
+                            scanned_product = resolve_scanned_product(
+                                sheets_manager,
+                                barcode_number,
+                                gluten_free_only=st.session_state["dietary_prefs"].get(GLUTEN_FREE, False),
+                            )
                             if scanned_product:
                                 product_name = scanned_product["title"]
                                 product_image = scanned_product.get("image_url", "")
@@ -1286,6 +1356,19 @@ else:
             
         active_names = [name for name, active in new_prefs.items() if active]
         st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
+
+        with st.popover("Dietary restrictions", use_container_width=True):
+            current_gluten_free = st.session_state["dietary_prefs"].get(GLUTEN_FREE, False)
+            selected_gluten_free = st.checkbox(GLUTEN_FREE, value=current_gluten_free)
+            if selected_gluten_free != current_gluten_free:
+                updated_dietary_prefs = {GLUTEN_FREE: selected_gluten_free}
+                if sheets_manager.save_dietary_preferences(updated_dietary_prefs):
+                    st.session_state["dietary_prefs"] = updated_dietary_prefs
+                    st.session_state["search_results"] = []
+                    st.session_state["search_performed"] = False
+                    st.rerun()
+        if st.session_state["dietary_prefs"].get(GLUTEN_FREE, False):
+            st.caption("Only products explicitly labelled Gluten Free are shown.")
         
         try:
             current_items = sheets_manager.get_shopping_list(user_id)

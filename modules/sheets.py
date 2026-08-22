@@ -21,6 +21,7 @@ from config import (
     STANDARD_PRICE_MAX_AGE_DAYS,
 )
 from modules.gtin import normalize_gtin
+from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,31 @@ class SheetsManager:
             return True
         except Exception as e:
             logger.error(f"Error saving store preferences: {e}", exc_info=True)
+            return False
+
+    def load_dietary_preferences(self) -> Dict[str, bool]:
+        """Load positive dietary filters from the Preferences worksheet."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["preferences"]
+            pref_ws = self._get_or_create_worksheet(worksheet_name)
+            data = self._cached_values(worksheet_name, pref_ws)
+            if len(data) >= 2 and len(data[1]) >= 5:
+                return {"Gluten Free": data[1][4] == "True"}
+        except Exception as e:
+            logger.error(f"Error loading dietary preferences: {e}", exc_info=True)
+        return {"Gluten Free": False}
+
+    def save_dietary_preferences(self, prefs: Dict[str, bool]) -> bool:
+        """Save dietary filters without changing supermarket preferences."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["preferences"]
+            pref_ws = self._get_or_create_worksheet(worksheet_name)
+            pref_ws.update("E1:E2", [["Gluten Free"], [str(prefs.get("Gluten Free", False))]])
+            self._invalidate_values_cache(worksheet_name)
+            logger.info("Dietary preferences saved successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving dietary preferences: {e}", exc_info=True)
             return False
     
     # ========================================================================
@@ -570,6 +596,7 @@ class SheetsManager:
                     "subcategory": row[9].strip(),
                     "brand": row[10].strip(),
                     "barcode": normalized_barcode,
+                    "source_url": row[14].strip() if len(row) >= 15 else "",
                     "store": row[0].strip(),
                 })
 
@@ -1057,7 +1084,13 @@ class SheetsManager:
             logger.error(f"Error saving product catalogue entry: {e}", exc_info=True)
             return False
 
-    def search_saved_products(self, user_id: str, query: str, limit: int = 5) -> List[Dict[str, str]]:
+    def search_saved_products(
+        self,
+        user_id: str,
+        query: str,
+        limit: int = 5,
+        gluten_free_only: bool = False,
+    ) -> List[Dict[str, str]]:
         """Search products previously used by the current customer."""
         try:
             worksheet_name = WORKSHEET_NAMES["product_catalog"]
@@ -1081,18 +1114,25 @@ class SheetsManager:
                         if re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", category):
                             category = ""
                             subcategory = ""
-                        matches.append({
+                        result = {
                             "title": row[1].strip(),
                             "image_url": row[2].strip(),
                             "category": category,
                             "subcategory": subcategory,
-                        })
+                        }
+                        if not gluten_free_only or has_gluten_free_claim(result["title"]):
+                            matches.append(result)
             return matches[:limit]
         except Exception as e:
             logger.error(f"Error searching product catalogue: {e}", exc_info=True)
             return []
 
-    def search_scraped_products(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
+    def search_scraped_products(
+        self,
+        query: str,
+        limit: int = 5,
+        gluten_free_only: bool = False,
+    ) -> List[Dict[str, str]]:
         """Search and rank products from the locally scraped retailer catalogue."""
         try:
             worksheet_name = WORKSHEET_NAMES["standard_prices"]
@@ -1118,6 +1158,7 @@ class SheetsManager:
                 return []
             normalized_query = " ".join(terms)
 
+            metadata = self.load_product_metadata() if gluten_free_only else {}
             matches = {}
             for row in self._cached_values(worksheet_name, ws)[1:]:
                 if len(row) < 2:
@@ -1133,6 +1174,13 @@ class SheetsManager:
                 subcategory = row[9].strip() if len(row) >= 10 else ""
                 brand = row[10].strip() if len(row) >= 11 else ""
                 store = row[0].strip()
+                entry = {
+                    "product_name": product_name,
+                    "barcode": normalize_gtin(row[13]) if len(row) >= 14 else "",
+                    "source_url": row[14].strip() if len(row) >= 15 else "",
+                }
+                if gluten_free_only and not product_is_gluten_free(title, entry, metadata):
+                    continue
 
                 normalized_title = normalize(f"{title} {product_name}")
                 normalized_brand = normalize(brand)
