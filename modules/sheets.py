@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import gspread
-from helpers import shopping_pack_count
+from modules.shopping import shopping_pack_count
 from config import (
     WORKSHEET_NAMES,
     WORKSHEET_CONFIG,

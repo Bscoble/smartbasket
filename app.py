@@ -34,13 +34,12 @@ from helpers import (
     get_store_initial,
     get_greeting,
     validate_email,
-    infer_quantity_and_unit,
-    shopping_pack_count,
     build_product_search_query,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.brands import merge_brand_metadata
 from modules.gtin import normalize_gtin
+from modules.shopping import infer_quantity_and_unit, shopping_pack_count
 
 # ============================================================================
 # LOGGING SETUP
@@ -314,6 +313,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     store_totals = {store: 0.0 for store in selected_stores}
     store_price_counts = {store: 0 for store in selected_stores}
     item_breakdown = []
+    unpriced_items = []
     split_store_total = 0.0
     unavailable_reasons = []
     
@@ -549,6 +549,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         ]
         if not available_item_stores:
             logger.warning("No prices available for %s", item_name)
+            unpriced_items.append(item_name)
             progress_bar.progress((idx + 1) / total_items)
             continue
 
@@ -645,6 +646,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         },
         "store_rankings": store_rankings,
         "item_breakdown": item_breakdown,
+        "unpriced_items": unpriced_items,
     }
 
 
@@ -1485,7 +1487,6 @@ else:
                         )
                         st.session_state["report"] = report
                         st.session_state["shopping_active"] = True
-                        st.session_state["active_tab"] = "Overview"
                         st.session_state["shop_mode"] = "overview"
                         st.rerun()
                     else:
@@ -1589,26 +1590,19 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if "active_tab" not in st.session_state:
-                    st.session_state["active_tab"] = "Overview"
-                elif st.session_state["active_tab"] not in ["Overview", "Breakdown"]:
-                    st.session_state["active_tab"] = "Overview"
-
-                tab_options = ["Overview", "Breakdown"]
-                tab_choice = st.radio(
-                    "Navigation",
-                    tab_options,
-                    index=tab_options.index(st.session_state["active_tab"]),
-                    horizontal=True,
-                    label_visibility="collapsed",
-                    key="nav_radio",
-                )
-
-                st.session_state["active_tab"] = tab_choice
+                tab_choice = "Overview"
                 split_available = split_shopping_available(report)
                 if st.session_state.get("shop_mode") == "split" and not split_available:
                     st.session_state["shop_mode"] = "single"
                     st.rerun()
+
+                unpriced_items = report.get("unpriced_items", [])
+                if unpriced_items:
+                    item_label = "item" if len(unpriced_items) == 1 else "items"
+                    st.warning(
+                        f"Could not find a reliable price for {len(unpriced_items)} {item_label}: "
+                        + ", ".join(unpriced_items)
+                    )
 
                 if tab_choice == "Overview":
                     # -----------------------------------------------
@@ -1645,6 +1639,14 @@ else:
                                     "item_name": item["item_name"],
                                     "unit_price": item["unit_price"],
                                     "total_price": item["total_price"],
+                                    "matched_name": next(
+                                        (
+                                            data.get("product_name")
+                                            for store_name, data in item["all_stores"]
+                                            if store_name == store
+                                        ),
+                                        "",
+                                    ),
                                 })
                         else:
                             best_store = report["comparison_modes"]["single_store_best"]["store_name"]
@@ -1656,6 +1658,7 @@ else:
                                         "item_name": item["item_name"],
                                         "unit_price": store_data["unit_price"],
                                         "total_price": f"${store_data['total_price']:.2f}",
+                                        "matched_name": store_data.get("product_name", ""),
                                     })
 
                         brand_colors = {
@@ -1694,6 +1697,9 @@ else:
                                     chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                     with c1:
                                         st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=chk_key)
+                                        matched_name = item.get("matched_name")
+                                        if matched_name and matched_name.strip().lower() != item["item_name"].strip().lower():
+                                            st.caption(f"Matched: {matched_name}")
                                     with c2:
                                         st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
 
@@ -1836,42 +1842,8 @@ else:
                             )
                             st.markdown(html_card, unsafe_allow_html=True)
 
-                elif tab_choice == "Breakdown":
-                    st.markdown("#### ITEM-BY-ITEM BREAKDOWN")
-                    
-                    for item in report["item_breakdown"]:
-                        with st.container(border=True):
-                            st.markdown(f"**{item['item_name']}** &nbsp; <span style='color:gray; font-size:0.85em;'>× {item['quantity']}</span>", unsafe_allow_html=True)
-                            
-                            for store_idx, (store_name, store_data) in enumerate(item["all_stores"]):
-                                store_initial = store_name[0].upper()
-                                is_best = (store_idx == 0)
-                                
-                                best_badge = " &nbsp; <span style='background-color: #005A36; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;'>BEST</span>" if is_best else ""
-                                is_available = store_data["total_price"] is not None
-                                matched_name = store_data.get("product_name") or "No matched product"
-                                value_content = (
-                                    f'<span style="color: gray; font-size: 0.85em;">{store_data["unit_price"]}</span> &nbsp;&nbsp; '
-                                    f'<span class="breakdown-total-price">${store_data["total_price"]:.2f}</span>'
-                                    if is_available
-                                    else f'<span class="breakdown-total-unavailable">Unavailable: {store_data.get("message", "Price unavailable")}</span>'
-                                )
-                                
-                                html_row = (
-                                    f'<div class="breakdown-store-row">'
-                                    f'<div class="breakdown-store-name"><b>{store_initial}</b> &nbsp; {store_name}'
-                                    f'<div class="breakdown-product-name">Matched: {matched_name}</div></div>'
-                                    f'<div class="breakdown-store-value">'
-                                    f'{value_content}'
-                                    f'{best_badge}'
-                                    f'</div>'
-                                    f'</div>'
-                                )
-                                st.markdown(html_row, unsafe_allow_html=True)
-                                
                 can_finish_shop = (
-                    tab_choice == "Overview"
-                    and st.session_state.get("shop_mode") in {"single", "split"}
+                    st.session_state.get("shop_mode") in {"single", "split"}
                 )
                 if can_finish_shop:
                     st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
