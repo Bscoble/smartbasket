@@ -1127,7 +1127,7 @@ else:
         with st.container(border=True):
             st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
             st.markdown('<div class="add-item-form-marker"></div>', unsafe_allow_html=True)
-            with st.form("add_item_form", clear_on_submit=True):
+            with st.form("add_item_form", clear_on_submit=False):
                 item_name = st.text_input(
                     "What do you need?",
                     placeholder="e.g., Helga's white bread 700g",
