@@ -131,7 +131,7 @@ WORKSHEET_CONFIG = {
     "users": {"rows": "1000", "cols": "9"},
     "price_cache": {"rows": "1000", "cols": "4"},
     "recent_shops": {"rows": "1000", "cols": "6"},
-    "product_catalog": {"rows": "5000", "cols": "5"},
+    "product_catalog": {"rows": "5000", "cols": "7"},
     "standard_prices": {"rows": "5000", "cols": "14"},
     "daily_specials": {"rows": "2000", "cols": "5"},
     "crawl_state": {"rows": "500", "cols": "4"},

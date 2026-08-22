@@ -922,14 +922,19 @@ class SheetsManager:
 
             matches = []
             for row in self._cached_values(worksheet_name, ws)[1:]:
-                if len(row) >= 7 and row[0].strip().lower() == normalized_user:
+                if len(row) >= 5 and row[0].strip().lower() == normalized_user:
                     search_key = row[3].strip().lower()
                     if all(term in search_key for term in terms):
+                        category = row[4].strip() if len(row) >= 7 else ""
+                        subcategory = row[5].strip() if len(row) >= 7 else ""
+                        if re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", category):
+                            category = ""
+                            subcategory = ""
                         matches.append({
                             "title": row[1].strip(),
                             "image_url": row[2].strip(),
-                            "category": row[4].strip(),
-                            "subcategory": row[5].strip(),
+                            "category": category,
+                            "subcategory": subcategory,
                         })
             return matches[:limit]
         except Exception as e:

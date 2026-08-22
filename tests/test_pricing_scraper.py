@@ -277,6 +277,28 @@ def test_save_product_keeps_category_metadata():
     assert saved[0]["subcategory"] == "fresh milk"
 
 
+def test_search_saved_products_does_not_show_legacy_updated_timestamp_as_category():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["User_ID", "Title", "Image_URL", "Search_Key", "Category", "Subcategory", "Updated"],
+                ["user@example.com", "A2 Milk 2L", "", "a2 milk 2l", "2026-08-19T23:33:49", "", ""],
+                ["user@example.com", "A2 Milk Full Cream", "https://img.test/a2.png", "a2 milk full cream", "2026-08-19T23:36:33"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_saved_products("user@example.com", "a2 milk")
+
+    assert len(results) == 2
+    assert all(result["category"] == "" for result in results)
+    assert all(result["subcategory"] == "" for result in results)
+
+
 def test_search_scraped_products_uses_stored_product_images():
     class FakeWorksheet:
         def __init__(self):
