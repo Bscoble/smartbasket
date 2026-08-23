@@ -484,6 +484,12 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
         cheapest_store = available_item_stores[0][0]
         best_price = available_item_stores[0][1]["total_price"]
+        highest_available_price = available_item_stores[-1][1]["total_price"]
+        savings_vs_highest = (
+            round(max(0.0, highest_available_price - best_price), 2)
+            if len(available_item_stores) > 1
+            else 0.0
+        )
         
         split_store_total += best_price
         
@@ -493,6 +499,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             "cheapest_store": cheapest_store,
             "unit_price": format_price(best_price / pack_count),
             "total_price": format_price(best_price),
+            "savings_vs_highest": savings_vs_highest,
+            "price_options_count": len(available_item_stores),
             "all_stores": sorted_item_stores,
         })
         
@@ -548,10 +556,21 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
     best_available_store = ranked_stores[0][0]
     best_available_cost = store_totals[best_available_store]
+    comparable_items = [
+        item for item in item_breakdown if item["price_options_count"] > 1
+    ]
+    price_selection_savings = round(
+        sum(item["savings_vs_highest"] for item in comparable_items),
+        2,
+    )
     
     return {
         "total_items": total_items,
         "trip_savings": trip_savings,
+        "price_selection_savings": {
+            "amount": price_selection_savings,
+            "compared_items": len(comparable_items),
+        },
         "comparison_modes": {
             "single_store_best": {
                 "store_name": best_single_store or best_available_store,
@@ -1058,7 +1077,7 @@ else:
         """, unsafe_allow_html=True)
         
         with st.container(border=True):
-            st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-bottom: 10px; margin-top: 0;'>ADD ITEM</p>", unsafe_allow_html=True)
+            st.markdown('<p class="add-item-heading">ADD ITEM</p>', unsafe_allow_html=True)
             st.markdown('<div class="add-item-form-marker"></div>', unsafe_allow_html=True)
             with st.form("add_item_form", clear_on_submit=False):
                 item_name = st.text_input(
@@ -1395,7 +1414,10 @@ else:
         item_count = len(valid_rows_with_indices)
         c_head1, c_head2 = st.columns([3, 1], vertical_alignment="center")
         with c_head1:
-            st.markdown(f"<p style='font-size: 13px; font-weight: 700; color: #666;'>MY LIST ({item_count} ITEMS)</p>", unsafe_allow_html=True)
+            st.markdown(
+                f'<p class="shopping-list-heading">MY LIST ({item_count} ITEMS)</p>',
+                unsafe_allow_html=True,
+            )
         with c_head2:
             if item_count > 0:
                 st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
@@ -1627,6 +1649,7 @@ else:
                                     "item_name": item["item_name"],
                                     "unit_price": item["unit_price"],
                                     "total_price": item["total_price"],
+                                    "savings_vs_highest": item.get("savings_vs_highest", 0.0),
                                     "matched_name": next(
                                         (
                                             data.get("product_name")
@@ -1659,6 +1682,10 @@ else:
                             b_color = brand_colors.get(store_name, "#555")
                             s_initial = store_name[0].upper()
                             store_total = sum(float(item['total_price'].replace('$', '')) for item in items)
+                            store_selection_savings = round(
+                                sum(item.get("savings_vs_highest", 0.0) for item in items),
+                                2,
+                            )
 
                             collected_count = 0
                             for idx, item in enumerate(items):
@@ -1674,6 +1701,7 @@ else:
                                         <div>
                                             <div style="font-weight: 800; font-size: 16px;">{store_name}</div>
                                             <div style="font-size: 12px; opacity: 0.9;">{collected_count}/{len(items)} items collected</div>
+                                            {f'<div style="font-size: 12px; font-weight: 700; margin-top: 2px;">Save up to ${store_selection_savings:.2f} here</div>' if store_selection_savings > 0 else ''}
                                         </div>
                                     </div>
                                     <div style="font-weight: 800; font-size: 18px;">${store_total:.2f}</div>
@@ -1681,15 +1709,22 @@ else:
                                 ''', unsafe_allow_html=True)
 
                                 for idx, item in enumerate(items):
+                                    st.markdown(
+                                        '<div class="shopping-detail-item-marker"></div>',
+                                        unsafe_allow_html=True,
+                                    )
                                     c1, c2 = st.columns([3, 1])
                                     chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                     with c1:
-                                        st.checkbox(f"{item['item_name']} ({item['unit_price']})", key=chk_key)
+                                        st.checkbox(item["item_name"], key=chk_key)
                                         matched_name = item.get("matched_name")
                                         if matched_name and matched_name.strip().lower() != item["item_name"].strip().lower():
                                             st.caption(f"Matched: {matched_name}")
                                     with c2:
-                                        st.markdown(f"<div style='text-align: right; font-weight: 600; color: #333; margin-top: 5px;'>{item['total_price']}</div>", unsafe_allow_html=True)
+                                        st.markdown(
+                                            f'<div class="shopping-detail-item-price">{item["total_price"]}</div>',
+                                            unsafe_allow_html=True,
+                                        )
 
                                     if idx < len(items) - 1:
                                         st.markdown("<hr style='margin: 0px 0 10px 0; opacity: 0.1;'>", unsafe_allow_html=True)
@@ -1755,6 +1790,23 @@ else:
                                 )
 
                         if split_available:
+                            selection_savings = report.get("price_selection_savings", {})
+                            savings_amount = selection_savings.get("amount", 0.0)
+                            compared_items = selection_savings.get("compared_items", 0)
+                            if savings_amount > 0 and compared_items > 0:
+                                compared_label = "item" if compared_items == 1 else "items"
+                                st.markdown(
+                                    '<div class="price-selection-savings">'
+                                    '<div>'
+                                    '<div class="price-selection-savings-label">SMARTBASKET SAVING</div>'
+                                    f'<div class="price-selection-savings-copy">Lowest available prices across {compared_items} comparable {compared_label}</div>'
+                                    '</div>'
+                                    f'<div class="price-selection-savings-amount">Save up to ${savings_amount:.2f}</div>'
+                                    '</div>'
+                                    '<p class="price-selection-savings-note">Compared item by item with the highest available price for the same products at your selected stores.</p>',
+                                    unsafe_allow_html=True,
+                                )
+
                             c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
                             c2_border_width = "2px" if not single_is_recommended else "1px"
                             c2_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if not single_is_recommended else ''
@@ -1873,7 +1925,12 @@ else:
                         report_savings = 0.0
                         report_total_items = None
                         if "report" in st.session_state:
-                            report_savings = st.session_state["report"].get("trip_savings", 0.0)
+                            if st.session_state.get("shop_mode") == "split":
+                                report_savings = st.session_state["report"].get(
+                                    "price_selection_savings", {}
+                                ).get("amount", 0.0)
+                            else:
+                                report_savings = st.session_state["report"].get("trip_savings", 0.0)
                             report_total_items = st.session_state["report"].get("total_items")
                             st.session_state["last_savings"] = report_savings
                             del st.session_state["report"]

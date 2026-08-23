@@ -36,6 +36,46 @@ div[data-testid="stCheckbox"] label p {
     white-space: nowrap !important;
 }
 
+div:has(> .shopping-detail-item-marker) {
+    display: none !important;
+}
+
+div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"] {
+    align-items: flex-start !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+}
+
+div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
+    > div[data-testid="stColumn"]:first-child {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
+    > div[data-testid="stColumn"]:last-child {
+    flex: 0 0 68px !important;
+    width: 68px !important;
+    min-width: 68px !important;
+}
+
+div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
+    div[data-testid="stCheckbox"] label p {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.35 !important;
+}
+
+.shopping-detail-item-price {
+    margin-top: 5px;
+    color: #333333;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+}
+
 /* ========================================================================
    IMAGE THUMBNAILS - HOVER TO ZOOM
    ======================================================================== */
@@ -69,6 +109,53 @@ div[data-testid="stCheckbox"] label p {
     border-radius: 12px;
     background-color: #FAFAFA;
     transition: background-color 0.2s ease;
+}
+
+.price-selection-savings {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 4px;
+    padding: 14px 16px;
+    border-left: 4px solid #008A4B;
+    background: #E8F5ED;
+}
+
+.price-selection-savings-label {
+    color: #005A36;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.price-selection-savings-copy {
+    margin-top: 2px;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.price-selection-savings-amount {
+    flex: 0 0 auto;
+    color: #005A36;
+    font-size: 18px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.price-selection-savings-note {
+    margin: 5px 0 12px;
+    color: #64748B;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+@media (max-width: 420px) {
+    .price-selection-savings {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
 }
 
 /* The keyed Streamlit button is the full-card interaction surface. */
@@ -324,7 +411,7 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     background-color: #005A36;
     color: white;
     padding: 30px 20px 20px 20px;
-    margin: -60px -20px 20px -20px;
+    margin: -60px -20px 4px -20px;
     border-radius: 0 0 20px 20px;
     display: flex;
     justify-content: space-between;
@@ -434,10 +521,14 @@ div[data-testid="element-container"]:has(.preferred-stores-caption) {
     margin: 0 !important;
 }
 
+div[data-testid="element-container"]:has(.preferred-stores-heading) {
+    margin-top: -10px !important;
+}
+
 div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] {
     align-items: center !important;
     gap: 10px !important;
-    margin: -8px 0 0 !important;
+    margin: -14px 0 0 !important;
 }
 
 div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
@@ -460,8 +551,31 @@ div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] button {
 }
 
 div[data-testid="element-container"]:has(.preferred-stores-caption) {
-    margin-top: -10px !important;
-    margin-bottom: -6px !important;
+    margin-top: -14px !important;
+    margin-bottom: -12px !important;
+}
+
+.add-item-heading,
+.shopping-list-heading {
+    margin: 0;
+    color: #666666;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+div[data-testid="element-container"]:has(.add-item-heading),
+div[data-testid="element-container"]:has(.shopping-list-heading) {
+    margin: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.clear-all-marker) {
+    min-height: 32px !important;
+    margin-top: -8px !important;
+    margin-bottom: -10px !important;
+}
+
+div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"] {
+    margin-top: -12px !important;
 }
 
 div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
