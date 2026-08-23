@@ -422,6 +422,48 @@ button[key="btn_logout"] {
 /* ========================================================================
    STORE PILLS - DYNAMIC COLOR STYLING
    ======================================================================== */
+.preferred-stores-heading {
+    margin: 0;
+    color: #666666;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+div[data-testid="element-container"]:has(.preferred-stores-heading),
+div[data-testid="element-container"]:has(.preferred-stores-caption) {
+    margin: 0 !important;
+}
+
+div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] {
+    align-items: center !important;
+    gap: 10px !important;
+    margin: -8px 0 0 !important;
+}
+
+div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
+    > div[data-testid="stColumn"] {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] button {
+    width: 100% !important;
+    margin: 0 !important;
+}
+
+.preferred-stores-caption {
+    margin: 0;
+    color: #888888;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+div[data-testid="element-container"]:has(.preferred-stores-caption) {
+    margin-top: -10px !important;
+    margin-bottom: -6px !important;
+}
+
 div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
     div[data-testid="stCheckbox"]
     label
@@ -500,17 +542,6 @@ div:has(> .shopping-list-item-marker) {
         div[data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-    }
-
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] {
-        gap: 8px !important;
-    }
-
-    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
-        > div[data-testid="stColumn"] {
-        flex: 1 1 0 !important;
-        width: auto !important;
-        min-width: 0 !important;
     }
 
     div[data-testid="stHorizontalBlock"]:has(.clear-all-marker)

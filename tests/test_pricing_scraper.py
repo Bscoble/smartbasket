@@ -239,6 +239,20 @@ def test_split_shopping_available_requires_multiple_cheapest_stores():
     assert split_shopping_available(multi_store_report) is True
 
 
+def test_single_store_shopping_available_requires_complete_coverage():
+    from app import single_store_shopping_available
+
+    complete_report = {
+        "comparison_modes": {"single_store_best": {"is_complete": True}}
+    }
+    partial_report = {
+        "comparison_modes": {"single_store_best": {"is_complete": False}}
+    }
+
+    assert single_store_shopping_available(complete_report) is True
+    assert single_store_shopping_available(partial_report) is False
+
+
 def test_resolve_scanned_product_uses_exact_local_barcode_without_remote_lookup(monkeypatch):
     import app
 

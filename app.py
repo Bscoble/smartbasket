@@ -249,6 +249,15 @@ def split_shopping_available(report: dict) -> bool:
     return len(cheapest_stores) > 1
 
 
+def single_store_shopping_available(report: dict) -> bool:
+    """Return whether one store can supply the complete priced basket."""
+    return bool(
+        report.get("comparison_modes", {})
+        .get("single_store_best", {})
+        .get("is_complete", False)
+    )
+
+
 def resolve_scanned_product(
     sheets: SheetsManager,
     barcode: str,
@@ -1340,7 +1349,7 @@ else:
                                     "Please try again."
                                 )
                             
-        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 10px; margin-bottom: 5px;'>PREFERRED STORES</p>", unsafe_allow_html=True)
+        st.markdown('<p class="preferred-stores-heading">PREFERRED STORES</p>', unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
@@ -1366,7 +1375,10 @@ else:
         new_prefs = st.session_state["prefs"]
             
         active_names = [name for name, active in new_prefs.items() if active]
-        st.markdown(f"<p style='font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 25px;'>✓ We'll highlight {', '.join(active_names)} in the comparison</p>", unsafe_allow_html=True)
+        st.markdown(
+            f'<p class="preferred-stores-caption">✓ We\'ll highlight {", ".join(active_names)} in the comparison</p>',
+            unsafe_allow_html=True,
+        )
 
         try:
             current_items = sheets_manager.get_shopping_list(user_id)
@@ -1561,8 +1573,15 @@ else:
                 
                 tab_choice = "Overview"
                 split_available = split_shopping_available(report)
-                if st.session_state.get("shop_mode") == "split" and not split_available:
-                    st.session_state["shop_mode"] = "single"
+                single_available = single_store_shopping_available(report)
+                selected_mode = st.session_state.get("shop_mode")
+                if (
+                    (selected_mode == "split" and not split_available)
+                    or (selected_mode == "single" and not single_available)
+                ):
+                    st.session_state["shop_mode"] = (
+                        "single" if single_available else "overview"
+                    )
                     st.rerun()
 
                 unpriced_items = report.get("unpriced_items", [])
@@ -1679,53 +1698,42 @@ else:
                     # SUB-VIEW: OVERVIEW (DEFAULT)
                     # -----------------------------------------------
                     else:
-                        st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
+                        option_count = int(single_available) + int(split_available)
+                        if option_count > 1:
+                            st.markdown("#### HOW WOULD YOU LIKE TO SHOP?")
+                        elif option_count == 1:
+                            st.markdown("#### YOUR AVAILABLE SHOPPING PLAN")
+                        else:
+                            st.markdown("#### NO COMPLETE SHOPPING PLAN")
 
                         single_best = report["comparison_modes"]["single_store_best"]
                         split_opt = report["comparison_modes"]["split_store_optimal"]
 
                         single_is_recommended = (
-                            single_best["is_complete"]
+                            single_available
                             and single_best["total_cost"] <= split_opt["total_cost"]
                         )
-                        single_coverage = next(
-                            (
-                                (store["coverage_count"], store["coverage_total"])
-                                for store in report["store_rankings"]
-                                if store["store"] == single_best["store_name"]
-                            ),
-                            (0, report["total_items"]),
-                        )
-                        single_subtitle = (
-                            f"Best of your stores: {single_best['store_name']}"
-                            if single_best["is_complete"]
-                            else f"{single_best['store_name']} has partial coverage ({single_coverage[0]}/{single_coverage[1]} items)"
-                        )
-                        single_title = (
-                            "Shop at one store"
-                            if single_best["is_complete"]
-                            else "Lowest partial store total"
-                        )
+                        if single_available:
+                            single_title = "Shop at one store"
+                            single_subtitle = f"Best of your stores: {single_best['store_name']}"
+                            c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
+                            c1_border_width = "2px" if single_is_recommended else "1px"
+                            c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
+                            html_single = (
+                                f'<div class="shopping-mode-banner" style="border: {c1_border_width} solid {c1_border};">'
+                                f'{c1_badge}'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
+                                f'<div style="display: flex; align-items: center; gap: 15px;">'
+                                f'<div style="font-size: 26px;">🏪</div>'
+                                f'<div style="line-height: 1.3;">'
+                                f'<div style="font-weight: 800; color: #111; font-size: 16px;">{single_title}</div>'
+                                f'<div style="font-size: 13px; color: #666;">{single_subtitle}</div>'
+                                f'</div></div>'
+                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
+                                f'</div></div>'
+                            )
 
-                        c1_border = "#F5A623" if single_is_recommended else "#E0E0E0"
-                        c1_border_width = "2px" if single_is_recommended else "1px"
-                        c1_badge = '<div style="position: absolute; top: -2px; right: 15px; background-color: #F5A623; color: black; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 0 0 8px 8px;">RECOMMENDED</div>' if single_is_recommended else ''
-                        html_single = (
-                            f'<div class="shopping-mode-banner" style="border: {c1_border_width} solid {c1_border};">'
-                            f'{c1_badge}'
-                            f'<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; pointer-events: none;">'
-                            f'<div style="display: flex; align-items: center; gap: 15px;">'
-                            f'<div style="font-size: 26px;">🏪</div>'
-                            f'<div style="line-height: 1.3;">'
-                            f'<div style="font-weight: 800; color: #111; font-size: 16px;">{single_title}</div>'
-                            f'<div style="font-size: 13px; color: #666;">{single_subtitle}</div>'
-                            f'</div></div>'
-                            f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
-                            f'</div></div>'
-                        )
-
-                        st.markdown(html_single, unsafe_allow_html=True)
-                        if single_best["is_complete"]:
+                            st.markdown(html_single, unsafe_allow_html=True)
                             if st.button(
                                 f"Choose {single_title}: {single_subtitle}, ${single_best['total_cost']:.2f}",
                                 use_container_width=True,
@@ -1734,6 +1742,17 @@ else:
                                 sheets_manager.log_user_event(user_id, "shop_mode_selected", mode="single")
                                 st.session_state["shop_mode"] = "single"
                                 st.rerun()
+                        else:
+                            if split_available:
+                                st.info(
+                                    "No single preferred store covers your complete basket. "
+                                    "The split-store plan below covers the available items."
+                                )
+                            else:
+                                st.warning(
+                                    "The current matches cannot produce a complete shopping plan. "
+                                    "Review the missing items and store coverage below."
+                                )
 
                         if split_available:
                             c2_border = "#F5A623" if not single_is_recommended else "#E0E0E0"
