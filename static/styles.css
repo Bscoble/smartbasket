@@ -484,8 +484,101 @@ button[kind="secondaryFormSubmit"] {
 div:has(> .clear-all-marker),
 div:has(> .qty-minus-marker),
 div:has(> .qty-plus-marker),
-div:has(> .qty-del-marker) {
+div:has(> .qty-del-marker),
+div:has(> .shopping-list-item-marker) {
     display: none !important;
+}
+
+/* Streamlit stacks columns on narrow screens by default. These controls are
+   compact interaction rows and need to remain horizontal on mobile. */
+@media (max-width: 767px) {
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"],
+    div[data-testid="stHorizontalBlock"]:has(.clear-all-marker),
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"],
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3)
+        div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+    }
+
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] {
+        gap: 8px !important;
+    }
+
+    div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"] {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(.clear-all-marker)
+        > div[data-testid="stColumn"]:first-child {
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(.clear-all-marker)
+        > div[data-testid="stColumn"]:last-child {
+        flex: 0 0 72px !important;
+        width: 72px !important;
+        min-width: 72px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"] {
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(1) {
+        flex: 0 0 38px !important;
+        width: 38px !important;
+        min-width: 38px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(2) {
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3) {
+        flex: 0 0 112px !important;
+        width: 112px !important;
+        min-width: 112px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(4) {
+        flex: 0 0 34px !important;
+        width: 34px !important;
+        min-width: 34px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3)
+        div[data-testid="stHorizontalBlock"] {
+        gap: 5px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3)
+        div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"] {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    .qty-value {
+        transform: none;
+    }
 }
 
 /* ========================================================================
