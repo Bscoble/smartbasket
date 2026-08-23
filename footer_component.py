@@ -1,5 +1,5 @@
 """
-Footer component for SmartBasket application.
+Footer component for the Grocery Gecko application.
 Provides a reusable, attractive footer with navigation links and copyright.
 """
 
@@ -39,7 +39,7 @@ def render_footer(on_about, on_privacy, on_support, on_refer):
                 <span style="font-size: 11px; font-weight: 600; color: #333;">Refer</span>
             </div>
         </div>
-        <p style="margin: 10px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">© 2026 SmartBasket • Shop Smarter, Save Every Week</p>
+        <p style="margin: 10px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">© 2026 Grocery Gecko · Compare your list. Keep the difference.</p>
     </div>
     """
     st.markdown(footer_html, unsafe_allow_html=True)

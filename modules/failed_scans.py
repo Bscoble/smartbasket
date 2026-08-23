@@ -9,7 +9,8 @@ from google.auth.transport.requests import AuthorizedSession
 from PIL import Image
 
 
-DRIVE_FOLDER_NAME = "SmartBasket Failed Barcode Scans"
+DRIVE_FOLDER_NAME = "Grocery Gecko Failed Barcode Scans"
+LEGACY_DRIVE_FOLDER_NAME = "SmartBasket Failed Barcode Scans"
 DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 
@@ -33,12 +34,16 @@ class FailedScanStore:
         if self._folder_id:
             return self._folder_id
 
-        escaped_name = DRIVE_FOLDER_NAME.replace("'", "\\'")
+        escaped_names = [
+            name.replace("'", "\\'")
+            for name in (DRIVE_FOLDER_NAME, LEGACY_DRIVE_FOLDER_NAME)
+        ]
         response = self.session.get(
             "https://www.googleapis.com/drive/v3/files",
             params={
                 "q": (
-                    f"name = '{escaped_name}' and mimeType = '{DRIVE_FOLDER_MIME_TYPE}' "
+                    f"(name = '{escaped_names[0]}' or name = '{escaped_names[1]}') "
+                    f"and mimeType = '{DRIVE_FOLDER_MIME_TYPE}' "
                     "and trashed = false"
                 ),
                 "fields": "files(id)",
@@ -65,7 +70,7 @@ class FailedScanStore:
     def upload(self, image_bytes: bytes) -> str:
         """Upload one JPEG privately and return its Drive file ID."""
         folder_id = self._get_or_create_folder()
-        boundary = f"smartbasket-{uuid.uuid4().hex}"
+        boundary = f"grocery-gecko-{uuid.uuid4().hex}"
         metadata = {
             "name": f"failed-barcode-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}.jpg",
             "parents": [folder_id],

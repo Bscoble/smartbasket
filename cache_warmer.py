@@ -1,5 +1,5 @@
 """
-Overnight cache warmer for SmartBasket.
+Overnight cache warmer for Grocery Gecko.
 
 Reuses the shared PriceScraper/SheetsManager classes so this benefits from
 the same relevance filtering, query retries, and product-name extraction as

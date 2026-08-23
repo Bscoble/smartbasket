@@ -1,5 +1,5 @@
 """
-Feedback and contact module for SmartBasket.
+Feedback and contact module for Grocery Gecko.
 Handles secure feedback submission and contact form functionality.
 """
 

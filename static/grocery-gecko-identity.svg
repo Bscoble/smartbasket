@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">Grocery Gecko brand identity</title>
+  <description id="description">Grocery Gecko logo, tagline, app icon, colour palette, and brand statement.</description>
+
+  <rect width="1600" height="900" fill="#F5F7F2"/>
+  <path d="M0 690C320 620 570 760 865 708C1158 657 1340 530 1600 575V900H0Z" fill="#DCEDE2"/>
+
+  <g opacity="0.32" fill="#BFD7C7">
+    <circle cx="1340" cy="132" r="7"/>
+    <circle cx="1380" cy="132" r="7"/>
+    <circle cx="1420" cy="132" r="7"/>
+    <circle cx="1460" cy="132" r="7"/>
+    <circle cx="1340" cy="172" r="7"/>
+    <circle cx="1380" cy="172" r="7"/>
+    <circle cx="1420" cy="172" r="7"/>
+    <circle cx="1460" cy="172" r="7"/>
+  </g>
+
+  <text x="100" y="96" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="3">BRAND IDENTITY / 01</text>
+
+  <!-- Primary app mark -->
+  <g transform="translate(100 164)">
+    <rect width="324" height="324" rx="70" fill="#075C3B"/>
+    <path d="M230 60c-38-18-88-9-116 23-24 27-29 65-14 95 12 24 35 42 61 48 23 6 49 1 65-15 14-14 20-36 12-54-7-16-24-27-41-28-16-1-33 7-40 22-5 10-5 24 2 33 7 10 22 14 33 8 8-4 13-14 10-22-2-7-11-12-18-9" fill="none" stroke="#A7D96B" stroke-width="25" stroke-linecap="round"/>
+    <circle cx="213" cy="82" r="22" fill="#F5F7F2"/>
+    <circle cx="219" cy="80" r="8" fill="#13251D"/>
+
+    <path d="M111 132L79 113M105 157L68 157M121 192L88 215M198 216L223 247M170 225L172 264" fill="none" stroke="#A7D96B" stroke-width="14" stroke-linecap="round"/>
+    <circle cx="75" cy="111" r="8" fill="#A7D96B"/>
+    <circle cx="65" cy="157" r="8" fill="#A7D96B"/>
+    <circle cx="85" cy="218" r="8" fill="#A7D96B"/>
+    <circle cx="226" cy="251" r="8" fill="#A7D96B"/>
+    <circle cx="172" cy="268" r="8" fill="#A7D96B"/>
+
+    <!-- Price comparison ticks -->
+    <path d="M79 266l13 13 25-30" fill="none" stroke="#FF6B5F" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M225 273h36" stroke="#F5F7F2" stroke-width="8" stroke-linecap="round"/>
+    <path d="M237 257v32" stroke="#F5F7F2" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(500 185)">
+    <text x="0" y="88" fill="#13251D" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="700">Grocery</text>
+    <text x="0" y="190" fill="#075C3B" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="700">Gecko</text>
+    <path d="M4 226H708" stroke="#BFD7C7" stroke-width="2"/>
+    <text x="0" y="278" fill="#13251D" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Compare your list. Keep the difference.</text>
+    <text x="0" y="332" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="24">Independent grocery price comparison for everyday shoppers.</text>
+  </g>
+
+  <!-- Brand proposition -->
+  <g transform="translate(100 570)">
+    <text x="0" y="0" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">THE IDEA</text>
+    <text x="0" y="52" fill="#13251D" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="700">A sharper eye on every shop.</text>
+    <text x="0" y="98" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="22">The gecko spots price differences, moves easily between stores,</text>
+    <text x="0" y="132" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="22">and helps households hold onto more of their grocery budget.</text>
+  </g>
+
+  <!-- Palette -->
+  <g transform="translate(965 574)">
+    <text x="0" y="0" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">CORE PALETTE</text>
+
+    <g transform="translate(0 34)">
+      <rect width="116" height="116" rx="16" fill="#075C3B"/>
+      <text x="0" y="148" fill="#13251D" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Gecko green</text>
+      <text x="0" y="172" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="14">#075C3B</text>
+    </g>
+
+    <g transform="translate(142 34)">
+      <rect width="116" height="116" rx="16" fill="#A7D96B"/>
+      <text x="0" y="148" fill="#13251D" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Fresh leaf</text>
+      <text x="0" y="172" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="14">#A7D96B</text>
+    </g>
+
+    <g transform="translate(284 34)">
+      <rect width="116" height="116" rx="16" fill="#FF6B5F"/>
+      <text x="0" y="148" fill="#13251D" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Savings coral</text>
+      <text x="0" y="172" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="14">#FF6B5F</text>
+    </g>
+
+    <g transform="translate(426 34)">
+      <rect width="116" height="116" rx="16" fill="#13251D"/>
+      <text x="0" y="148" fill="#13251D" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Deep charcoal</text>
+      <text x="0" y="172" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="14">#13251D</text>
+    </g>
+  </g>
+
+  <text x="100" y="844" fill="#526159" font-family="Arial, Helvetica, sans-serif" font-size="16">PRIMARY LOCKUP · APP MARK · POSITIONING · COLOUR SYSTEM</text>
+</svg>

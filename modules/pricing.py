@@ -1,5 +1,5 @@
 """
-Price scraping and fetching module for SmartBasket.
+Price scraping and fetching module for Grocery Gecko.
 Handles price lookups from various supermarket websites using APIs and web scraping.
 """
 

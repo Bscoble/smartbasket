@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 324 324" role="img" aria-labelledby="title description">
+  <title id="title">Grocery Gecko mark</title>
+  <description id="description">A green gecko with a coral savings tick and white comparison plus.</description>
+  <rect width="324" height="324" rx="70" fill="#075C3B"/>
+  <path d="M230 60c-38-18-88-9-116 23-24 27-29 65-14 95 12 24 35 42 61 48 23 6 49 1 65-15 14-14 20-36 12-54-7-16-24-27-41-28-16-1-33 7-40 22-5 10-5 24 2 33 7 10 22 14 33 8 8-4 13-14 10-22-2-7-11-12-18-9" fill="none" stroke="#A7D96B" stroke-width="25" stroke-linecap="round"/>
+  <circle cx="213" cy="82" r="22" fill="#F5F7F2"/>
+  <circle cx="219" cy="80" r="8" fill="#13251D"/>
+  <path d="M111 132L79 113M105 157L68 157M121 192L88 215M198 216L223 247M170 225L172 264" fill="none" stroke="#A7D96B" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="75" cy="111" r="8" fill="#A7D96B"/>
+  <circle cx="65" cy="157" r="8" fill="#A7D96B"/>
+  <circle cx="85" cy="218" r="8" fill="#A7D96B"/>
+  <circle cx="226" cy="251" r="8" fill="#A7D96B"/>
+  <circle cx="172" cy="268" r="8" fill="#A7D96B"/>
+  <path d="M79 266l13 13 25-30" fill="none" stroke="#FF6B5F" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M225 273h36M243 255v36" fill="none" stroke="#F5F7F2" stroke-width="8" stroke-linecap="round"/>
+</svg>

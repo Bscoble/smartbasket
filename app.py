@@ -1,10 +1,12 @@
 """
-SmartBasket - Australian Grocery Price Comparison Application
+Grocery Gecko - Australian Grocery Price Comparison Application
 A Streamlit-based app that helps users compare prices across major supermarkets.
 """
 
+import base64
 import logging
 import os
+import pathlib
 import sys
 import time
 from datetime import datetime, timedelta
@@ -23,6 +25,8 @@ from config import (
     APP_TITLE,
     APP_ICON,
     APP_LAYOUT,
+    BRAND_NAME,
+    BRAND_TAGLINE,
     GOOGLE_SCOPES,
     SPREADSHEET_ID,
 )
@@ -39,7 +43,11 @@ from modules.catalog_matching import find_local_price_matches
 from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 from modules.failed_scans import FailedScanStore, encode_failed_scan
 from modules.gtin import normalize_gtin
-from modules.shopping import infer_quantity_and_unit, shopping_pack_count
+from modules.shopping import (
+    infer_quantity_and_unit,
+    shopping_pack_count,
+    shopping_quantity_label,
+)
 
 # ============================================================================
 # LOGGING SETUP
@@ -49,12 +57,18 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-logger.info("SmartBasket application starting")
+logger.info("Grocery Gecko application starting")
 
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
+
+BRAND_MARK_PATH = pathlib.Path(__file__).parent / "static" / "grocery-gecko-mark.svg"
+BRAND_MARK_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    + base64.b64encode(BRAND_MARK_PATH.read_bytes()).decode("ascii")
+)
 
 
 def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
@@ -590,7 +604,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
 
 try:
-    import pathlib
     css_path = pathlib.Path(__file__).parent / "static" / "styles.css"
     if css_path.exists():
         css_content = css_path.read_text()
@@ -622,27 +635,25 @@ st.markdown(f"""
 # --- 4. WELCOME SPLASH SCREEN ---
 # =====================================================================
 if not st.session_state["app_started"]:
-    st.markdown("""
+    st.markdown(f"""
     <style>
-        .stApp {
+        .stApp {{
             background-color: #005A36 !important;
-        }
-        div[data-testid="stMainBlockContainer"], .main .block-container {
+        }}
+        div[data-testid="stMainBlockContainer"], .main .block-container {{
             padding: 0 !important;
-        }
-        header[data-testid="stHeader"] {
+        }}
+        header[data-testid="stHeader"] {{
             display: none !important;
-        }
+        }}
     </style>
     <div style="background-color: #005A36; padding: 180px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
-        <div style="background: rgba(255, 255, 255, 0.15); width: 80px; height: 80px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 25px auto; font-size: 38px; backdrop-filter: blur(5px);">
-            🛒
-        </div>
+        <img class="splash-brand-mark" src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" />
         <div class="splash-brand-title">
-            <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0; color: white;">SmartBasket</h1>
+            <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0; color: white;">{BRAND_NAME}</h1>
             <span class="splash-beta-badge">BETA</span>
         </div>
-        <p style="font-size: 15px; opacity: 0.9; margin: 0 0 40px 0; font-weight: 400;">Shop smarter. Save every week.</p>
+        <p style="font-size: 15px; opacity: 0.9; margin: 0 0 40px 0; font-weight: 400;">{BRAND_TAGLINE}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -662,9 +673,9 @@ elif not st.session_state["authenticated"]:
     # VIEW: LOGIN
     # -----------------------------------------------------------
     if st.session_state["auth_mode"] == "login":
-        st.markdown("""
+        st.markdown(f"""
         <div class="auth-header">
-            <div class="auth-logo">🛒</div>
+            <div class="auth-logo"><img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" /></div>
             <h1>Welcome back</h1>
             <p class="auth-subtitle">Sign in to pick up your shopping list.</p>
         </div>
@@ -712,11 +723,11 @@ elif not st.session_state["authenticated"]:
     # VIEW: SIGN UP
     # -----------------------------------------------------------
     elif st.session_state["auth_mode"] == "signup":
-        st.markdown("""
+        st.markdown(f"""
         <div class="auth-header">
-            <div class="auth-logo">🛒</div>
+            <div class="auth-logo"><img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" /></div>
             <h1>Create account</h1>
-            <p class="auth-subtitle">Save your list and shop smarter each week.</p>
+            <p class="auth-subtitle">Save your list. Compare prices. Keep the difference.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -900,7 +911,7 @@ else:
             
         st.markdown("""
         <div style="color: #444; font-size: 14px; line-height: 1.6; margin: 15px 0 25px 0;">
-            Know someone who could use a hand beating supermarket prices? Send them a quick invite to try SmartBasket.
+            Know someone who could use a hand beating supermarket prices? Send them a quick invite to try Grocery Gecko.
         </div>
         """, unsafe_allow_html=True)
         
@@ -908,9 +919,9 @@ else:
         
         # Dynamically build the message body using the saved trip amount and dynamic signature 
         if savings > 0:
-            default_msg = f"Hey you should give this a try. It saved me ${savings:.2f} on this weeks shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+            default_msg = f"Hey you should give this a try. It saved me ${savings:.2f} on this week's shop.\n\nCheers,\nBrad\n\nTry Grocery Gecko:"
         else:
-            default_msg = "Hey you should give this a try. It saves me money every week on my shop.\n\nCheers,\nBrad\n\nDownload SmartBasket:"
+            default_msg = "Hey, you should give this a try. It helps me compare grocery prices before I shop.\n\nCheers,\nBrad\n\nTry Grocery Gecko:"
             
         with st.form("refer_form"):
             recipient = st.text_input("Friend's Email Address", placeholder="e.g. friend@example.com")
@@ -939,7 +950,7 @@ else:
             <div style="font-size: 20px;">←</div>
             <div>
                 <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">About Us</h1>
-                <p style="margin: 0; font-size: 13px; opacity: 0.9;">SmartBasket Information</p>
+                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Grocery Gecko Information</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -951,14 +962,14 @@ else:
             
         st.markdown("""
         <div style="color: #444; font-size: 14px; line-height: 1.7; margin-top: 10px;">
-            <h3 style="color: #005A36; font-size: 18px; margin-bottom: 10px;">Welcome to SmartBasket</h3>
-            <p>SmartBasket is Australia's independent grocery price comparison companion, designed to help households cut through supermarket price hikes and make informed shopping choices.</p>
+            <h3 style="color: #005A36; font-size: 18px; margin-bottom: 10px;">Welcome to Grocery Gecko</h3>
+            <p>Grocery Gecko is Australia's independent grocery price comparison companion, designed to help households cut through supermarket price hikes and make informed shopping choices.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Our Mission</h4>
-            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking live pricing across major Australian supermarkets like Woolworths, Coles, and Aldi, SmartBasket shows you instantly whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
+            <p>We believe grocery shopping shouldn't require visiting multiple stores blindly or sorting through confusing catalogues. By tracking pricing across major Australian supermarkets like Woolworths, Coles, and Aldi, Grocery Gecko shows you whether you save more by buying your whole basket at one store or splitting your items across the cheapest options.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">Built for Everyday Australians</h4>
-            <p>Created to simplify weekly budgeting, SmartBasket puts full transparency back into your hands. No hidden fees, no corporate bias—just real-time data comparing your preferred local stores.</p>
+            <p>Created to simplify weekly budgeting, Grocery Gecko puts clear price comparisons back into your hands. No corporate bias, just available pricing data from your preferred stores.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -986,10 +997,10 @@ else:
             <h3 style="color: #005A36; font-size: 18px; margin-bottom: 10px;">Privacy Policy & Data Protection</h3>
             <p><i>Last updated: August 2026</i></p>
             
-            <p>SmartBasket respects your privacy and is committed to protecting any personal data you share with us. This policy outlines how your information is handled.</p>
+            <p>Grocery Gecko respects your privacy and is committed to protecting any personal data you share with us. This policy outlines how your information is handled.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">1. Information We Collect</h4>
-            <p>When you create an account or use SmartBasket, we collect your name, email address, postal location (postcode), store preferences, custom shopping lists, and images from barcode scans that could not be decoded.</p>
+            <p>When you create an account or use Grocery Gecko, we collect your name, email address, postal location (postcode), store preferences, custom shopping lists, and images from barcode scans that could not be decoded.</p>
             
             <h4 style="color: #222; font-size: 15px; margin-top: 20px;">2. How We Use Your Data</h4>
             <p>Your data is used solely to provide and improve your app experience, such as saving your preferred shopping lists and configuring store comparisons. Failed barcode images are linked to your account and retained privately for scan-quality analysis; successful barcode captures are not retained. Feedback or problem reports submitted through the app are securely routed directly to our administrative team.</p>
@@ -1185,7 +1196,7 @@ else:
                                 if r_item["img"]:
                                     st.markdown(f'<img src="{r_item["img"]}" class="thumbnail-zoom" style="width:28px; height:28px; margin-top:-5px;" />', unsafe_allow_html=True)
                                 else:
-                                    st.markdown('<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 14px; margin-top:-5px;">🛒</div>', unsafe_allow_html=True)
+                                    st.markdown(f'<div style="background-color: #E6F4EA; width: 28px; height: 28px; border-radius: 6px; display: flex; justify-content: center; align-items: center; margin-top:-5px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:24px; height:24px;" /></div>', unsafe_allow_html=True)
                             with cols[2]:
                                 st.markdown(f'<div style="font-size: 14px; font-weight: 500; margin-top:-2px;">{r_item["name"]}</div>', unsafe_allow_html=True)
                             
@@ -1230,7 +1241,7 @@ else:
                                 )
                             else:
                                 st.markdown(
-                                    '<div class="product-result-placeholder">🛒</div>',
+                                    f'<div class="product-result-placeholder"><img src="{BRAND_MARK_DATA_URI}" alt="" /></div>',
                                     unsafe_allow_html=True,
                                 )
                         with sc2:
@@ -1441,15 +1452,20 @@ else:
                     i_unit,
                     row[4] if len(row) >= 5 else None,
                 )
+                i_quantity_label = shopping_quantity_label(
+                    i_qty,
+                    i_unit,
+                    row[4] if len(row) >= 5 else None,
+                )
                 st.markdown('<div class="shopping-list-item-marker"></div>', unsafe_allow_html=True)
                 cols = st.columns([0.55, 1.9, 1.65, 0.55])
                 with cols[0]:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
                     else:
-                        st.markdown('<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 18px; margin-top: 2px;">🛒</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="background-color: #E6F4EA; width: 38px; height: 38px; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-top: 2px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:32px; height:32px;" /></div>', unsafe_allow_html=True)
                 with cols[1]:
-                    st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_qty} {i_unit}</span></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_quantity_label}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
                     sub_c1, sub_c2, sub_c3 = st.columns([1, 1, 1], gap="small")
                     with sub_c1:
@@ -1713,14 +1729,20 @@ else:
                                         '<div class="shopping-detail-item-marker"></div>',
                                         unsafe_allow_html=True,
                                     )
-                                    c1, c2 = st.columns([3, 1])
+                                    c_select, c_name, c_price = st.columns([0.3, 3, 0.8])
                                     chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
-                                    with c1:
-                                        st.checkbox(item["item_name"], key=chk_key)
+                                    with c_select:
+                                        st.checkbox(
+                                            f'Select {item["item_name"]}',
+                                            key=chk_key,
+                                            label_visibility="collapsed",
+                                        )
+                                    with c_name:
+                                        st.markdown(item["item_name"])
                                         matched_name = item.get("matched_name")
                                         if matched_name and matched_name.strip().lower() != item["item_name"].strip().lower():
                                             st.caption(f"Matched: {matched_name}")
-                                    with c2:
+                                    with c_price:
                                         st.markdown(
                                             f'<div class="shopping-detail-item-price">{item["total_price"]}</div>',
                                             unsafe_allow_html=True,
@@ -1798,7 +1820,7 @@ else:
                                 st.markdown(
                                     '<div class="price-selection-savings">'
                                     '<div>'
-                                    '<div class="price-selection-savings-label">SMARTBASKET SAVING</div>'
+                                    '<div class="price-selection-savings-label">GROCERY GECKO SAVING</div>'
                                     f'<div class="price-selection-savings-copy">Lowest available prices across {compared_items} comparable {compared_label}</div>'
                                     '</div>'
                                     f'<div class="price-selection-savings-amount">Save up to ${savings_amount:.2f}</div>'
@@ -1834,7 +1856,10 @@ else:
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
 
-                        st.markdown("<p style='font-size: 13px; font-weight: 700; color: #666; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase;'>STORE RANKING — PRICE COVERAGE</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            '<p class="store-ranking-heading">STORE RANKING — PRICE COVERAGE</p>',
+                            unsafe_allow_html=True,
+                        )
 
                         brand_colors = {
                             "Woolworths": "#005A36",
@@ -1972,7 +1997,7 @@ else:
                 st.session_state["current_page"] = "refer"
                 st.rerun()
         st.markdown(
-            "<p class='footer-tagline'>© 2026 SmartBasket · Shop Smarter, Save Every Week</p>",
+            f"<p class='footer-tagline'>© 2026 {BRAND_NAME} · {BRAND_TAGLINE}</p>",
             unsafe_allow_html=True,
         )
 

@@ -9,7 +9,12 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from modules.failed_scans import DRIVE_FOLDER_NAME, FailedScanStore, encode_failed_scan
+from modules.failed_scans import (
+    DRIVE_FOLDER_NAME,
+    LEGACY_DRIVE_FOLDER_NAME,
+    FailedScanStore,
+    encode_failed_scan,
+)
 from modules.sheets import SheetsManager
 
 
@@ -56,6 +61,23 @@ def test_failed_scan_upload_creates_private_folder_and_multipart_image():
     assert upload_call[2]["params"]["uploadType"] == "multipart"
     assert b"jpeg-bytes" in upload_call[2]["data"]
     assert all("permissions" not in url for _method, url, _kwargs in session.calls)
+
+
+def test_failed_scan_upload_reuses_legacy_brand_folder():
+    class ExistingFolderSession(FakeDriveSession):
+        def get(self, url, **kwargs):
+            self.calls.append(("GET", url, kwargs))
+            return FakeResponse({"files": [{"id": "legacy-folder-id"}]})
+
+    session = ExistingFolderSession()
+    store = FailedScanStore(credentials=None, session=session)
+
+    assert store.upload(b"jpeg-bytes") == "private-image-id"
+    assert len(session.calls) == 2
+    folder_query = session.calls[0][2]["params"]["q"]
+    assert DRIVE_FOLDER_NAME in folder_query
+    assert LEGACY_DRIVE_FOLDER_NAME in folder_query
+    assert b'"parents": ["legacy-folder-id"]' in session.calls[1][2]["data"]
 
 
 def test_failed_scan_encoding_limits_size_and_writes_jpeg():

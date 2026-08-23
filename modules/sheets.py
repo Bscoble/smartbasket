@@ -1,5 +1,5 @@
 """
-Google Sheets integration module for SmartBasket.
+Google Sheets integration module for Grocery Gecko.
 Handles all interactions with Google Sheets for data persistence.
 """
 
@@ -39,7 +39,7 @@ PRODUCT_METADATA_HEADERS = [
 
 
 class SheetsManager:
-    """Manages all Google Sheets operations for SmartBasket."""
+    """Manages all Google Sheets operations for Grocery Gecko."""
     
     def __init__(self, spreadsheet):
         """

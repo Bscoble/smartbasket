@@ -14,6 +14,7 @@ from helpers import (
     infer_quantity_and_unit,
     price_quantity_multiplier,
     shopping_pack_count,
+    shopping_quantity_label,
 )
 
 
@@ -130,6 +131,12 @@ def test_shopping_pack_count_separates_package_size_from_item_count():
     assert shopping_pack_count(750, "g") == 1
     assert shopping_pack_count(3, "each") == 3
     assert shopping_pack_count(750, "g", "2") == 2
+
+
+def test_shopping_quantity_label_uses_pack_count_for_measurable_products():
+    assert shopping_quantity_label(5, "g") == "1 pack"
+    assert shopping_quantity_label(750, "g", "2") == "2 packs"
+    assert shopping_quantity_label(3, "each") == "3 each"
 
 
 def test_shopping_list_persists_pack_count_separately_from_package_size():

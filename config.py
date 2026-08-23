@@ -1,5 +1,5 @@
 """
-Configuration and constants for SmartBasket application.
+Configuration and constants for Grocery Gecko application.
 Centralized settings for stores, colors, API endpoints, and application behavior.
 """
 
@@ -102,7 +102,7 @@ STALE_REVALIDATION_BATCH_LIMITS = {
 # ============================================================================
 
 OPEN_FOOD_FACTS_BARCODE_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
-OPEN_FOOD_FACTS_USER_AGENT = "SmartBasketApp/1.0 (Australian Supermarket Price Tracker)"
+OPEN_FOOD_FACTS_USER_AGENT = "GroceryGeckoApp/1.0 (Australian Supermarket Price Tracker)"
 
 # ============================================================================
 # GOOGLE SHEETS CONFIGURATION
@@ -161,7 +161,7 @@ RECENT_HISTORY_DAYS = 21  # Show items from last 21 days
 
 ADMIN_EMAIL = "bscoble74@gmail.com"
 FEEDBACK_URL_TEMPLATE = "https://formsubmit.co/ajax/{}"
-FEEDBACK_SUBJECT = "🚨 SmartBasket: New Problem Report"
+FEEDBACK_SUBJECT = "Grocery Gecko: New Problem Report"
 
 # ============================================================================
 # BARCODE DETECTION
@@ -180,8 +180,10 @@ COUNTRY_TIMEZONES = {
     "New Zealand": "Pacific/Auckland",
 }
 
-APP_TITLE = "SmartBasket"
-APP_ICON = "🛒"
+BRAND_NAME = "Grocery Gecko"
+BRAND_TAGLINE = "Compare your list. Keep the difference."
+APP_TITLE = BRAND_NAME
+APP_ICON = "🦎"
 APP_LAYOUT = "centered"
 PHONE_FRAME_WIDTH = 412
 PHONE_FRAME_HEIGHT = 850

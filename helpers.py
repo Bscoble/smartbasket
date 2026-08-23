@@ -1,5 +1,5 @@
 """
-Helper functions and utilities for SmartBasket application.
+Helper functions and utilities for the Grocery Gecko application.
 Includes price formatting, data validation, and common UI utilities.
 """
 
@@ -9,6 +9,7 @@ from modules.shopping import (
     infer_quantity_and_unit,
     price_quantity_multiplier,
     shopping_pack_count,
+    shopping_quantity_label,
 )
 import re
 

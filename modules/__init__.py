@@ -1,5 +1,5 @@
 """
-SmartBasket modules package.
+Grocery Gecko modules package.
 Contains core business logic for pricing, sheets, barcode scanning, and feedback.
 """
 

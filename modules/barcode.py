@@ -1,5 +1,5 @@
 """
-Barcode and product database module for SmartBasket.
+Barcode and product database module for Grocery Gecko.
 Handles barcode scanning, decoding, and product lookup from Open Food Facts.
 """
 

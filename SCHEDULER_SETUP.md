@@ -1,4 +1,4 @@
-# SmartBasket Scheduler Setup
+# Grocery Gecko Scheduler Setup
 
 ## GitHub Actions - Automated Daily Cache Warmup at 4:00 AM
 

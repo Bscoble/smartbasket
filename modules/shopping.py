@@ -32,6 +32,18 @@ def shopping_pack_count(quantity: int, unit: str, stored_pack_count=None) -> int
     return max(1, int(quantity))
 
 
+def shopping_quantity_label(
+    quantity: int,
+    unit: str,
+    stored_pack_count=None,
+) -> str:
+    """Return a list quantity without repeating a product's package size."""
+    if unit in {"g", "kg", "L"}:
+        pack_count = shopping_pack_count(quantity, unit, stored_pack_count)
+        return f"{pack_count} {'pack' if pack_count == 1 else 'packs'}"
+    return f"{quantity} {unit}"
+
+
 def price_quantity_multiplier(quantity: int, unit: str) -> int:
     """Return how many shelf-priced packs contribute to a shopping-list total."""
     return shopping_pack_count(quantity, unit)
