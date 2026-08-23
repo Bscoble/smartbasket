@@ -1130,10 +1130,10 @@ class SheetsManager:
         self,
         user_id: str,
         query: str,
-        limit: int = 5,
+        limit: Optional[int] = 5,
         gluten_free_only: bool = False,
     ) -> List[Dict[str, str]]:
-        """Search products previously used by the current customer."""
+        """Search products previously used by the customer, optionally without a limit."""
         try:
             worksheet_name = WORKSHEET_NAMES["product_catalog"]
             ws = self._get_or_create_worksheet(
@@ -1164,7 +1164,7 @@ class SheetsManager:
                         }
                         if not gluten_free_only or has_gluten_free_claim(result["title"]):
                             matches.append(result)
-            return matches[:limit]
+            return matches if limit is None else matches[:limit]
         except Exception as e:
             logger.error(f"Error searching product catalogue: {e}", exc_info=True)
             return []
@@ -1172,10 +1172,10 @@ class SheetsManager:
     def search_scraped_products(
         self,
         query: str,
-        limit: int = 5,
+        limit: Optional[int] = 5,
         gluten_free_only: bool = False,
     ) -> List[Dict[str, str]]:
-        """Search and rank products from the locally scraped retailer catalogue."""
+        """Search and rank local retailer products, optionally without a limit."""
         try:
             worksheet_name = WORKSHEET_NAMES["standard_prices"]
             ws = self._get_or_create_worksheet(
@@ -1305,7 +1305,7 @@ class SheetsManager:
                     "brand": match["brand"],
                     "stores": sorted(match["stores"]),
                 }
-                for match in ranked[:limit]
+                for match in (ranked if limit is None else ranked[:limit])
             ]
         except Exception as e:
             logger.error(f"Error searching scraped product catalogue: {e}", exc_info=True)

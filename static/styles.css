@@ -85,6 +85,73 @@ div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
     white-space: nowrap;
 }
 
+.checkout-completion-copy {
+    padding: 14px 15px 10px;
+    background: #F1F8EE;
+    border: 1px solid #D5E8CD;
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+}
+
+.checkout-completion-copy span,
+.checkout-completion-copy strong,
+.checkout-completion-copy p {
+    display: block;
+}
+
+.checkout-completion-copy span {
+    margin-bottom: 3px;
+    color: #075C3B;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0 !important;
+}
+
+.checkout-completion-copy strong {
+    color: #13251D;
+    font-size: 14px;
+}
+
+.checkout-completion-copy p {
+    margin: 3px 0 0;
+    color: #66736D;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+div[data-testid="element-container"]:has(> .checkout-completion-copy),
+div[data-testid="element-container"]:has(> .checkout-mark-all-marker) {
+    margin-bottom: 0 !important;
+}
+
+div[data-testid="element-container"]:has(> .checkout-mark-all-marker) {
+    height: 0 !important;
+}
+
+div:has(> .checkout-mark-all-marker) + div[data-testid="stButton"] button {
+    min-height: 42px !important;
+    margin-bottom: 10px;
+    color: #075C3B !important;
+    background: #FFFFFF !important;
+    border: 1px solid #A9CDBB !important;
+    border-radius: 0 0 8px 8px !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
+}
+
+div:has(> .checkout-mark-all-marker) + div[data-testid="stButton"] button:hover:not(:disabled) {
+    background: #E9F5E8 !important;
+    border-color: #075C3B !important;
+}
+
+div:has(> .checkout-mark-all-marker) + div[data-testid="stButton"] button:disabled {
+    color: #FFFFFF !important;
+    background: #075C3B !important;
+    border-color: #075C3B !important;
+    opacity: 1 !important;
+}
+
 /* ========================================================================
    IMAGE THUMBNAILS - HOVER TO ZOOM
    ======================================================================== */
@@ -493,6 +560,12 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     background: rgba(255, 255, 255, 0.32);
     color: #FFFFFF !important;
     transform: translateY(-1px);
+}
+
+.header-profile-link img {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
 }
 
 /* ========================================================================
@@ -1185,7 +1258,7 @@ div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"] button:
 
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
     div[data-testid="column"]:nth-child(1) button::before {
-    content: "ℹ️";
+    content: "👤";
 }
 
 div:has(> .footer-buttons-marker) + div[data-testid="stHorizontalBlock"]
@@ -1254,4 +1327,341 @@ button[data-testid="baseButton-secondary"]:has(
 ):hover {
     text-decoration: underline !important;
     color: #555 !important;
+}
+
+/* ========================================================================
+   CUSTOMER PROFILE
+   ======================================================================== */
+.profile-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    align-items: center;
+    min-height: 172px;
+    margin: -60px -20px 22px;
+    padding: 64px 24px 24px;
+    overflow: hidden;
+    color: #FFFFFF;
+    background: #075C3B;
+    border-radius: 0 0 8px 8px;
+}
+
+.profile-hero::after {
+    content: "";
+    position: absolute;
+    right: -32px;
+    bottom: -52px;
+    width: 148px;
+    height: 148px;
+    border: 20px solid #A7D96B;
+    border-radius: 50%;
+    opacity: 0.22;
+}
+
+.profile-hero-copy {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+.profile-eyebrow,
+.profile-section-kicker,
+.profile-group-label {
+    letter-spacing: 0 !important;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.profile-eyebrow {
+    color: #DDF4C4;
+}
+
+.profile-hero h1 {
+    margin: 4px 0 3px;
+    color: #FFFFFF;
+    font-family: Georgia, serif;
+    font-size: 32px;
+    line-height: 1.1;
+}
+
+.profile-hero p {
+    max-width: 270px;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.profile-hero img {
+    position: relative;
+    z-index: 1;
+    width: 88px;
+    height: 88px;
+    object-fit: contain;
+}
+
+div[data-testid="element-container"]:has(> .profile-done-marker) {
+    height: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+}
+
+div:has(> .profile-done-marker) + div[data-testid="stButton"] {
+    position: absolute;
+    z-index: 5;
+    top: 11px;
+    right: 12px;
+    width: auto;
+}
+
+div:has(> .profile-done-marker) + div[data-testid="stButton"] button {
+    min-height: 34px;
+    padding: 5px 13px;
+    color: #FFFFFF;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 7px;
+    font-weight: 700;
+}
+
+.profile-account-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 18px;
+    overflow: hidden;
+    background: #FFFFFF;
+    border: 1px solid #DDE7E1;
+    border-left: 4px solid #FF6B5F;
+    border-radius: 8px;
+    box-shadow: 0 8px 22px rgba(19, 37, 29, 0.07);
+}
+
+.profile-avatar {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    color: #FFFFFF;
+    background: #075C3B;
+    border: 4px solid #E9F5E8;
+    border-radius: 50%;
+    font-family: Georgia, serif;
+    font-size: 21px;
+    font-weight: 700;
+}
+
+.profile-account-copy {
+    min-width: 0;
+}
+
+.profile-account-copy h2 {
+    margin: 0 0 2px;
+    color: #13251D;
+    font-size: 20px;
+    line-height: 1.25;
+}
+
+.profile-account-copy p,
+.profile-account-copy span {
+    display: block;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: #66736D;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.profile-account-copy span {
+    margin-top: 3px;
+    color: #075C3B;
+    font-weight: 700;
+}
+
+.profile-preferences {
+    margin-bottom: 24px;
+    padding: 18px;
+    background: #F1F8EE;
+    border: 1px solid #D5E8CD;
+    border-radius: 8px;
+}
+
+.profile-section-kicker,
+.profile-group-label {
+    color: #6F7B75;
+}
+
+.profile-preferences h2 {
+    margin: 3px 0 12px;
+    color: #13251D;
+    font-size: 17px;
+}
+
+.profile-store-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.profile-store-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    color: #24372E;
+    background: #FFFFFF;
+    border: 1px solid #D5E1DA;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.profile-store-chip i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+}
+
+.profile-store-empty {
+    color: #66736D;
+    font-size: 12px;
+}
+
+.profile-preferences > p {
+    margin: 11px 0 0;
+    color: #66736D;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.profile-group-label {
+    margin: 0 0 8px !important;
+}
+
+div[data-testid="element-container"]:has(> .profile-group-label) {
+    margin-bottom: 0 !important;
+}
+
+.profile-action-description {
+    position: relative;
+    min-height: 72px;
+    padding: 14px 48px 14px 16px;
+    background: #FFFFFF;
+    border: 1px solid #E0E7E3;
+    border-radius: 7px;
+}
+
+.profile-action-description::after {
+    content: "›";
+    position: absolute;
+    top: 50%;
+    right: 18px;
+    color: #7E8A84;
+    font-size: 28px;
+    line-height: 1;
+    transform: translateY(-52%);
+}
+
+.profile-action-description strong,
+.profile-action-description span {
+    display: block;
+}
+
+.profile-action-description strong {
+    margin-bottom: 3px;
+    color: #13251D;
+    font-size: 15px;
+}
+
+.profile-action-description span {
+    color: #6D7772;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+div[data-testid="element-container"]:has(> .profile-action-description) {
+    margin-bottom: 8px !important;
+}
+
+div[data-testid="element-container"]:has(> .profile-action-marker) {
+    height: 0 !important;
+    margin: 0 !important;
+}
+
+div:has(> .profile-action-marker) + div[data-testid="stButton"] {
+    position: relative;
+    z-index: 2;
+    height: 0;
+    margin-top: -80px;
+    margin-bottom: 80px;
+}
+
+div:has(> .profile-action-marker) + div[data-testid="stButton"] button {
+    width: 100%;
+    min-height: 72px;
+    color: transparent !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.profile-version {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 18px;
+    padding: 14px 2px;
+    color: #77817C;
+    border-top: 1px solid #DDE5E0;
+    font-size: 12px;
+}
+
+.profile-version strong {
+    color: #075C3B;
+}
+
+.profile-signout {
+    display: block;
+    margin: 2px 0 26px;
+    padding: 12px;
+    color: #A33A34 !important;
+    background: #FFF3F1;
+    border: 1px solid #F3CBC6;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+    text-decoration: none !important;
+}
+
+@media (max-width: 480px) {
+    .profile-hero {
+        grid-template-columns: minmax(0, 1fr) 76px;
+        min-height: 158px;
+        padding: 58px 20px 20px;
+    }
+
+    .profile-hero img {
+        width: 74px;
+        height: 74px;
+    }
+
+    .profile-hero h1 {
+        font-size: 29px;
+    }
+
+    .profile-account-card {
+        grid-template-columns: 56px minmax(0, 1fr);
+        padding: 15px;
+    }
+
+    .profile-avatar {
+        width: 56px;
+        height: 56px;
+        font-size: 18px;
+    }
 }

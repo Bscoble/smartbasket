@@ -4,6 +4,7 @@ A Streamlit-based app that helps users compare prices across major supermarkets.
 """
 
 import base64
+import html
 import logging
 import os
 import pathlib
@@ -25,6 +26,7 @@ from config import (
     APP_TITLE,
     APP_ICON,
     APP_LAYOUT,
+    APP_VERSION,
     BRAND_NAME,
     BRAND_TAGLINE,
     GOOGLE_SCOPES,
@@ -45,6 +47,8 @@ from modules.failed_scans import FailedScanStore, encode_failed_scan
 from modules.gtin import normalize_gtin
 from modules.shopping import (
     infer_quantity_and_unit,
+    mark_all_items_collected,
+    shopping_checkbox_keys,
     shopping_pack_count,
     shopping_quantity_label,
 )
@@ -236,7 +240,12 @@ if st.query_params.get("logout") == "1":
     st.session_state["authenticated"] = False
     st.session_state["current_user"] = None
     st.session_state["auth_mode"] = "login"
+    st.session_state["current_page"] = "home"
     st.rerun()
+
+if st.session_state["authenticated"] and st.query_params.get("profile") == "1":
+    st.query_params.pop("profile", None)
+    st.session_state["current_page"] = "profile"
 
 prefs = {
     store_name: bool(st.session_state["prefs"].get(store_name, True))
@@ -861,9 +870,96 @@ elif not st.session_state["authenticated"]:
 # =====================================================================
 else:
     # -----------------------------------------------------------
+    # VIEW: CUSTOMER PROFILE
+    # -----------------------------------------------------------
+    if st.session_state["current_page"] == "profile":
+        current_user = st.session_state.get("current_user") or {}
+        first_name = current_user.get("first_name", "")
+        surname = current_user.get("surname", "")
+        full_name = " ".join(part for part in (first_name, surname) if part).strip()
+        if not full_name:
+            full_name = current_user.get("name", "Grocery Gecko shopper")
+        email = current_user.get("email", "")
+        postcode = current_user.get("postcode", "")
+        country = current_user.get("country", config.DEFAULT_COUNTRY)
+        initials = html.escape("".join(part[0] for part in full_name.split()[:2] if part).upper() or "GG")
+        active_stores = [store for store in config.STORE_NAMES if st.session_state["prefs"].get(store)]
+
+        st.markdown(f"""
+        <div class="profile-hero">
+            <div class="profile-hero-copy">
+                <span class="profile-eyebrow">YOUR GROCERY GECKO</span>
+                <h1>Profile</h1>
+                <p>Your account, preferences and support in one place.</p>
+            </div>
+            <img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" />
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<div class="profile-done-marker"></div>', unsafe_allow_html=True)
+        if st.button("Done", key="profile_done"):
+            st.session_state["current_page"] = "home"
+            st.rerun()
+
+        safe_name = html.escape(full_name)
+        safe_email = html.escape(email)
+        safe_location = html.escape(" · ".join(part for part in (postcode, country) if part))
+        store_chips = "".join(
+            f'<span class="profile-store-chip"><i style="background:{config.STORES[store]["color"]}"></i>{html.escape(store)}</span>'
+            for store in active_stores
+        ) or '<span class="profile-store-empty">No preferred stores selected</span>'
+        st.markdown(f"""
+        <section class="profile-account-card">
+            <div class="profile-avatar">{initials}</div>
+            <div class="profile-account-copy">
+                <h2>{safe_name}</h2>
+                <p>{safe_email}</p>
+                <span>{safe_location}</span>
+            </div>
+        </section>
+        <section class="profile-preferences">
+            <div>
+                <span class="profile-section-kicker">SHOPPING PREFERENCES</span>
+                <h2>Your comparison stores</h2>
+            </div>
+            <div class="profile-store-chips">{store_chips}</div>
+            <p>Change these any time from the preferred stores section on your home screen.</p>
+        </section>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<p class="profile-group-label">HELP &amp; SHARING</p>', unsafe_allow_html=True)
+        profile_actions = [
+            ("Support & feedback", "Tell us about a price, product or app issue", "contact", "profile_support"),
+            ("Refer a friend", "Help someone else compare their weekly shop", "refer", "profile_refer"),
+            ("Privacy policy", "How we collect, use and protect your information", "privacy", "profile_privacy"),
+            (f"About {BRAND_NAME}", "Our purpose and independent comparison approach", "about", "profile_about"),
+        ]
+        for title, description, destination, key in profile_actions:
+            st.markdown(
+                f'<div class="profile-action-description"><strong>{html.escape(title)}</strong><span>{html.escape(description)}</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown('<div class="profile-action-marker"></div>', unsafe_allow_html=True)
+            if st.button(f"Open {title}", key=key, use_container_width=True):
+                if destination == "contact":
+                    sheets_manager.log_user_event(email, "contact_click")
+                elif destination == "refer":
+                    sheets_manager.log_user_event(email, "refer_click")
+                st.session_state["current_page"] = destination
+                st.rerun()
+
+        st.markdown(f"""
+        <div class="profile-version">
+            <span>{BRAND_NAME}</span>
+            <strong>{APP_VERSION}</strong>
+        </div>
+        <a class="profile-signout" href="?logout=1&amp;auth_token={st.query_params.get('auth_token', '')}">Sign out</a>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------------------------------------
     # VIEW: SHOP CELEBRATION (POST-FINISH)
     # -----------------------------------------------------------
-    if st.session_state["current_page"] == "celebration":
+    elif st.session_state["current_page"] == "celebration":
         st.markdown("""
         <div style="background-color: #005A36; color: white; padding: 60px 20px 40px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 30px 30px; text-align: center;">
             <div style="font-size: 50px; margin-bottom: 10px;">🎉</div>
@@ -1083,7 +1179,7 @@ else:
                 <p>{greeting}</p>
                 <h1>{display_name}</h1>
             </div>
-            <a class="header-logout-link" href="?logout=1&auth_token={st.query_params.get('auth_token', '')}" title="Log out" aria-label="Log out">⏻</a>
+            <a class="header-logout-link header-profile-link" href="?profile=1&amp;auth_token={st.query_params.get('auth_token', '')}" title="Open profile" aria-label="Open profile"><img src="{BRAND_MARK_DATA_URI}" alt="" /></a>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1145,8 +1241,15 @@ else:
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             search_query = build_product_search_query(item_name, qty, unit)
-                            local_results = sheets_manager.search_saved_products(user_id, search_query)
-                            scraped_results = sheets_manager.search_scraped_products(search_query, limit=10)
+                            local_results = sheets_manager.search_saved_products(
+                                user_id,
+                                search_query,
+                                limit=None,
+                            )
+                            scraped_results = sheets_manager.search_scraped_products(
+                                search_query,
+                                limit=None,
+                            )
                             seen_titles = {
                                 result["title"].strip().lower()
                                 for result in local_results
@@ -1158,7 +1261,7 @@ else:
                             ]
                             st.session_state["search_results"] = (
                                 local_results + unique_scraped_results
-                            )[:5]
+                            )
                     else:
                         st.session_state["search_results"] = []
                         st.warning("Enter a product description first.")
@@ -1912,6 +2015,31 @@ else:
                 )
                 if can_finish_shop:
                     st.markdown("<hr style='margin: 30px 0 15px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                    checkout_checkbox_keys = shopping_checkbox_keys(
+                        grouped_items,
+                        st.session_state["shop_mode"],
+                    )
+                    all_items_collected = bool(checkout_checkbox_keys) and all(
+                        st.session_state.get(key, False)
+                        for key in checkout_checkbox_keys
+                    )
+                    st.markdown(
+                        '<div class="checkout-completion-copy">'
+                        '<span>AT CHECKOUT</span>'
+                        '<strong>Forgot to tick items as you shopped?</strong>'
+                        '<p>Mark the whole trolley as collected, then finish your shop.</p>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown('<div class="checkout-mark-all-marker"></div>', unsafe_allow_html=True)
+                    st.button(
+                        "All items collected" if all_items_collected else "Mark all items collected",
+                        key="checkout_mark_all",
+                        use_container_width=True,
+                        disabled=all_items_collected,
+                        on_click=mark_all_items_collected,
+                        args=(st.session_state, checkout_checkbox_keys),
+                    )
                 if can_finish_shop and st.button("✅ Finish Shop", type="primary", use_container_width=True):
                     selected_purchase_names = set()
                     grouped_item_names = {}
@@ -1979,8 +2107,8 @@ else:
         st.markdown('<div class="footer-buttons-marker"></div>', unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns(4, gap="small")
         with fc1:
-            if st.button("About", key="footer_about"):
-                st.session_state["current_page"] = "about"
+            if st.button("Profile", key="footer_profile"):
+                st.session_state["current_page"] = "profile"
                 st.rerun()
         with fc2:
             if st.button("Privacy", key="footer_privacy"):

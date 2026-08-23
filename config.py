@@ -182,6 +182,7 @@ COUNTRY_TIMEZONES = {
 
 BRAND_NAME = "Grocery Gecko"
 BRAND_TAGLINE = "Compare your list. Keep the difference."
+APP_VERSION = "Beta 1.0"
 APP_TITLE = BRAND_NAME
 APP_ICON = "🦎"
 APP_LAYOUT = "centered"

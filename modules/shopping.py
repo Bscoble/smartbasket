@@ -1,7 +1,28 @@
 """Shopping-list quantity and package-size helpers."""
 
 import re
-from typing import Tuple
+from typing import Any, Iterable, Mapping, MutableMapping, Sequence, Tuple
+
+
+def shopping_checkbox_keys(
+    grouped_items: Mapping[str, Sequence[Any]],
+    shop_mode: str,
+) -> list[str]:
+    """Return the stable checkbox keys for a rendered shopping plan."""
+    return [
+        f"chk_{shop_mode}_{store_name}_{item_index}"
+        for store_name, items in grouped_items.items()
+        for item_index, _item in enumerate(items)
+    ]
+
+
+def mark_all_items_collected(
+    state: MutableMapping[str, Any],
+    checkbox_keys: Iterable[str],
+) -> None:
+    """Mark every rendered shopping-plan checkbox as collected."""
+    for checkbox_key in checkbox_keys:
+        state[checkbox_key] = True
 
 
 def infer_quantity_and_unit(item_name: str) -> Tuple[int, str]:

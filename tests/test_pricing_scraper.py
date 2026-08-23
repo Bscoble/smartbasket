@@ -6,6 +6,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from modules.pricing import PriceScraper
+from modules.shopping import mark_all_items_collected, shopping_checkbox_keys
 from config import APIFY_DEFAULT_CONFIG
 from helpers import (
     build_product_search_query,
@@ -32,6 +33,25 @@ def test_iter_apify_products_flattens_result_payloads():
         "name": "Milk",
         "pricing": {"now": 4.99},
     }]
+
+
+def test_mark_all_items_collected_uses_rendered_plan_checkbox_keys():
+    grouped_items = {
+        "Coles": [{"item_name": "Milk"}, {"item_name": "Bread"}],
+        "Aldi": [{"item_name": "Eggs"}],
+    }
+    state = {"chk_split_Coles_0": False, "unrelated": "keep"}
+
+    checkbox_keys = shopping_checkbox_keys(grouped_items, "split")
+    mark_all_items_collected(state, checkbox_keys)
+
+    assert checkbox_keys == [
+        "chk_split_Coles_0",
+        "chk_split_Coles_1",
+        "chk_split_Aldi_0",
+    ]
+    assert all(state[key] is True for key in checkbox_keys)
+    assert state["unrelated"] == "keep"
 
 
 def test_extract_apify_price_supports_nested_price_shapes():
@@ -399,6 +419,39 @@ def test_search_saved_products_does_not_show_legacy_updated_timestamp_as_categor
     assert all(result["subcategory"] == "" for result in results)
 
 
+def test_search_saved_products_can_return_all_matches():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["User_ID", "Title", "Image_URL", "Search_Key", "Category", "Subcategory", "Updated"],
+                *[
+                    [
+                        "user@example.com",
+                        f"Organic Milk Variety {index} 1L",
+                        "",
+                        f"organic milk variety {index} 1l",
+                        "Dairy",
+                        "Fresh Milk",
+                        "",
+                    ]
+                    for index in range(7)
+                ],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    default_results = manager.search_saved_products("user@example.com", "organic milk")
+    all_results = manager.search_saved_products("user@example.com", "organic milk", limit=None)
+
+    assert len(default_results) == 5
+    assert len(all_results) == 7
+    assert all_results[:5] == default_results
+
+
 def test_search_scraped_products_uses_stored_product_images():
     class FakeWorksheet:
         def __init__(self):
@@ -482,6 +535,44 @@ def test_search_scraped_products_ranks_metadata_and_deduplicates_retailers():
     assert results[0]["image_url"] == "https://scraped.test/tim-tam.png"
     assert results[0]["stores"] == ["Coles", "Woolworths"]
     assert sum(result["title"] == "Arnott's Tim Tam Original 200g" for result in results) == 1
+
+
+def test_search_scraped_products_can_return_all_ranked_matches():
+    class FakeWorksheet:
+        def get_all_values(self):
+            rows = [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand"],
+            ]
+            rows.extend(
+                [
+                    "Coles",
+                    f"Organic Milk Variety {index} 1L",
+                    "3.50",
+                    f"Organic Milk Variety {index} 1L",
+                    "2026-08-21 12:00:00",
+                    "",
+                    "",
+                    "",
+                    "Dairy",
+                    "Fresh Milk",
+                    "Farm Test",
+                ]
+                for index in range(7)
+            )
+            return rows
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    default_results = manager.search_scraped_products("organic milk 1L")
+    all_results = manager.search_scraped_products("organic milk 1L", limit=None)
+
+    assert len(default_results) == 5
+    assert len(all_results) == 7
+    assert all_results[:5] == default_results
 
 
 def test_search_scraped_products_can_match_brand_and_category_metadata():
