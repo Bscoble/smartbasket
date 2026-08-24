@@ -22,15 +22,17 @@ from google.oauth2.service_account import Credentials
 
 # Import configuration and modules
 import config
-from config import (
-    APP_TITLE,
-    APP_ICON,
-    APP_LAYOUT,
-    BRAND_NAME,
-    BRAND_TAGLINE,
-    GOOGLE_SCOPES,
-    SPREADSHEET_ID,
+APP_TITLE = getattr(config, "APP_TITLE", "Grocery Gecko")
+APP_ICON = getattr(config, "APP_ICON", "🦎")
+APP_LAYOUT = getattr(config, "APP_LAYOUT", "centered")
+BRAND_NAME = getattr(config, "BRAND_NAME", APP_TITLE)
+BRAND_TAGLINE = getattr(
+    config,
+    "BRAND_TAGLINE",
+    "Compare your list. Keep the difference.",
 )
+GOOGLE_SCOPES = config.GOOGLE_SCOPES
+SPREADSHEET_ID = config.SPREADSHEET_ID
 APP_VERSION = getattr(config, "APP_VERSION", "Beta 1.0")
 from helpers import (
     format_price,
