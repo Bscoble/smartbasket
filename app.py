@@ -26,12 +26,12 @@ from config import (
     APP_TITLE,
     APP_ICON,
     APP_LAYOUT,
-    APP_VERSION,
     BRAND_NAME,
     BRAND_TAGLINE,
     GOOGLE_SCOPES,
     SPREADSHEET_ID,
 )
+APP_VERSION = getattr(config, "APP_VERSION", "Beta 1.0")
 from helpers import (
     format_price,
     get_store_color,
