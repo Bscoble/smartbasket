@@ -833,13 +833,6 @@ div:has(> .shopping-list-item-marker) {
     }
 
     div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
-        > div[data-testid="stColumn"]:nth-child(4) {
-        flex: 0 0 34px !important;
-        width: 34px !important;
-        min-width: 34px !important;
-    }
-
-    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:nth-child(3)
         div[data-testid="stHorizontalBlock"] {
         gap: 0 !important;

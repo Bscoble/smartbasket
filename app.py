@@ -1564,7 +1564,7 @@ else:
                     row[4] if len(row) >= 5 else None,
                 )
                 st.markdown('<div class="shopping-list-item-marker"></div>', unsafe_allow_html=True)
-                cols = st.columns([0.8, 1.65, 1.65, 0.55])
+                cols = st.columns([0.8, 2.2, 1.65])
                 with cols[0]:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
@@ -1587,13 +1587,12 @@ else:
                         if st.button("+", key=f"add_{sheet_idx}"):
                             sheets_manager.update_list_quantity(sheet_idx, i_pack_count + 1, user_id)
                             st.rerun()
-                with cols[3]:
-                    st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
-                    if st.button("✕", key=f"del_{sheet_idx}"):
-                        if sheets_manager.delete_list_row(sheet_idx, user_id):
-                            st.rerun()
-                        else:
-                            st.error("Failed to delete item. Please try again.")
+                        st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
+                        if st.button("✕", key=f"del_{sheet_idx}"):
+                            if sheets_manager.delete_list_row(sheet_idx, user_id):
+                                st.rerun()
+                            else:
+                                st.error("Failed to delete item. Please try again.")
                         
                 st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
             
