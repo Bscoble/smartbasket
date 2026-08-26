@@ -544,11 +544,11 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 14px;
+    background: transparent;
     color: #FFFFFF !important;
     font-size: 17px;
     font-weight: 700;
@@ -557,14 +557,14 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
 }
 
 .header-logout-link:hover {
-    background: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.12);
     color: #FFFFFF !important;
     transform: translateY(-1px);
 }
 
 .header-profile-link img {
-    width: 34px;
-    height: 34px;
+    width: 46px;
+    height: 46px;
     object-fit: contain;
 }
 
@@ -647,7 +647,7 @@ div:has(> .store-pills-marker) + div[data-testid="stHorizontalBlock"] {
     align-items: center !important;
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 12px !important;
+    gap: 0 !important;
     margin: -16px 0 0 !important;
 }
 
@@ -948,6 +948,43 @@ div:has(> .coles-store-button-marker) + div[data-testid="element-container"] but
 div:has(> .aldi-store-button-marker) + div[data-testid="element-container"] button:hover {
     filter: brightness(0.9) !important;
     transform: translateY(-1px) !important;
+}
+
+/* Streamlit's current button wrapper is stButton rather than element-container. */
+div:has(> .woolworths-store-button-marker) + div[data-testid="stButton"] button,
+div:has(> .coles-store-button-marker) + div[data-testid="stButton"] button,
+div:has(> .aldi-store-button-marker) + div[data-testid="stButton"] button {
+    width: 100% !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+}
+
+div:has(> .woolworths-store-button-marker) + div[data-testid="stButton"] button {
+    background: #005A36 !important;
+    border-color: #005A36 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .coles-store-button-marker) + div[data-testid="stButton"] button {
+    background: #E31837 !important;
+    border-color: #E31837 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .aldi-store-button-marker) + div[data-testid="stButton"] button {
+    background: #002D62 !important;
+    border-color: #002D62 !important;
+    color: #FFFFFF !important;
+}
+
+div:has(> .woolworths-store-button-marker) + div[data-testid="stButton"] button[kind="secondary"],
+div:has(> .coles-store-button-marker) + div[data-testid="stButton"] button[kind="secondary"],
+div:has(> .aldi-store-button-marker) + div[data-testid="stButton"] button[kind="secondary"] {
+    opacity: 0.55 !important;
 }
 
 /* The marker and button share the list-heading row, so this selector remains
