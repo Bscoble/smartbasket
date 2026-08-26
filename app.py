@@ -44,6 +44,7 @@ from helpers import (
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.catalog_matching import find_local_price_matches
+from modules.brands import has_explicit_brand
 from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 from modules.failed_scans import FailedScanStore, encode_failed_scan
 from modules.gtin import normalize_gtin
@@ -1209,21 +1210,27 @@ else:
                     stored_unit = config.UNIT_VALUES[unit]
                     if stored_unit == "auto":
                         stored_qty, stored_unit = infer_quantity_and_unit(item_name)
-                    scraped_matches = sheets_manager.search_scraped_products(item_name)
-                    scraped_product = next(
-                        (match for match in scraped_matches if match.get("image_url")),
-                        None,
+                    search_query = build_product_search_query(item_name, qty, unit)
+                    scraped_matches = sheets_manager.search_scraped_products(
+                        search_query,
+                        limit=None,
+                    )
+                    scraped_product = scraped_matches[0] if scraped_matches else None
+                    selected_name = (
+                        scraped_product["title"]
+                        if scraped_product and not has_explicit_brand(item_name)
+                        else item_name
                     )
                     product_image = scraped_product["image_url"] if scraped_product else ""
                     sheets_manager.save_product(
                         user_id,
-                        item_name,
+                        selected_name,
                         product_image,
                         category=scraped_product.get("category", "") if scraped_product else "",
                         subcategory=scraped_product.get("subcategory", "") if scraped_product else "",
                     )
                     if sheets_manager.add_item_to_list(
-                        item_name,
+                        selected_name,
                         stored_qty,
                         stored_unit,
                         product_image,

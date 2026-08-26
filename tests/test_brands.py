@@ -5,7 +5,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from modules.brands import merge_brand_metadata, resolve_brand
+from modules.brands import has_explicit_brand, merge_brand_metadata, resolve_brand
 
 
 def test_explicit_retailer_brand_has_high_confidence():
@@ -38,6 +38,12 @@ def test_descriptive_first_word_is_not_inferred_as_brand():
         "brand_source": "",
         "brand_confidence": "",
     }
+
+
+def test_has_explicit_brand_distinguishes_generic_and_branded_queries():
+    assert has_explicit_brand("tissues") is False
+    assert has_explicit_brand("Sprite lemonade cans") is True
+    assert has_explicit_brand("Farmdale full cream milk") is True
 
 
 def test_explicit_retailer_brand_replaces_weaker_existing_inference():

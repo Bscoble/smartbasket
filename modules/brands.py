@@ -93,6 +93,14 @@ def _find_named_brand(product_name: str, brands: tuple[str, ...]) -> str:
     return ""
 
 
+def has_explicit_brand(product_name: str) -> bool:
+    """Return whether a shopper-entered product name includes a known brand."""
+    retailer_brands = tuple(
+        brand for brands in PRIVATE_LABELS.values() for brand in brands
+    )
+    return bool(_find_named_brand(product_name, KNOWN_BRANDS + retailer_brands))
+
+
 def resolve_brand(
     product_name: str,
     explicit_brand: Optional[str] = None,
