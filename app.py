@@ -1209,8 +1209,6 @@ else:
         if st.session_state.pop("clear_add_item_description", False):
             st.session_state["add_item_description"] = ""
         matched_item_added_notice = st.session_state.pop("matched_item_added_notice", "")
-        if matched_item_added_notice:
-            st.toast(f"Added {matched_item_added_notice} to your shopping list", icon="✅")
             
         st.markdown(f"""
         <div class="app-header">
@@ -1221,6 +1219,11 @@ else:
             <a class="header-logout-link header-profile-link" href="?profile=1&amp;auth_token={st.query_params.get('auth_token', '')}" title="Open profile" aria-label="Open profile"><img src="{BRAND_MARK_DATA_URI}" alt="" /></a>
         </div>
         """, unsafe_allow_html=True)
+        if matched_item_added_notice:
+            st.markdown(
+                f'<div class="matched-item-added-confirmation"><strong>Added to your list</strong><span>{html.escape(matched_item_added_notice)}</span></div>',
+                unsafe_allow_html=True,
+            )
         
         with st.container(border=True):
             st.markdown('<p class="add-item-heading">ADD ITEM</p>', unsafe_allow_html=True)

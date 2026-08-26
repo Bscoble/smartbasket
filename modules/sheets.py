@@ -1256,6 +1256,25 @@ class SheetsManager:
                 normalized_title = normalize(f"{title} {product_name}")
                 normalized_brand = normalize(brand)
                 normalized_categories = normalize(f"{category} {subcategory}")
+                title_or_brand_terms = set(
+                    f"{normalized_title} {normalized_brand}".split()
+                )
+                pet_food_terms = {"dog", "food"}
+                cat_food_terms = {"cat", "food"}
+                query_term_set = set(terms)
+                candidate_text = f"{normalized_title} {normalized_brand}"
+                other_animal_terms = {"cat", "rabbit", "guinea", "bird", "fish", "horse"}
+                if pet_food_terms.issubset(query_term_set) and (
+                    not pet_food_terms.issubset(title_or_brand_terms)
+                    or "hot dog" in candidate_text
+                    or bool(other_animal_terms & title_or_brand_terms)
+                ):
+                    continue
+                if (
+                    cat_food_terms.issubset(query_term_set)
+                    and not cat_food_terms.issubset(title_or_brand_terms)
+                ):
+                    continue
                 matched_terms = []
                 score = 0
                 for term in terms:

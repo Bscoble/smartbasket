@@ -621,6 +621,29 @@ def test_search_scraped_products_places_best_unit_price_first():
     assert results[0]["title"] == "Organic Full Cream Milk 1L"
 
 
+def test_search_scraped_products_excludes_non_pet_products_from_dog_food_query():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand"],
+                ["Aldi", "Spaghetti in Tomato Sauce 420g", "0.89", "Spaghetti in Tomato Sauce 420g", "2026-08-21 12:00:00", "0.21", "100g", "", "Pet Care", "Dog Food", "Aldi"],
+                ["Aldi", "Adult Dog Food Casserole 1.2kg", "2.89", "Adult Dog Food Casserole 1.2kg", "2026-08-21 12:00:00", "0.24", "100g", "", "Pet Care", "Dog Food", "Julius"],
+                ["Coles", "Assorted Cat Food 400g", "1.29", "Assorted Cat Food 400g", "2026-08-21 12:00:00", "0.32", "100g", "", "Pet Care", "Dog Food", "Coles"],
+                ["Coles", "Rabbit and Guinea Pig Food 2kg", "7.10", "Rabbit and Guinea Pig Food 2kg", "2026-08-21 12:00:00", "0.36", "100g", "", "Pet Care", "Dog Food", "Coles"],
+                ["Aldi", "Hot Dog Food Rolls 450g", "2.29", "Hot Dog Food Rolls 450g", "2026-08-21 12:00:00", "0.38", "each", "", "Pet Care", "Dog Food", "Aldi"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("dog food", limit=None)
+
+    assert [result["title"] for result in results] == ["Adult Dog Food Casserole 1.2kg"]
+
+
 def test_search_scraped_products_can_match_brand_and_category_metadata():
     class FakeWorksheet:
         def get_all_values(self):

@@ -540,6 +540,43 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     opacity: 0.9;
 }
 
+.matched-item-added-confirmation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-left: 4px solid #008A4B;
+    background: #E8F5ED;
+    color: #075C3B;
+    font-size: 12px;
+    animation: matched-item-confirmation 0.3s ease-out;
+}
+
+.matched-item-added-confirmation strong {
+    flex: 0 0 auto;
+    font-size: 12px;
+}
+
+.matched-item-added-confirmation span {
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes matched-item-confirmation {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .header-logout-link {
     display: flex;
     align-items: center;
