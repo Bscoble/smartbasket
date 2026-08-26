@@ -8,6 +8,7 @@ import html
 import logging
 import os
 import pathlib
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -284,6 +285,11 @@ def single_store_shopping_available(report: dict) -> bool:
         .get("single_store_best", {})
         .get("is_complete", False)
     )
+
+
+def _normalized_product_title(value: str) -> str:
+    """Normalize product names for exact purchase-history comparisons."""
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
 def resolve_scanned_product(
@@ -1290,6 +1296,15 @@ else:
                                 if result.get("price") is not None
                                 and result.get("unit_price") is not None
                             ]
+                            purchased_titles = {
+                                _normalized_product_title(item["name"])
+                                for item in sheets_manager.get_recent_history(user_id)
+                            }
+                            for result in priced_scraped_results:
+                                result["previously_purchased"] = (
+                                    _normalized_product_title(result["title"])
+                                    in purchased_titles
+                                )
                             st.session_state["search_results"] = priced_scraped_results
                     else:
                         st.session_state["search_results"] = []
@@ -1377,12 +1392,24 @@ else:
                     }
                     for idx, res in enumerate(search_results):
                         is_best_unit_price = idx == best_unit_price_idx
+                        is_previously_purchased = (
+                            res.get("previously_purchased", False)
+                            and not is_best_unit_price
+                        )
                         with st.container(
-                            border=is_best_unit_price,
-                            key="best_unit_price_result" if is_best_unit_price else None,
+                            border=is_best_unit_price or is_previously_purchased,
+                            key=(
+                                "best_unit_price_result"
+                                if is_best_unit_price
+                                else f"previous_purchase_{idx}"
+                                if is_previously_purchased
+                                else None
+                            ),
                         ):
                             if is_best_unit_price:
                                 st.markdown('<div class="best-unit-price-marker">BEST UNIT PRICE</div>', unsafe_allow_html=True)
+                            elif is_previously_purchased:
+                                st.markdown('<div class="previous-purchase-marker">PREVIOUSLY PURCHASED</div>', unsafe_allow_html=True)
                             sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
                             with sc1:
                                 if res["image_url"]:

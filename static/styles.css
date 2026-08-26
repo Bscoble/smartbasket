@@ -1285,6 +1285,24 @@ div:has(> .best-unit-price-marker) {
     transform: translateY(-24px);
 }
 
+div:has(> .previous-purchase-marker) {
+    height: 12px !important;
+    margin: 0 !important;
+}
+
+.previous-purchase-marker {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 3px;
+    background: #E31837;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 800;
+    transform: translateY(-24px);
+}
+
 .stVerticalBlockBorderWrapper:has(.best-unit-price-marker),
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
     position: relative;
@@ -1297,6 +1315,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
 .st-key-best_unit_price_result .stVerticalBlockBorderWrapper,
 .st-key-best_unit_price_result div[data-testid="stVerticalBlockBorderWrapper"] {
     border: 2px solid #D4A017 !important;
+    border-radius: 8px !important;
+}
+
+[class*="st-key-previous_purchase_"],
+[class*="st-key-previous_purchase_"] .stVerticalBlockBorderWrapper,
+[class*="st-key-previous_purchase_"] div[data-testid="stVerticalBlockBorderWrapper"] {
+    border: 2px solid #E31837 !important;
     border-radius: 8px !important;
 }
 
