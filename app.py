@@ -1377,7 +1377,10 @@ else:
                     }
                     for idx, res in enumerate(search_results):
                         is_best_unit_price = idx == best_unit_price_idx
-                        with st.container(border=is_best_unit_price):
+                        with st.container(
+                            border=is_best_unit_price,
+                            key="best_unit_price_result" if is_best_unit_price else None,
+                        ):
                             if is_best_unit_price:
                                 st.markdown('<div class="best-unit-price-marker">BEST UNIT PRICE</div>', unsafe_allow_html=True)
                             sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])

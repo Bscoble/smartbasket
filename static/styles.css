@@ -1292,6 +1292,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
     border-radius: 8px !important;
 }
 
+.st-key-best_unit_price_result,
+.st-key-best_unit_price_result .stVerticalBlockBorderWrapper,
+.st-key-best_unit_price_result div[data-testid="stVerticalBlockBorderWrapper"] {
+    border: 2px solid #D4A017 !important;
+    border-radius: 8px !important;
+}
+
 
 /* The direct-add action is secondary to product matching. */
 div:has(> .add-item-form-marker) + div[data-testid="stForm"] button[kind="secondaryFormSubmit"] {
