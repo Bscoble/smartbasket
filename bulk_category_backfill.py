@@ -46,17 +46,22 @@ STORES_TO_CRAWL = ["Woolworths", "Coles", "Aldi"]
 # additional pages returns new, non-overlapping products rather than repeats).
 PAGINATED_STORES = {"Woolworths", "Aldi"}
 
-CATEGORY_KEYWORDS = [
-    "dairy",
-    "bakery",
-    "meat",
-    "fruit",
-    "vegetables",
-    "pantry",
-    "drinks",
-    "frozen",
-    "household",
-    "biscuits",
+CATEGORY_TARGETS = [
+    ("dairy", "Dairy, Eggs & Fridge"),
+    ("bakery", "Bakery"),
+    ("meat", "Meat & Seafood"),
+    ("seafood", "Meat & Seafood"),
+    ("fruit", "Fruit & Vegetables"),
+    ("vegetables", "Fruit & Vegetables"),
+    ("pantry", "Pantry"),
+    ("drinks", "Drinks"),
+    ("frozen", "Frozen"),
+    ("household", "Cleaning & Household"),
+    ("personal care", "Health & Beauty"),
+    ("baby", "Baby"),
+    ("pet food", "Pet Care"),
+    ("deli", "Deli & Chilled Meats"),
+    ("biscuits", "Snacks & Confectionery"),
 ]
 
 # Coles' actor only returns the first search page reliably. Use specific, mapped
@@ -235,7 +240,7 @@ def backfill() -> None:
         targets = (
             get_coles_catalog_targets(crawl_state)
             if store == "Coles"
-            else [(keyword, keyword) for keyword in CATEGORY_KEYWORDS]
+            else CATEGORY_TARGETS
         )
         for keyword, category_fallback in targets:
             total_added += crawl_keyword(

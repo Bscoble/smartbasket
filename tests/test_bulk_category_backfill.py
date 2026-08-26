@@ -6,11 +6,21 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from bulk_category_backfill import (
+    CATEGORY_TARGETS,
     COLES_CATALOG_TARGETS,
     COLES_TARGETS_PER_RUN,
     crawl_keyword,
     get_coles_catalog_targets,
 )
+
+
+def test_category_targets_use_dashboard_category_labels():
+    targets = dict(CATEGORY_TARGETS)
+
+    assert targets["dairy"] == "Dairy, Eggs & Fridge"
+    assert targets["household"] == "Cleaning & Household"
+    assert targets["biscuits"] == "Snacks & Confectionery"
+    assert {"baby", "pet food", "deli", "seafood"} <= set(targets)
 
 
 def test_coles_catalog_targets_start_at_dairy_and_are_bounded():
