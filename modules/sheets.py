@@ -25,6 +25,15 @@ from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 
 logger = logging.getLogger(__name__)
 
+
+def _matches_tissue_search(terms: List[str], title: str) -> bool:
+    """Keep tissue-only searches focused on facial tissues, not paper products."""
+    if set(terms) - {"tissue", "tissues"}:
+        return True
+    normalized_title = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+    excluded_phrases = ("toilet paper", "paper towel", "paper towels")
+    return not any(phrase in normalized_title for phrase in excluded_phrases)
+
 STANDARD_PRICE_HEADERS = [
     "Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price",
     "Unit Label", "Image URL", "Category", "Subcategory", "Brand",
@@ -1150,7 +1159,9 @@ class SheetsManager:
             for row in self._cached_values(worksheet_name, ws)[1:]:
                 if len(row) >= 5 and row[0].strip().lower() == normalized_user:
                     search_key = row[3].strip().lower()
-                    if all(term in search_key for term in terms):
+                    if all(term in search_key for term in terms) and _matches_tissue_search(
+                        terms, row[1].strip()
+                    ):
                         category = row[4].strip() if len(row) >= 7 else ""
                         subcategory = row[5].strip() if len(row) >= 7 else ""
                         if re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", category):
@@ -1208,6 +1219,8 @@ class SheetsManager:
 
                 title = row[1].strip()
                 if not title:
+                    continue
+                if not _matches_tissue_search(terms, title):
                     continue
 
                 product_name = row[3].strip() if len(row) >= 4 else ""

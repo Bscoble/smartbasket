@@ -164,3 +164,17 @@ def test_find_product_by_barcode_returns_local_product_and_store_coverage():
     assert result["image_url"] == "https://scraped.test/tim-tam.png"
     assert result["stores"] == ["Coles", "Woolworths"]
     assert manager.find_product_by_barcode("9999999999999") is None
+
+
+def test_tissue_search_excludes_toilet_paper_and_paper_towels():
+    spreadsheet = FakeSpreadsheet([
+        ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+        ["Coles", "facial tissues 95 pack", "3.00", "Facial Tissues 95 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
+        ["Coles", "toilet paper tissues 12 pack", "7.00", "Toilet Paper Tissues 12 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
+        ["Aldi", "paper towels tissues 2 pack", "4.00", "Paper Towels Tissues 2 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
+    ])
+    manager = SheetsManager(spreadsheet)
+
+    results = manager.search_scraped_products("tissues", limit=None)
+
+    assert [result["title"] for result in results] == ["facial tissues 95 pack"]
