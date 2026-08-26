@@ -1271,7 +1271,7 @@ div:has(> .best-unit-price-marker) {
     display: none !important;
 }
 
-div:has(> .best-unit-price-marker) + div[data-testid="stHorizontalBlock"] {
+div[data-testid="stHorizontalBlock"]:has(.best-unit-price-marker) {
     position: relative;
     margin: 8px -6px 8px !important;
     padding: 14px 6px 8px !important;
@@ -1279,7 +1279,7 @@ div:has(> .best-unit-price-marker) + div[data-testid="stHorizontalBlock"] {
     border-radius: 8px;
 }
 
-div:has(> .best-unit-price-marker) + div[data-testid="stHorizontalBlock"]::before {
+div[data-testid="stHorizontalBlock"]:has(.best-unit-price-marker)::before {
     content: "BEST UNIT PRICE";
     position: absolute;
     top: -10px;

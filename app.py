@@ -1381,8 +1381,6 @@ else:
                         "Aldi": "#002D62",
                     }
                     for idx, res in enumerate(search_results):
-                        if idx == best_unit_price_idx:
-                            st.markdown('<div class="best-unit-price-marker"></div>', unsafe_allow_html=True)
                         sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
                         with sc1:
                             if res["image_url"]:
@@ -1428,6 +1426,8 @@ else:
                                     unsafe_allow_html=True,
                                 )
                         with sc3:
+                            if idx == best_unit_price_idx:
+                                st.markdown('<div class="best-unit-price-marker"></div>', unsafe_allow_html=True)
                             if st.button("➕ Add", key=f"add_search_{idx}"):
                                 matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
                                 sheets_manager.save_product(
