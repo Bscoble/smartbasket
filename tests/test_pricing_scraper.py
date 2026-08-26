@@ -508,6 +508,9 @@ def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
         "subcategory": "",
         "brand": "",
         "stores": ["Woolworths"],
+        "price": 4.50,
+        "unit_price": 0.81,
+        "unit_label": "100G",
     }]
 
 
@@ -573,6 +576,29 @@ def test_search_scraped_products_can_return_all_ranked_matches():
     assert len(default_results) == 5
     assert len(all_results) == 7
     assert all_results[:5] == default_results
+
+
+def test_search_scraped_products_sorts_equally_relevant_matches_by_unit_price():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand"],
+                ["Coles", "Organic Milk A 1L", "4.00", "Organic Milk A 1L", "2026-08-21 12:00:00", "4.00", "per L", "", "Dairy", "Milk", "Coles"],
+                ["Aldi", "Organic Milk B 1L", "3.20", "Organic Milk B 1L", "2026-08-21 12:00:00", "3.20", "per L", "", "Dairy", "Milk", "Aldi"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("organic milk 1L", limit=None)
+
+    assert [result["title"] for result in results] == ["Organic Milk B 1L", "Organic Milk A 1L"]
+    assert results[0]["price"] == 3.20
+    assert results[0]["unit_price"] == 3.20
+    assert results[0]["unit_label"] == "per L"
 
 
 def test_search_scraped_products_can_match_brand_and_category_metadata():

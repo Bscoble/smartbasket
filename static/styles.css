@@ -1244,11 +1244,16 @@ div[class*="st-key-add_search_"] {
 }
 
 div[class*="st-key-add_search_"] button {
-    width: auto !important;
+    width: 64px !important;
     min-height: 36px !important;
-    padding: 6px 9px !important;
+    padding: 6px !important;
     border-radius: 8px !important;
     font-size: 12px !important;
+    white-space: nowrap !important;
+}
+
+div[class*="st-key-add_search_"] button p {
+    white-space: nowrap !important;
 }
 
 /* The direct-add action is secondary to product matching. */

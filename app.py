@@ -1337,7 +1337,7 @@ else:
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                     for idx, res in enumerate(st.session_state["search_results"]):
-                        sc1, sc2, sc3 = st.columns([1.3, 3.2, 0.7])
+                        sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
                         with sc1:
                             if res["image_url"]:
                                 st.markdown(
@@ -1351,6 +1351,18 @@ else:
                                 )
                         with sc2:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
+                            price_parts = []
+                            if res.get("price") is not None:
+                                price_parts.append(format_price(res["price"]))
+                            if res.get("unit_price") is not None:
+                                unit_label = res.get("unit_label", "").strip()
+                                separator = " " if unit_label.lower().startswith("per ") else " / "
+                                price_parts.append(f"{format_price(res['unit_price'])}{separator}{unit_label}".rstrip())
+                            if price_parts:
+                                st.markdown(
+                                    f"<div style='font-size: 12px; color: #005A36; font-weight: 700; margin-top: 3px;'>{' · '.join(price_parts)}</div>",
+                                    unsafe_allow_html=True,
+                                )
                             metadata = []
                             if res.get("category"):
                                 metadata.append(res["category"])

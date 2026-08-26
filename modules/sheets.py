@@ -1216,6 +1216,12 @@ class SheetsManager:
                 return []
             normalized_query = " ".join(terms)
 
+            def parse_price(value: str) -> Optional[float]:
+                try:
+                    return float(value) if value else None
+                except (TypeError, ValueError):
+                    return None
+
             metadata = self.load_product_metadata() if gluten_free_only else {}
             matches = {}
             for row in self._cached_values(worksheet_name, ws)[1:]:
@@ -1229,6 +1235,9 @@ class SheetsManager:
                     continue
 
                 product_name = row[3].strip() if len(row) >= 4 else ""
+                price = parse_price(row[2].strip() if len(row) >= 3 else "")
+                unit_price = parse_price(row[5].strip() if len(row) >= 6 else "")
+                unit_label = row[6].strip() if len(row) >= 7 else ""
                 image_url = row[7].strip() if len(row) >= 8 else ""
                 category = row[8].strip() if len(row) >= 9 else ""
                 subcategory = row[9].strip() if len(row) >= 10 else ""
@@ -1291,6 +1300,9 @@ class SheetsManager:
                         "subcategory": subcategory,
                         "brand": brand,
                         "stores": {store} if store else set(),
+                        "price": price,
+                        "unit_price": unit_price,
+                        "unit_label": unit_label,
                         "_score": score,
                     }
                 else:
@@ -1304,13 +1316,20 @@ class SheetsManager:
                         existing["subcategory"] = subcategory
                     if not existing["brand"] and brand:
                         existing["brand"] = brand
+                    existing_unit_price = existing["unit_price"]
+                    if unit_price is not None and (
+                        existing_unit_price is None or unit_price < existing_unit_price
+                    ):
+                        existing["price"] = price
+                        existing["unit_price"] = unit_price
+                        existing["unit_label"] = unit_label
                     existing["_score"] = max(existing["_score"], score)
 
             ranked = sorted(
                 matches.values(),
                 key=lambda match: (
                     -match["_score"],
-                    -len(match["stores"]),
+                    match["unit_price"] if match["unit_price"] is not None else float("inf"),
                     match["title"].lower(),
                 ),
             )
@@ -1322,6 +1341,9 @@ class SheetsManager:
                     "subcategory": match["subcategory"],
                     "brand": match["brand"],
                     "stores": sorted(match["stores"]),
+                    "price": match["price"],
+                    "unit_price": match["unit_price"],
+                    "unit_label": match["unit_label"],
                 }
                 for match in (ranked if limit is None else ranked[:limit])
             ]
