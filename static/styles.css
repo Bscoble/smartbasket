@@ -1268,20 +1268,21 @@ div[class*="st-key-add_search_"] button p {
 }
 
 div:has(> .best-unit-price-marker) {
-    height: 24px !important;
+    height: 12px !important;
     margin: 0 !important;
 }
 
 .best-unit-price-marker {
     display: inline-flex;
     align-items: center;
-    height: 18px;
-    padding: 0 6px;
+    height: 24px;
+    padding: 0 9px;
     border-radius: 3px;
     background: #D4A017;
     color: #FFFFFF;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 800;
+    transform: translateY(-24px);
 }
 
 .stVerticalBlockBorderWrapper:has(.best-unit-price-marker),
