@@ -1563,7 +1563,7 @@ else:
                     row[4] if len(row) >= 5 else None,
                 )
                 st.markdown('<div class="shopping-list-item-marker"></div>', unsafe_allow_html=True)
-                cols = st.columns([0.8, 3.2, 0.65])
+                cols = st.columns([0.8, 1.65, 1.65, 0.55])
                 with cols[0]:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
@@ -1572,16 +1572,21 @@ else:
                 with cols[1]:
                     st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_quantity_label}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
-                    if st.button("−", key=f"sub_{sheet_idx}"):
-                        if i_pack_count > 1:
-                            sheets_manager.update_list_quantity(sheet_idx, i_pack_count - 1, user_id)
+                    sub_c1, sub_c2, sub_c3 = st.columns([1, 1, 1], gap="small")
+                    with sub_c1:
+                        st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
+                        if st.button("−", key=f"sub_{sheet_idx}"):
+                            if i_pack_count > 1:
+                                sheets_manager.update_list_quantity(sheet_idx, i_pack_count - 1, user_id)
+                                st.rerun()
+                    with sub_c2:
+                        st.markdown(f'<div class="qty-value">{i_pack_count}</div>', unsafe_allow_html=True)
+                    with sub_c3:
+                        st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
+                        if st.button("+", key=f"add_{sheet_idx}"):
+                            sheets_manager.update_list_quantity(sheet_idx, i_pack_count + 1, user_id)
                             st.rerun()
-                    st.markdown(f'<div class="qty-value">{i_pack_count}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="qty-plus-marker"></div>', unsafe_allow_html=True)
-                    if st.button("+", key=f"add_{sheet_idx}"):
-                        sheets_manager.update_list_quantity(sheet_idx, i_pack_count + 1, user_id)
-                        st.rerun()
+                with cols[3]:
                     st.markdown('<div class="qty-del-marker"></div>', unsafe_allow_html=True)
                     if st.button("✕", key=f"del_{sheet_idx}"):
                         if sheets_manager.delete_list_row(sheet_idx, user_id):

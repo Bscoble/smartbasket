@@ -827,13 +827,35 @@ div:has(> .shopping-list-item-marker) {
     div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:nth-child(3)
         {
-        flex: 0 0 38px !important;
-        width: 38px !important;
-        min-width: 38px !important;
+        flex: 0 0 112px !important;
+        width: 112px !important;
+        min-width: 112px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(4) {
+        flex: 0 0 34px !important;
+        width: 34px !important;
+        min-width: 34px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3)
+        div[data-testid="stHorizontalBlock"] {
+        gap: 5px !important;
+    }
+
+    div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"]:nth-child(3)
+        div[data-testid="stHorizontalBlock"]
+        > div[data-testid="stColumn"] {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
     }
 
     .qty-value {
-        transform: none;
+        transform: translateY(10px);
     }
 }
 
@@ -1057,7 +1079,7 @@ div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button p {
     justify-content: center;
     width: 100%;
     height: 38px;
-    transform: none;
+    transform: translateY(10px);
     color: #1F2937;
     font-weight: 700;
     line-height: 1;
