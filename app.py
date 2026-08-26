@@ -1569,7 +1569,7 @@ else:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<div style="background-color: #E6F4EA; width: 80px; height: 80px; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-top: 2px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:60px; height:60px;" /></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="background-color: #E6F4EA; width: 96px; height: 96px; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-top: 2px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:72px; height:72px;" /></div>', unsafe_allow_html=True)
                 with cols[1]:
                     st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_quantity_label}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
