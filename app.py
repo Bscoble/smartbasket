@@ -1489,7 +1489,7 @@ else:
                                         ):
                                             res["is_favorite"] = new_favorite_state
                                             if new_favorite_state:
-                                                st.success("Added to favourites")
+                                                st.toast("Added to favourites", icon="♥")
                                 with add_column:
                                     if st.button("➕ Add", key=f"add_search_{idx}"):
                                         matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
