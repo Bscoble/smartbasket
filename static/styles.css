@@ -1268,20 +1268,23 @@ div[class*="st-key-add_search_"] button p {
 }
 
 div:has(> .best-unit-price-marker) {
-    display: none !important;
+    height: 18px !important;
+    margin: 0 !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.best-unit-price-marker) {
+.best-unit-price-marker {
+    display: block;
+    height: 18px;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
     position: relative;
-    margin: 8px -6px 8px !important;
-    box-sizing: border-box !important;
-    width: calc(100% + 20px) !important;
-    padding: 24px 20px 26px 6px !important;
-    border: 2px solid #D4A017;
-    border-radius: 8px;
+    margin: 8px 0 !important;
+    border: 2px solid #D4A017 !important;
+    border-radius: 8px !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.best-unit-price-marker)::before {
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker)::before {
     content: "BEST UNIT PRICE";
     position: absolute;
     top: 5px;

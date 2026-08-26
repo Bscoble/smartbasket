@@ -1386,73 +1386,75 @@ else:
                         "Aldi": "#002D62",
                     }
                     for idx, res in enumerate(search_results):
-                        sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
-                        with sc1:
-                            if res["image_url"]:
-                                st.markdown(
-                                    f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" />',
-                                    unsafe_allow_html=True,
-                                )
-                            else:
-                                st.markdown(
-                                    f'<div class="product-result-placeholder"><img src="{BRAND_MARK_DATA_URI}" alt="" /></div>',
-                                    unsafe_allow_html=True,
-                                )
-                        with sc2:
-                            st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
-                            shelf_price = ""
-                            if res.get("price") is not None:
-                                shelf_price = format_price(res["price"])
-                            unit_price = ""
-                            if res.get("unit_price") is not None:
-                                unit_label = res.get("unit_label", "").strip()
-                                separator = " " if unit_label.lower().startswith("per ") else " / "
-                                unit_price = f"{format_price(res['unit_price'])}{separator}{unit_label}".rstrip()
-                            if shelf_price or unit_price:
-                                st.markdown(
-                                    f'<div class="matched-result-prices"><span>{shelf_price}</span><span>{unit_price}</span></div>',
-                                    unsafe_allow_html=True,
-                                )
-                            metadata = []
-                            if res.get("category"):
-                                metadata.append(res["category"])
-                            if res.get("subcategory"):
-                                metadata.append(res["subcategory"])
-                            if res.get("stores"):
-                                metadata.append(
-                                    ", ".join(
-                                        f'<span style="color: {store_colors.get(store, "#666")};">{html.escape(store)}</span>'
-                                        for store in res["stores"]
-                                    )
-                                )
-                            if metadata:
-                                st.markdown(
-                                    f"<div style='font-size: 11px; color: #666; margin-top: 4px; line-height: 1.4;'>{' · '.join(metadata)}</div>",
-                                    unsafe_allow_html=True,
-                                )
-                        with sc3:
-                            if idx == best_unit_price_idx:
+                        is_best_unit_price = idx == best_unit_price_idx
+                        with st.container(border=is_best_unit_price):
+                            if is_best_unit_price:
                                 st.markdown('<div class="best-unit-price-marker"></div>', unsafe_allow_html=True)
-                            if st.button("➕ Add", key=f"add_search_{idx}"):
-                                matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
-                                sheets_manager.save_product(
-                                    user_id,
-                                    res["title"],
-                                    res["image_url"],
-                                    category=res.get("category", ""),
-                                    subcategory=res.get("subcategory", ""),
-                                )
-                                if sheets_manager.add_item_to_list(
-                                    res["title"], matched_qty, matched_unit, res["image_url"], user_id
-                                ):
-                                    sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
-                                    st.session_state["clear_add_item_description"] = True
-                                    st.session_state["matched_item_added_notice"] = res["title"]
-                                    st.session_state["search_performed"] = False
-                                    st.session_state["search_results"] = []
-                                    st.rerun()
+                            sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
+                            with sc1:
+                                if res["image_url"]:
+                                    st.markdown(
+                                        f'<img src="{res["image_url"]}" alt="{res["title"]}" class="product-result-image" />',
+                                        unsafe_allow_html=True,
+                                    )
                                 else:
-                                    st.error("Failed to add item. Please try again.")
+                                    st.markdown(
+                                        f'<div class="product-result-placeholder"><img src="{BRAND_MARK_DATA_URI}" alt="" /></div>',
+                                        unsafe_allow_html=True,
+                                    )
+                            with sc2:
+                                st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
+                                shelf_price = ""
+                                if res.get("price") is not None:
+                                    shelf_price = format_price(res["price"])
+                                unit_price = ""
+                                if res.get("unit_price") is not None:
+                                    unit_label = res.get("unit_label", "").strip()
+                                    separator = " " if unit_label.lower().startswith("per ") else " / "
+                                    unit_price = f"{format_price(res['unit_price'])}{separator}{unit_label}".rstrip()
+                                if shelf_price or unit_price:
+                                    st.markdown(
+                                        f'<div class="matched-result-prices"><span>{shelf_price}</span><span>{unit_price}</span></div>',
+                                        unsafe_allow_html=True,
+                                    )
+                                metadata = []
+                                if res.get("category"):
+                                    metadata.append(res["category"])
+                                if res.get("subcategory"):
+                                    metadata.append(res["subcategory"])
+                                if res.get("stores"):
+                                    metadata.append(
+                                        ", ".join(
+                                            f'<span style="color: {store_colors.get(store, "#666")};">{html.escape(store)}</span>'
+                                            for store in res["stores"]
+                                        )
+                                    )
+                                if metadata:
+                                    st.markdown(
+                                        f"<div style='font-size: 11px; color: #666; margin-top: 4px; line-height: 1.4;'>{' · '.join(metadata)}</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                            with sc3:
+                                if st.button("➕ Add", key=f"add_search_{idx}"):
+                                    matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
+                                    sheets_manager.save_product(
+                                        user_id,
+                                        res["title"],
+                                        res["image_url"],
+                                        category=res.get("category", ""),
+                                        subcategory=res.get("subcategory", ""),
+                                    )
+                                    if sheets_manager.add_item_to_list(
+                                        res["title"], matched_qty, matched_unit, res["image_url"], user_id
+                                    ):
+                                        sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
+                                        st.session_state["clear_add_item_description"] = True
+                                        st.session_state["matched_item_added_notice"] = res["title"]
+                                        st.session_state["search_performed"] = False
+                                        st.session_state["search_results"] = []
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to add item. Please try again.")
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
                 else:
                     st.info("No products found. Try adding a brand or pack size.")
