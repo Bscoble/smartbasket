@@ -987,6 +987,41 @@ div:has(> .aldi-store-button-marker) + div[data-testid="stButton"] button[kind="
     opacity: 0.55 !important;
 }
 
+/* Key classes remain stable across Streamlit wrapper changes. */
+.st-key-store_toggle_woolworths button,
+.st-key-store_toggle_coles button,
+.st-key-store_toggle_aldi button {
+    width: 100% !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    color: #FFFFFF !important;
+}
+
+.st-key-store_toggle_woolworths button {
+    background: #005A36 !important;
+    border-color: #005A36 !important;
+}
+
+.st-key-store_toggle_coles button {
+    background: #E31837 !important;
+    border-color: #E31837 !important;
+}
+
+.st-key-store_toggle_aldi button {
+    background: #002D62 !important;
+    border-color: #002D62 !important;
+}
+
+.st-key-store_toggle_woolworths button[kind="secondary"],
+.st-key-store_toggle_coles button[kind="secondary"],
+.st-key-store_toggle_aldi button[kind="secondary"] {
+    opacity: 0.55 !important;
+}
+
 /* The marker and button share the list-heading row, so this selector remains
    stable when Streamlit changes the nested element-container structure. */
 div[data-testid="stHorizontalBlock"]:has(.clear-all-marker) {

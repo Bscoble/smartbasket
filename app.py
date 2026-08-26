@@ -1487,7 +1487,7 @@ else:
         st.markdown('<p class="preferred-stores-heading">PREFERRED STORES</p>', unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3, gap=None)
         store_columns = [
             (col1, "Woolworths", "woolworths"),
             (col2, "Coles", "coles"),
@@ -1500,6 +1500,7 @@ else:
                     store_name,
                     key=f"store_toggle_{store_key}",
                     type="primary" if prefs[store_name] else "secondary",
+                    use_container_width=True,
                 ):
                     updated_prefs = prefs.copy()
                     updated_prefs[store_name] = not prefs[store_name]
