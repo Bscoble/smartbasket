@@ -397,6 +397,44 @@ def test_save_product_keeps_category_metadata():
     assert saved[0]["subcategory"] == "fresh milk"
 
 
+def test_save_product_persists_favorite_state():
+    class FakeWorksheet:
+        def __init__(self):
+            self.values = []
+
+        def get_all_values(self):
+            return [row[:] for row in self.values]
+
+        def append_row(self, row):
+            self.values.append(list(row))
+
+        def update(self, range_name, values):
+            if range_name.startswith("A") and ":" in range_name:
+                row_index = int(range_name.split(":", 1)[0][1:])
+                self.values[row_index - 1] = list(values[0])
+
+    class FakeSpreadsheet:
+        def __init__(self):
+            self._sheets = {}
+
+        def worksheet(self, name):
+            if name not in self._sheets:
+                self._sheets[name] = FakeWorksheet()
+            return self._sheets[name]
+
+        def add_worksheet(self, title, rows, cols):
+            ws = FakeWorksheet()
+            self._sheets[title] = ws
+            return ws
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    assert manager.save_product("user@example.com", "Dog Food", favorite=True)
+    assert manager.get_favorite_product_titles("user@example.com") == {"dog food"}
+    assert manager.save_product("user@example.com", "Dog Food", favorite=False)
+    assert manager.get_favorite_product_titles("user@example.com") == set()
+
+
 def test_search_saved_products_does_not_show_legacy_updated_timestamp_as_category():
     class FakeWorksheet:
         def get_all_values(self):
@@ -642,6 +680,26 @@ def test_search_scraped_products_excludes_non_pet_products_from_dog_food_query()
     results = manager.search_scraped_products("dog food", limit=None)
 
     assert [result["title"] for result in results] == ["Adult Dog Food Casserole 1.2kg"]
+
+
+def test_search_scraped_products_dog_collar_query_excludes_dog_food():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand"],
+                ["Aldi", "Adult Dog Food Casserole 1.2kg", "2.89", "Adult Dog Food Casserole 1.2kg", "2026-08-21 12:00:00", "0.24", "100g", "", "Pet Care", "Collars", "Julius"],
+                ["Coles", "Adjustable Dog Collar", "8.00", "Adjustable Dog Collar", "2026-08-21 12:00:00", "8.00", "each", "", "Pet Care", "Dog Food", "Kong"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("dog collar", limit=None)
+
+    assert [result["title"] for result in results] == ["Adjustable Dog Collar"]
 
 
 def test_search_scraped_products_can_match_brand_and_category_metadata():

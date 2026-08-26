@@ -1083,6 +1083,7 @@ class SheetsManager:
         image_url: str = "",
         category: str = "",
         subcategory: str = "",
+        favorite: Optional[bool] = None,
     ) -> bool:
         """Save a product a customer has used for future local searches."""
         try:
@@ -1101,13 +1102,14 @@ class SheetsManager:
                 "Category",
                 "Subcategory",
                 "Updated",
+                "Favorite",
             ]
             if not data:
                 ws.append_row(headers)
                 self._invalidate_values_cache(worksheet_name)
                 data = [headers]
             elif data[0] != headers:
-                ws.update("A1:G1", [headers])
+                ws.update("A1:H1", [headers])
                 self._invalidate_values_cache(worksheet_name)
                 data[0] = headers
 
@@ -1118,9 +1120,11 @@ class SheetsManager:
 
             search_key = normalized_title.lower()
             existing_row = None
+            existing_favorite = False
             for row_number, row in enumerate(data[1:], start=2):
                 if len(row) >= 4 and row[0].strip().lower() == normalized_user and row[3].strip() == search_key:
                     existing_row = row_number
+                    existing_favorite = len(row) >= 8 and row[7].strip().lower() == "true"
                     break
 
             values = [
@@ -1131,9 +1135,10 @@ class SheetsManager:
                 category.strip(),
                 subcategory.strip(),
                 datetime.now().isoformat(timespec="seconds"),
+                str(existing_favorite if favorite is None else favorite).upper(),
             ]
             if existing_row:
-                ws.update(f"A{existing_row}:G{existing_row}", [values])
+                ws.update(f"A{existing_row}:H{existing_row}", [values])
             else:
                 ws.append_row(values)
             self._invalidate_values_cache(worksheet_name)
@@ -1141,6 +1146,27 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error saving product catalogue entry: {e}", exc_info=True)
             return False
+
+    def get_favorite_product_titles(self, user_id: str) -> set[str]:
+        """Return normalized titles explicitly marked as favorites by a customer."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["product_catalog"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["product_catalog"]["rows"],
+                cols=WORKSHEET_CONFIG["product_catalog"]["cols"],
+            )
+            normalized_user = user_id.strip().lower()
+            return {
+                row[3].strip().lower()
+                for row in self._cached_values(worksheet_name, ws)[1:]
+                if len(row) >= 8
+                and row[0].strip().lower() == normalized_user
+                and row[7].strip().lower() == "true"
+            }
+        except Exception as e:
+            logger.error("Error loading favorite products: %s", e, exc_info=True)
+            return set()
 
     def search_saved_products(
         self,
@@ -1274,6 +1300,10 @@ class SheetsManager:
                     cat_food_terms.issubset(query_term_set)
                     and not cat_food_terms.issubset(title_or_brand_terms)
                 ):
+                    continue
+                pet_accessory_terms = {"collar", "lead", "leash", "harness"}
+                required_accessory_terms = query_term_set & pet_accessory_terms
+                if not required_accessory_terms.issubset(title_or_brand_terms):
                     continue
                 matched_terms = []
                 score = 0

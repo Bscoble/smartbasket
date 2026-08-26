@@ -566,6 +566,32 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
     white-space: nowrap;
 }
 
+.favorite-added-confirmation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-left: 4px solid #E31837;
+    background: #FDECEC;
+    color: #A71930;
+    font-size: 12px;
+    animation: matched-item-confirmation 0.3s ease-out;
+}
+
+.favorite-added-confirmation strong {
+    flex: 0 0 auto;
+    font-size: 12px;
+}
+
+.favorite-added-confirmation span {
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @keyframes matched-item-confirmation {
     from {
         opacity: 0;
@@ -1291,6 +1317,26 @@ div[class*="st-key-add_search_"] button {
 
 div[class*="st-key-add_search_"] button p {
     white-space: nowrap !important;
+}
+
+div[class*="st-key-favorite_search_"] button {
+    width: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #E31837 !important;
+    font-size: 22px !important;
+    line-height: 1 !important;
+}
+
+div[class*="st-key-favorite_search_"] button p {
+    margin: 0 !important;
+    color: inherit !important;
+    font-size: 22px !important;
+    line-height: 1 !important;
 }
 
 .matched-result-prices {

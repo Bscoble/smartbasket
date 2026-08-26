@@ -234,6 +234,8 @@ if "search_performed" not in st.session_state:
     st.session_state["search_performed"] = False
 if "matched_item_added_notice" not in st.session_state:
     st.session_state["matched_item_added_notice"] = ""
+if "favorite_added_notice" not in st.session_state:
+    st.session_state["favorite_added_notice"] = ""
 if "recent_shops_available" not in st.session_state:
     st.session_state["recent_shops_available"] = False
 
@@ -1209,6 +1211,7 @@ else:
         if st.session_state.pop("clear_add_item_description", False):
             st.session_state["add_item_description"] = ""
         matched_item_added_notice = st.session_state.pop("matched_item_added_notice", "")
+        favorite_added_notice = st.session_state.pop("favorite_added_notice", "")
             
         st.markdown(f"""
         <div class="app-header">
@@ -1222,6 +1225,11 @@ else:
         if matched_item_added_notice:
             st.markdown(
                 f'<div class="matched-item-added-confirmation"><strong>Added to your list</strong><span>{html.escape(matched_item_added_notice)}</span></div>',
+                unsafe_allow_html=True,
+            )
+        if favorite_added_notice:
+            st.markdown(
+                f'<div class="favorite-added-confirmation"><strong>Added to favourites</strong><span>{html.escape(favorite_added_notice)}</span></div>',
                 unsafe_allow_html=True,
             )
         
@@ -1303,10 +1311,15 @@ else:
                                 _normalized_product_title(item["name"])
                                 for item in sheets_manager.get_recent_history(user_id)
                             }
+                            favorite_titles = sheets_manager.get_favorite_product_titles(user_id)
                             for result in priced_scraped_results:
                                 result["previously_purchased"] = (
                                     _normalized_product_title(result["title"])
                                     in purchased_titles
+                                )
+                                result["is_favorite"] = (
+                                    _normalized_product_title(result["title"])
+                                    in favorite_titles
                                 )
                             st.session_state["search_results"] = priced_scraped_results
                     else:
@@ -1413,7 +1426,7 @@ else:
                                 st.markdown('<div class="best-unit-price-marker">BEST UNIT PRICE</div>', unsafe_allow_html=True)
                             elif is_previously_purchased:
                                 st.markdown('<div class="previous-purchase-marker">PREVIOUSLY PURCHASED</div>', unsafe_allow_html=True)
-                            sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
+                            sc1, sc2, sc3 = st.columns([1.3, 2.8, 1.15])
                             with sc1:
                                 if res["image_url"]:
                                     st.markdown(
@@ -1454,26 +1467,51 @@ else:
                                         unsafe_allow_html=True,
                                     )
                             with sc3:
-                                if st.button("➕ Add", key=f"add_search_{idx}"):
-                                    matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
-                                    sheets_manager.save_product(
-                                        user_id,
-                                        res["title"],
-                                        res["image_url"],
-                                        category=res.get("category", ""),
-                                        subcategory=res.get("subcategory", ""),
-                                    )
-                                    if sheets_manager.add_item_to_list(
-                                        res["title"], matched_qty, matched_unit, res["image_url"], user_id
+                                favorite_column, add_column = st.columns([0.34, 0.66], gap="small")
+                                is_highlighted = (
+                                    res.get("is_favorite", False)
+                                    or res.get("previously_purchased", False)
+                                )
+                                with favorite_column:
+                                    if st.button(
+                                        "♥" if is_highlighted else "♡",
+                                        key=f"favorite_search_{idx}",
+                                        help="Add to favourites",
                                     ):
-                                        sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
-                                        st.session_state["clear_add_item_description"] = True
-                                        st.session_state["matched_item_added_notice"] = res["title"]
-                                        st.session_state["search_performed"] = False
-                                        st.session_state["search_results"] = []
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to add item. Please try again.")
+                                        new_favorite_state = not res.get("is_favorite", False)
+                                        if sheets_manager.save_product(
+                                            user_id,
+                                            res["title"],
+                                            res["image_url"],
+                                            category=res.get("category", ""),
+                                            subcategory=res.get("subcategory", ""),
+                                            favorite=new_favorite_state,
+                                        ):
+                                            res["is_favorite"] = new_favorite_state
+                                            if new_favorite_state:
+                                                st.session_state["favorite_added_notice"] = res["title"]
+                                            st.rerun()
+                                with add_column:
+                                    if st.button("➕ Add", key=f"add_search_{idx}"):
+                                        matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
+                                        sheets_manager.save_product(
+                                            user_id,
+                                            res["title"],
+                                            res["image_url"],
+                                            category=res.get("category", ""),
+                                            subcategory=res.get("subcategory", ""),
+                                        )
+                                        if sheets_manager.add_item_to_list(
+                                            res["title"], matched_qty, matched_unit, res["image_url"], user_id
+                                        ):
+                                            sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
+                                            st.session_state["clear_add_item_description"] = True
+                                            st.session_state["matched_item_added_notice"] = res["title"]
+                                            st.session_state["search_performed"] = False
+                                            st.session_state["search_results"] = []
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to add item. Please try again.")
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
                 else:
                     st.info("No products found. Try adding a brand or pack size.")
