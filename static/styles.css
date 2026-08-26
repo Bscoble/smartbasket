@@ -1284,6 +1284,7 @@ div:has(> .best-unit-price-marker) {
     font-weight: 800;
 }
 
+.stVerticalBlockBorderWrapper:has(.best-unit-price-marker),
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
     position: relative;
     margin: 8px 0 !important;
