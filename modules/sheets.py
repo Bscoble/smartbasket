@@ -31,7 +31,12 @@ def _matches_tissue_search(terms: List[str], title: str) -> bool:
     if set(terms) - {"tissue", "tissues"}:
         return True
     normalized_title = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
-    excluded_phrases = ("toilet paper", "paper towel", "paper towels")
+    excluded_phrases = (
+        "toilet paper",
+        "toilet tissue",
+        "paper towel",
+        "paper towels",
+    )
     return not any(phrase in normalized_title for phrase in excluded_phrases)
 
 STANDARD_PRICE_HEADERS = [
