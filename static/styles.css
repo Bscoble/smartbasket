@@ -1211,15 +1211,15 @@ div[data-testid="element-container"]:has(#subpage-back-anchor)
 
 .product-result-image,
 .product-result-placeholder {
-    width: 48px;
-    height: 48px;
+    width: 64px;
+    height: 64px;
     border-radius: 10px;
     object-fit: cover;
 }
 
 .product-result-placeholder img {
-    width: 44px;
-    height: 44px;
+    width: 56px;
+    height: 56px;
     object-fit: contain;
 }
 
@@ -1232,10 +1232,23 @@ div[data-testid="element-container"]:has(#subpage-back-anchor)
 }
 
 .product-result-image:hover {
-    transform: scale(4);
+    transform: scale(3);
     z-index: 9999 !important;
     box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.4);
     border-radius: 6px;
+}
+
+div[class*="st-key-add_search_"] {
+    display: flex !important;
+    justify-content: flex-end !important;
+}
+
+div[class*="st-key-add_search_"] button {
+    width: auto !important;
+    min-height: 36px !important;
+    padding: 6px 9px !important;
+    border-radius: 8px !important;
+    font-size: 12px !important;
 }
 
 /* The direct-add action is secondary to product matching. */

@@ -1337,7 +1337,7 @@ else:
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
                     for idx, res in enumerate(st.session_state["search_results"]):
-                        sc1, sc2, sc3 = st.columns([1, 3, 1.5])
+                        sc1, sc2, sc3 = st.columns([1.3, 3.2, 0.7])
                         with sc1:
                             if res["image_url"]:
                                 st.markdown(
@@ -1364,7 +1364,7 @@ else:
                                     unsafe_allow_html=True,
                                 )
                         with sc3:
-                            if st.button("➕ Add", key=f"add_search_{idx}", use_container_width=True):
+                            if st.button("➕ Add", key=f"add_search_{idx}"):
                                 matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
                                 sheets_manager.save_product(
                                     user_id,
