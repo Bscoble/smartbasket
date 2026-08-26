@@ -1389,7 +1389,7 @@ else:
                         is_best_unit_price = idx == best_unit_price_idx
                         with st.container(border=is_best_unit_price):
                             if is_best_unit_price:
-                                st.markdown('<div class="best-unit-price-marker"></div>', unsafe_allow_html=True)
+                                st.markdown('<div class="best-unit-price-marker">BEST UNIT PRICE</div>', unsafe_allow_html=True)
                             sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
                             with sc1:
                                 if res["image_url"]:
@@ -1418,10 +1418,6 @@ else:
                                         unsafe_allow_html=True,
                                     )
                                 metadata = []
-                                if res.get("category"):
-                                    metadata.append(res["category"])
-                                if res.get("subcategory"):
-                                    metadata.append(res["subcategory"])
                                 if res.get("stores"):
                                     metadata.append(
                                         ", ".join(

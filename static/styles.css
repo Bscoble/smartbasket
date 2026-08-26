@@ -6,7 +6,7 @@
    ======================================================================== */
 @media (min-width: 768px) {
     .stApp {
-        max-width: 412px !important;
+        max-width: 440px !important;
         height: 850px !important;
         margin: 30px auto !important;
         border: 14px solid #1c1c1e !important;
@@ -1268,13 +1268,20 @@ div[class*="st-key-add_search_"] button p {
 }
 
 div:has(> .best-unit-price-marker) {
-    height: 18px !important;
+    height: 24px !important;
     margin: 0 !important;
 }
 
 .best-unit-price-marker {
-    display: block;
+    display: inline-flex;
+    align-items: center;
     height: 18px;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: #D4A017;
+    color: #FFFFFF;
+    font-size: 9px;
+    font-weight: 800;
 }
 
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
@@ -1284,18 +1291,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker) {
     border-radius: 8px !important;
 }
 
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.best-unit-price-marker)::before {
-    content: "BEST UNIT PRICE";
-    position: absolute;
-    top: 5px;
-    left: 8px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: #D4A017;
-    color: #FFFFFF;
-    font-size: 9px;
-    font-weight: 800;
-}
 
 /* The direct-add action is secondary to product matching. */
 div:has(> .add-item-form-marker) + div[data-testid="stForm"] button[kind="secondaryFormSubmit"] {
