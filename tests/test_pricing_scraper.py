@@ -601,6 +601,26 @@ def test_search_scraped_products_sorts_equally_relevant_matches_by_unit_price():
     assert results[0]["unit_label"] == "per L"
 
 
+def test_search_scraped_products_places_best_unit_price_first():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory", "Brand"],
+                ["Coles", "Organic Milk 1L", "4.00", "Organic Milk 1L", "2026-08-21 12:00:00", "4.00", "per L", "", "Dairy", "Milk", "Coles"],
+                ["Aldi", "Organic Full Cream Milk 1L", "3.20", "Organic Full Cream Milk 1L", "2026-08-21 12:00:00", "3.20", "per L", "", "Dairy", "Milk", "Aldi"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("organic milk 1L", limit=None)
+
+    assert results[0]["title"] == "Organic Full Cream Milk 1L"
+
+
 def test_search_scraped_products_can_match_brand_and_category_metadata():
     class FakeWorksheet:
         def get_all_values(self):

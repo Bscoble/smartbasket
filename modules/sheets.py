@@ -31,6 +31,8 @@ def _matches_tissue_search(terms: List[str], title: str) -> bool:
     if set(terms) - {"tissue", "tissues"}:
         return True
     normalized_title = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+    if not ({"tissue", "tissues"} & set(normalized_title.split())):
+        return False
     excluded_phrases = (
         "toilet paper",
         "toilet tissue",
@@ -1333,6 +1335,20 @@ class SheetsManager:
                     match["title"].lower(),
                 ),
             )
+            unit_priced_matches = [
+                match for match in ranked if match["unit_price"] is not None
+            ]
+            if unit_priced_matches:
+                best_unit_price_match = min(
+                    unit_priced_matches,
+                    key=lambda match: (
+                        match["unit_price"],
+                        -match["_score"],
+                        match["title"].lower(),
+                    ),
+                )
+                ranked.remove(best_unit_price_match)
+                ranked.insert(0, best_unit_price_match)
             return [
                 {
                     "title": match["title"],

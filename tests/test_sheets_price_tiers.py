@@ -173,6 +173,7 @@ def test_tissue_search_excludes_toilet_paper_and_paper_towels():
         ["Coles", "toilet paper tissues 12 pack", "7.00", "Toilet Paper Tissues 12 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
         ["Aldi", "toilet tissue 18 pack", "6.00", "Toilet Tissue 18 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
         ["Aldi", "paper towels tissues 2 pack", "4.00", "Paper Towels Tissues 2 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
+        ["Aldi", "flushable wipes 40 pack", "2.49", "Flushable Wipes 40 Pack", "2026-08-21 12:00:00", "", "", "", "Cleaning & Household", "Toilet Paper, Tissues & Paper Towels"],
     ])
     manager = SheetsManager(spreadsheet)
 
