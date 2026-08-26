@@ -1274,7 +1274,9 @@ div:has(> .best-unit-price-marker) {
 div[data-testid="stHorizontalBlock"]:has(.best-unit-price-marker) {
     position: relative;
     margin: 8px -6px 8px !important;
-    padding: 24px 6px 8px !important;
+    box-sizing: border-box !important;
+    width: calc(100% + 20px) !important;
+    padding: 24px 20px 26px 6px !important;
     border: 2px solid #D4A017;
     border-radius: 8px;
 }

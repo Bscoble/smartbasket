@@ -231,6 +231,8 @@ if "search_results" not in st.session_state:
     st.session_state["search_results"] = []
 if "search_performed" not in st.session_state:
     st.session_state["search_performed"] = False
+if "matched_item_added_notice" not in st.session_state:
+    st.session_state["matched_item_added_notice"] = ""
 if "recent_shops_available" not in st.session_state:
     st.session_state["recent_shops_available"] = False
 
@@ -1200,6 +1202,9 @@ else:
 
         if st.session_state.pop("clear_add_item_description", False):
             st.session_state["add_item_description"] = ""
+        matched_item_added_notice = st.session_state.pop("matched_item_added_notice", "")
+        if matched_item_added_notice:
+            st.toast(f"Added {matched_item_added_notice} to your shopping list", icon="✅")
             
         st.markdown(f"""
         <div class="app-header">
@@ -1442,6 +1447,7 @@ else:
                                 ):
                                     sheets_manager.log_user_event(user_id, "item_added", mode="find_matches")
                                     st.session_state["clear_add_item_description"] = True
+                                    st.session_state["matched_item_added_notice"] = res["title"]
                                     st.session_state["search_performed"] = False
                                     st.session_state["search_results"] = []
                                     st.rerun()
