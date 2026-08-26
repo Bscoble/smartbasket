@@ -1568,11 +1568,11 @@ else:
                     if i_img:
                         st.markdown(f'<img src="{i_img}" class="thumbnail-zoom" style="margin-top: 2px;" />', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<div style="background-color: #E6F4EA; width: 56px; height: 56px; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-top: 2px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:44px; height:44px;" /></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="background-color: #E6F4EA; width: 68px; height: 68px; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin-top: 2px;"><img src="{BRAND_MARK_DATA_URI}" alt="" style="width:52px; height:52px;" /></div>', unsafe_allow_html=True)
                 with cols[1]:
                     st.markdown(f'<div style="padding-top: 2px;"><b>{i_name}</b><br><span style="color:#888; font-size:0.85em;">{i_quantity_label}</span></div>', unsafe_allow_html=True)
                 with cols[2]:
-                    sub_c1, sub_c2, sub_c3 = st.columns([1, 1, 1], gap="small")
+                    sub_c1, sub_c2, sub_c3 = st.columns([1, 1, 1], gap=None)
                     with sub_c1:
                         st.markdown('<div class="qty-minus-marker"></div>', unsafe_allow_html=True)
                         if st.button("−", key=f"sub_{sheet_idx}"):
@@ -1961,10 +1961,11 @@ else:
                                 st.session_state["shop_mode"] = "split"
                                 st.rerun()
 
-                        st.markdown(
-                            '<p class="store-ranking-heading">STORE RANKING — PRICE COVERAGE</p>',
-                            unsafe_allow_html=True,
-                        )
+                        if single_available:
+                            st.markdown(
+                                '<p class="store-ranking-heading">STORE RANKING — PRICE COVERAGE</p>',
+                                unsafe_allow_html=True,
+                            )
 
                         brand_colors = {
                             "Woolworths": "#005A36",
@@ -1974,7 +1975,7 @@ else:
 
                         max_cost = report["store_rankings"][-1]["total_cost"] if report["store_rankings"] else 1
 
-                        for store in report["store_rankings"]:
+                        for store in report["store_rankings"] if single_available else []:
                             s_name = store['store']
                             s_cost = store['total_cost']
                             b_color = brand_colors.get(s_name, "#555")
