@@ -1487,7 +1487,7 @@ else:
         st.markdown('<p class="preferred-stores-heading">PREFERRED STORES</p>', unsafe_allow_html=True)
         st.markdown('<div class="store-pills-marker"></div>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3, gap=None)
+        col1, col2, col3 = st.columns(3, gap="small")
         store_columns = [
             (col1, "Woolworths", "woolworths"),
             (col2, "Coles", "coles"),
