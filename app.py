@@ -414,6 +414,12 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             standard_prices,
             sheets_manager.is_standard_price_valid,
         )
+        all_store_matches = find_local_price_matches(
+            item_name,
+            config.STORE_NAMES,
+            standard_prices,
+            sheets_manager.is_standard_price_valid,
+        )
         
         # Check cache and determine which stores need fresh prices
         for store in selected_stores:
@@ -510,10 +516,29 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
         cheapest_store = available_item_stores[0][0]
         best_price = available_item_stores[0][1]["total_price"]
-        highest_available_price = available_item_stores[-1][1]["total_price"]
+        all_store_prices = []
+        for store in config.STORE_NAMES:
+            cache_key = (store, item_lower)
+            matched_key, standard_data = all_store_matches.get(store, (cache_key, None))
+            special_data = daily_specials.get(matched_key) or daily_specials.get(cache_key)
+            if special_data and special_data.get("price") is not None:
+                all_store_prices.append(special_data["price"] * pack_count)
+            elif standard_data and sheets_manager.is_standard_price_valid(standard_data):
+                all_store_prices.append(standard_data["price"] * pack_count)
+            else:
+                cached_data = price_cache.get(cache_key)
+                if (
+                    cached_data
+                    and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
+                    and sheets_manager.is_cache_valid(cached_data)
+                ):
+                    all_store_prices.append(cached_data["price"] * pack_count)
+
+        lowest_comparable_price = min(all_store_prices) if all_store_prices else best_price
+        highest_comparable_price = max(all_store_prices) if all_store_prices else best_price
         savings_vs_highest = (
-            round(max(0.0, highest_available_price - best_price), 2)
-            if len(available_item_stores) > 1
+            round(max(0.0, highest_comparable_price - lowest_comparable_price), 2)
+            if len(all_store_prices) > 1
             else 0.0
         )
         
@@ -526,7 +551,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             "unit_price": format_price(best_price / pack_count),
             "total_price": format_price(best_price),
             "savings_vs_highest": savings_vs_highest,
-            "price_options_count": len(available_item_stores),
+            "price_options_count": len(all_store_prices),
             "all_stores": sorted_item_stores,
         })
         
@@ -1965,11 +1990,11 @@ else:
                                     '<div class="price-selection-savings">'
                                     '<div>'
                                     '<div class="price-selection-savings-label">GROCERY GECKO SAVING</div>'
-                                    f'<div class="price-selection-savings-copy">Lowest available prices across {compared_items} comparable {compared_label}</div>'
+                                    f'<div class="price-selection-savings-copy">Best available prices across {compared_items} comparable {compared_label}</div>'
                                     '</div>'
                                     f'<div class="price-selection-savings-amount">Save up to ${savings_amount:.2f}</div>'
                                     '</div>'
-                                    '<p class="price-selection-savings-note">Compared item by item with the highest available price for the same products at your selected stores.</p>',
+                                    '<p class="price-selection-savings-note">Compared item by item with the highest available price for the same products across all supermarkets.</p>',
                                     unsafe_allow_html=True,
                                 )
 

@@ -172,3 +172,51 @@ def test_basket_report_calculates_item_selection_savings(monkeypatch):
         "compared_items": 1,
     }
     assert round(report["item_breakdown"][0]["savings_vs_highest"], 2) == 1.30
+
+
+def test_basket_savings_include_unselected_store_prices(monkeypatch):
+    import app
+
+    class Placeholder:
+        def text(self, _value):
+            pass
+
+        def progress(self, _value):
+            pass
+
+        def empty(self):
+            pass
+
+    class FakeSheets:
+        def load_price_cache(self):
+            return {}
+
+        def load_daily_specials(self):
+            return {}
+
+        def load_standard_prices(self):
+            return {
+                ("Coles", "full cream milk 2l"): _entry("Coles Full Cream Milk 2L", 3.20),
+                ("Woolworths", "full cream milk 2l"): _entry("Woolworths Full Cream Milk 2L", 4.50),
+                ("Aldi", "full cream milk 2l"): _entry("Aldi Full Cream Milk 2L", 5.00),
+            }
+
+        def is_standard_price_valid(self, entry):
+            return _is_fresh(entry)
+
+        def is_cache_valid(self, _entry):
+            return False
+
+    monkeypatch.setattr(app, "sheets_manager", FakeSheets())
+    monkeypatch.setattr(app.st, "progress", lambda _value: Placeholder())
+    monkeypatch.setattr(app.st, "empty", Placeholder)
+
+    report = app.generate_smart_basket_report(
+        [["Full Cream Milk 2L", "1", "each", "", "1"]],
+        ["Coles", "Woolworths"],
+    )
+
+    assert report["price_selection_savings"] == {
+        "amount": 1.80,
+        "compared_items": 1,
+    }
