@@ -1336,7 +1336,21 @@ else:
                 st.markdown("<div class='matching-products-heading'>Matching products</div>", unsafe_allow_html=True)
                 if st.session_state.get("search_results"):
                     st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
-                    for idx, res in enumerate(st.session_state["search_results"]):
+                    search_results = st.session_state["search_results"]
+                    priced_results = [
+                        (idx, result["unit_price"])
+                        for idx, result in enumerate(search_results)
+                        if isinstance(result.get("unit_price"), (int, float))
+                    ]
+                    best_unit_price_idx = min(priced_results, key=lambda result: result[1])[0] if priced_results else None
+                    store_colors = {
+                        "Woolworths": "#005A36",
+                        "Coles": "#E31837",
+                        "Aldi": "#002D62",
+                    }
+                    for idx, res in enumerate(search_results):
+                        if idx == best_unit_price_idx:
+                            st.markdown('<div class="best-unit-price-marker"></div>', unsafe_allow_html=True)
                         sc1, sc2, sc3 = st.columns([1.3, 3.1, 0.85])
                         with sc1:
                             if res["image_url"]:
@@ -1351,16 +1365,17 @@ else:
                                 )
                         with sc2:
                             st.markdown(f"<div style='font-size: 13px; font-weight: 600; line-height: 1.2; padding-top: 5px;'>{res['title']}</div>", unsafe_allow_html=True)
-                            price_parts = []
+                            shelf_price = ""
                             if res.get("price") is not None:
-                                price_parts.append(format_price(res["price"]))
+                                shelf_price = format_price(res["price"])
+                            unit_price = ""
                             if res.get("unit_price") is not None:
                                 unit_label = res.get("unit_label", "").strip()
                                 separator = " " if unit_label.lower().startswith("per ") else " / "
-                                price_parts.append(f"{format_price(res['unit_price'])}{separator}{unit_label}".rstrip())
-                            if price_parts:
+                                unit_price = f"{format_price(res['unit_price'])}{separator}{unit_label}".rstrip()
+                            if shelf_price or unit_price:
                                 st.markdown(
-                                    f"<div style='font-size: 12px; color: #005A36; font-weight: 700; margin-top: 3px;'>{' · '.join(price_parts)}</div>",
+                                    f'<div class="matched-result-prices"><span>{shelf_price}</span><span>{unit_price}</span></div>',
                                     unsafe_allow_html=True,
                                 )
                             metadata = []
@@ -1369,7 +1384,12 @@ else:
                             if res.get("subcategory"):
                                 metadata.append(res["subcategory"])
                             if res.get("stores"):
-                                metadata.append(", ".join(res["stores"]))
+                                metadata.append(
+                                    ", ".join(
+                                        f'<span style="color: {store_colors.get(store, "#666")};">{html.escape(store)}</span>'
+                                        for store in res["stores"]
+                                    )
+                                )
                             if metadata:
                                 st.markdown(
                                     f"<div style='font-size: 11px; color: #666; margin-top: 4px; line-height: 1.4;'>{' · '.join(metadata)}</div>",

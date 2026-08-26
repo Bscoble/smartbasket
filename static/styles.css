@@ -1256,6 +1256,42 @@ div[class*="st-key-add_search_"] button p {
     white-space: nowrap !important;
 }
 
+.matched-result-prices {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 4px;
+    color: #005A36;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+div:has(> .best-unit-price-marker) {
+    display: none !important;
+}
+
+div:has(> .best-unit-price-marker) + div[data-testid="stHorizontalBlock"] {
+    position: relative;
+    margin: 8px -6px 8px !important;
+    padding: 14px 6px 8px !important;
+    border: 2px solid #D4A017;
+    border-radius: 8px;
+}
+
+div:has(> .best-unit-price-marker) + div[data-testid="stHorizontalBlock"]::before {
+    content: "BEST UNIT PRICE";
+    position: absolute;
+    top: -10px;
+    left: 8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #D4A017;
+    color: #FFFFFF;
+    font-size: 9px;
+    font-weight: 800;
+}
+
 /* The direct-add action is secondary to product matching. */
 div:has(> .add-item-form-marker) + div[data-testid="stForm"] button[kind="secondaryFormSubmit"] {
     min-height: 40px !important;
