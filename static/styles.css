@@ -827,9 +827,9 @@ div:has(> .shopping-list-item-marker) {
     div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
         > div[data-testid="stColumn"]:nth-child(3)
         {
-        flex: 0 0 102px !important;
-        width: 102px !important;
-        min-width: 102px !important;
+        flex: 0 0 90px !important;
+        width: 90px !important;
+        min-width: 90px !important;
     }
 
     div:has(> .shopping-list-item-marker) + div[data-testid="stHorizontalBlock"]
@@ -1116,7 +1116,7 @@ div[data-testid="stHorizontalBlock"]:has(.qty-del-marker) button {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 34px !important;
+    width: 30px !important;
     height: 38px !important;
     min-height: 38px !important;
     margin: 0 auto !important;
