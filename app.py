@@ -1337,7 +1337,7 @@ else:
                 else "recent-shops-hidden-marker"
             )
             st.markdown(f'<div class="{recent_marker}"></div>', unsafe_allow_html=True)
-            recent_shops_label = "🕒 Add from Recent Shops" + ("\u200B" if st.session_state["expander_toggle"] else "")
+            recent_shops_label = "🕒 Add from Previous Shops/Favourites" + ("\u200B" if st.session_state["expander_toggle"] else "")
             with st.expander(recent_shops_label):
                 if not recent_items:
                     recent_items = sheets_manager.get_recent_history(
