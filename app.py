@@ -1280,27 +1280,17 @@ else:
                     if item_name.strip():
                         with st.spinner("Finding the closest product matches..."):
                             search_query = build_product_search_query(item_name, qty, unit)
-                            local_results = sheets_manager.search_saved_products(
-                                user_id,
-                                search_query,
-                                limit=None,
-                            )
                             scraped_results = sheets_manager.search_scraped_products(
                                 search_query,
                                 limit=None,
                             )
-                            seen_titles = {
-                                result["title"].strip().lower()
-                                for result in local_results
-                            }
-                            unique_scraped_results = [
+                            priced_scraped_results = [
                                 result
                                 for result in scraped_results
-                                if result["title"].strip().lower() not in seen_titles
+                                if result.get("price") is not None
+                                and result.get("unit_price") is not None
                             ]
-                            st.session_state["search_results"] = (
-                                local_results + unique_scraped_results
-                            )
+                            st.session_state["search_results"] = priced_scraped_results
                     else:
                         st.session_state["search_results"] = []
                         st.warning("Enter a product description first.")
