@@ -1,9 +1,6 @@
 name: Stale Price Revalidation
 
 on:
-  schedule:
-    # Runs after the cache warmer and category crawl have completed.
-    - cron: '0 21 * * *'
   workflow_dispatch:
 
 jobs:

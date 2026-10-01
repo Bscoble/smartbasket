@@ -1,9 +1,6 @@
 name: Product Metadata Enrichment
 
 on:
-  schedule:
-    # Runs after catalogue discovery and before stale-price revalidation.
-    - cron: '0 20 * * *'
   workflow_dispatch:
 
 jobs:

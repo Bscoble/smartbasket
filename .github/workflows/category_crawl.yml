@@ -1,9 +1,6 @@
 name: Overnight Category Crawl
 
 on:
-  schedule:
-    # Runs at 18:30 UTC every day (4:30 AM AEST), 30 minutes after the cache warmer
-    - cron: '30 18 * * *'
   workflow_dispatch: # Allows you to run it manually from the GitHub dashboard
 
 jobs:

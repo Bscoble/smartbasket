@@ -2,13 +2,13 @@
 
 ## GitHub Actions - Automated Daily Cache Warmup at 4:00 AM
 
-Your repository already has GitHub Actions set up to run the cache warmer every day at **18:00 UTC (4:00 AM AEST)**.
+Automated supermarket scraping is currently paused. The workflows remain available for manual runs only.
 
 ### Current Setup Status
 
 ✅ **Workflow File**: `.github/workflows/warmup.yml`
-✅ **Schedule**: Daily at 18:00 UTC (4:00 AM Australian Eastern Time)
-✅ **Trigger**: Automatic daily run + manual trigger available
+✅ **Schedule**: Paused
+✅ **Trigger**: Manual trigger available
 
 ### Step 1: Add GitHub Secrets
 
@@ -69,7 +69,7 @@ python3 cache_warmer.py
 
 ## Monitoring & Logs
 
-### Daily Jobs
+### Previously Scheduled Jobs
 
 | UTC | Job | Purpose |
 |-----|-----|---------|
@@ -78,7 +78,7 @@ python3 cache_warmer.py
 | 20:00 | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
 | 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
 
-Each job refreshes the `Performance Dashboard` after its source data has been
+These jobs are currently paused and can only be started manually from GitHub Actions. Each job refreshes the `Performance Dashboard` after its source data has been
 successfully saved. This behavior lives in the Python job entry points, so it
 also applies when a job is run manually rather than through GitHub Actions.
 If persistence fails, the job exits with an error and skips the dashboard

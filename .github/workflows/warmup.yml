@@ -1,9 +1,6 @@
 name: Overnight Cache Warmer
 
 on:
-  schedule:
-    # This runs at 18:00 UTC every day (which is 4:00 AM AEST)
-    - cron: '0 18 * * *'
   workflow_dispatch: # Allows you to run it manually from the GitHub dashboard
 
 jobs:

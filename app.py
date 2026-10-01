@@ -1490,7 +1490,6 @@ else:
                                             res["is_favorite"] = new_favorite_state
                                             if new_favorite_state:
                                                 st.session_state["favorite_added_notice"] = res["title"]
-                                                st.rerun()
                                 with add_column:
                                     if st.button("➕ Add", key=f"add_search_{idx}"):
                                         matched_qty, matched_unit = infer_quantity_and_unit(res["title"])
