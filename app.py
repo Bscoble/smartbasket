@@ -1762,7 +1762,7 @@ else:
             
             store_count_label = len(active_names)
             
-            if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary", use_container_width=True):
+            if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary", use_container_width=True, key="compare_prices"):
                 if not active_names:
                     st.error("Please select at least one store to compare.")
                 else:

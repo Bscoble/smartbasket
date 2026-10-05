@@ -819,6 +819,17 @@ button[data-testid="baseButton-primary"] {
     margin-top: 20px;
 }
 
+.st-key-compare_prices button {
+    background-color: #E31837 !important;
+    color: #FFFFFF !important;
+}
+
+.st-key-compare_prices button:hover,
+.st-key-compare_prices button:active {
+    background-color: #C8102E !important;
+    color: #FFFFFF !important;
+}
+
 /* ========================================================================
    SECONDARY ADD ITEM SUBMIT BUTTON
    ======================================================================== */
