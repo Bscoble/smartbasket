@@ -400,6 +400,12 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     price_cache = sheets_manager.load_price_cache()
     daily_specials = sheets_manager.load_daily_specials()
     standard_prices = sheets_manager.load_standard_prices()
+
+    def is_valid_cached_price(entry: dict) -> bool:
+        return (
+            entry.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
+            and sheets_manager.is_cache_valid(entry)
+        )
     
     for idx, row in enumerate(valid_items):
         item_name = row[0]
@@ -429,11 +435,23 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             standard_prices,
             sheets_manager.is_standard_price_valid,
         )
+        local_cache_matches = find_local_price_matches(
+            item_name,
+            stores_to_search,
+            price_cache,
+            is_valid_cached_price,
+        )
         all_store_matches = find_local_price_matches(
             item_name,
             config.STORE_NAMES,
             standard_prices,
             sheets_manager.is_standard_price_valid,
+        )
+        all_store_cache_matches = find_local_price_matches(
+            item_name,
+            config.STORE_NAMES,
+            price_cache,
+            is_valid_cached_price,
         )
         
         # Check cache and determine which stores need fresh prices
@@ -444,6 +462,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 matched_key, standard_data = local_matches.get(store, (cache_key, None))
                 special_data = daily_specials.get(matched_key) or special_data
                 cached_data = price_cache.get(cache_key)
+                if not is_valid_cached_price(cached_data or {}):
+                    cached_data = local_cache_matches.get(store, (None, None))[1]
                 
                 if special_data and special_data.get("price") is not None:
                     item_store_prices[store] = special_data["price"]
@@ -461,11 +481,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                         "product_name": standard_data.get("product_name") or item_name,
                     }
                     logger.debug(f"Using standard price for {item_name} at {store}")
-                elif (
-                    cached_data
-                    and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
-                    and sheets_manager.is_cache_valid(cached_data)
-                ):
+                elif cached_data and is_valid_cached_price(cached_data):
                     item_store_prices[store] = cached_data["price"]
                     item_store_status[store] = {
                         "status": "cached",
@@ -542,10 +558,11 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 all_store_prices.append(standard_data["price"] * pack_count)
             else:
                 cached_data = price_cache.get(cache_key)
+                if not is_valid_cached_price(cached_data or {}):
+                    cached_data = all_store_cache_matches.get(store, (None, None))[1]
                 if (
                     cached_data
-                    and cached_data.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
-                    and sheets_manager.is_cache_valid(cached_data)
+                    and is_valid_cached_price(cached_data)
                 ):
                     all_store_prices.append(cached_data["price"] * pack_count)
 
