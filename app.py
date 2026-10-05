@@ -954,6 +954,22 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
+        if st.session_state.pop("profile_scroll_to_top", False):
+            st.html(
+                """
+                <script>
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        const main = document.querySelector('[data-testid="stMain"]');
+                        if (main) {
+                            main.scrollTo({top: 0, left: 0, behavior: "instant"});
+                        }
+                        window.scrollTo({top: 0, left: 0, behavior: "instant"});
+                    }));
+                </script>
+                """,
+                unsafe_allow_javascript=True,
+            )
+
         st.markdown('<div class="profile-done-marker"></div>', unsafe_allow_html=True)
         if st.button("Done", key="profile_done"):
             st.session_state["current_page"] = "home"
@@ -2260,6 +2276,7 @@ else:
         with fc1:
             if st.button("Profile", key="footer_profile"):
                 st.session_state["current_page"] = "profile"
+                st.session_state["profile_scroll_to_top"] = True
                 st.rerun()
         with fc2:
             if st.button("Privacy", key="footer_privacy"):
