@@ -77,9 +77,9 @@ BRAND_MARK_DATA_URI = (
     "data:image/svg+xml;base64,"
     + base64.b64encode(BRAND_MARK_PATH.read_bytes()).decode("ascii")
 )
-BRAND_LOGO_PATH = pathlib.Path(__file__).parent / "static" / "grocery-gecko-logo.jpg"
+BRAND_LOGO_PATH = pathlib.Path(__file__).parent / "static" / "grocery-gecko-logo.png"
 BRAND_LOGO_DATA_URI = (
-    "data:image/jpeg;base64,"
+    "data:image/png;base64,"
     + base64.b64encode(BRAND_LOGO_PATH.read_bytes()).decode("ascii")
 )
 
