@@ -95,6 +95,24 @@ The dashboard expands its worksheet grid as history grows. Stale-price
 revalidation fails explicitly if targets exist but no prices are refreshed;
 a green run must not conceal a zero-refresh batch.
 
+Stale-price revalidation prioritizes catalogue matches for products currently
+saved in customers' shopping lists, then fills unused slots with the oldest
+stale entries. It uses the same name and package-size matching rules as the app
+and respects store-specific product names. Products with a fresh match at a
+store do not need a priority refresh there. Customer identifiers are not
+included in the priority list or job logs.
+
+The existing per-run limits remain 15 Woolworths, 5 Coles, and 15 Aldi products.
+If shopping-list demand exceeds a store's limit, additional manual or scheduled
+runs are needed; successful refreshes leave the stale queue. Missing catalogue
+products still need discovery, and failed scrapes remain stale. A shopping-list
+read failure stops the job rather than silently reverting to oldest-first.
+The app continues to exclude prices older than 14 days.
+
+To refresh shopping-list matches after deploying this change, run **Stale Price
+Revalidation** from GitHub Actions, wait for completion, then click **Compare
+Prices** again in the app. An existing report does not update automatically.
+
 ### Recovery from the October 1 pause
 
 The schedules were removed on October 1, 2026. The preceding runs showed:

@@ -46,17 +46,23 @@ def build_dependencies() -> tuple[SheetsManager, PriceScraper]:
 def revalidate_stale_prices() -> None:
     sheets_manager, scraper = build_dependencies()
     standard_prices = sheets_manager.load_standard_prices()
+    shopping_item_names = sheets_manager.get_active_shopping_item_names()
     targets = select_stale_standard_prices(
         standard_prices,
         STALE_REVALIDATION_BATCH_LIMITS,
         STANDARD_PRICE_MAX_AGE_DAYS,
+        shopping_item_names=shopping_item_names,
     )
 
     if not targets:
         print("No stale standard prices are due for revalidation.")
         return
 
-    print(f"Revalidating {len(targets)} stale prices: {dict(STALE_REVALIDATION_BATCH_LIMITS)}")
+    print(
+        f"Revalidating {len(targets)} stale prices, prioritizing matches for "
+        f"{len(shopping_item_names)} active shopping-list products: "
+        f"{dict(STALE_REVALIDATION_BATCH_LIMITS)}"
+    )
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS) as executor:
         future_to_target = {

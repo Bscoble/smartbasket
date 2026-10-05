@@ -890,6 +890,31 @@ class SheetsManager:
     # SHOPPING LIST
     # ========================================================================
     
+    def get_active_shopping_item_names(self) -> List[str]:
+        """Read distinct saved shopping-list names without exposing customer details."""
+        worksheet_name = WORKSHEET_NAMES["shopping_list"]
+        try:
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["shopping_list"]["rows"],
+                cols=WORKSHEET_CONFIG["shopping_list"]["cols"],
+            )
+            names = {}
+            for row in self._cached_values(worksheet_name, ws, force_refresh=True):
+                if len(row) < 5 or not row[0].strip() or not row[4].strip():
+                    continue
+                try:
+                    quantity = int(row[1])
+                except ValueError:
+                    continue
+                if quantity > 0:
+                    name = row[0].strip()
+                    names.setdefault(name.lower(), name)
+            return list(names.values())
+        except Exception:
+            logger.exception("Error loading active shopping-list products for revalidation")
+            raise
+
     def get_shopping_list(self, user_id: str) -> List[List[str]]:
         """
         Get all items from the Shopping List worksheet.

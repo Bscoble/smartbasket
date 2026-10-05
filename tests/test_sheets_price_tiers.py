@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime, timedelta
+import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
@@ -38,6 +39,39 @@ class FakeSpreadsheet:
 
     def worksheet(self, _name):
         return self.worksheet_value
+
+
+def test_active_shopping_names_deduplicate_and_exclude_customer_data():
+    manager = SheetsManager(FakeSpreadsheet([
+        ["Item", "Quantity", "Unit", "Image", "User", "Pack Count"],
+        ["Milk 2L", "2", "L", "", "first@test.com"],
+        [" milk 2l ", "2", "L", "", "second@test.com", "3"],
+        ["Apple Juice 2L", "2", "L", "", "second@test.com"],
+        ["Unowned", "1", "each", "", ""],
+        ["Removed", "0", "each", "", "first@test.com"],
+        ["Negative", "-1", "each", "", "first@test.com"],
+        ["Malformed", "invalid", "each", "", "first@test.com"],
+        ["Legacy unowned", "1", "each", ""],
+        ["", "1", "each", "", "first@test.com"],
+    ]))
+    assert manager.get_active_shopping_item_names() == ["Milk 2L", "Apple Juice 2L"]
+    manager.sh.worksheet_value.append_row(
+        ["Eggs 12 Pack", "1", "each", "", "third@test.com"],
+    )
+    assert manager.get_active_shopping_item_names() == [
+        "Milk 2L", "Apple Juice 2L", "Eggs 12 Pack",
+    ]
+
+
+def test_active_shopping_names_surface_read_errors(caplog):
+    class BrokenSpreadsheet:
+        def worksheet(self, _name):
+            raise RuntimeError("Sheets read unavailable")
+
+    manager = SheetsManager(BrokenSpreadsheet())
+    with pytest.raises(RuntimeError, match="Sheets read unavailable"):
+        manager.get_active_shopping_item_names()
+    assert "Error loading active shopping-list products" in caplog.text
 
 
 def test_standard_price_valid_within_max_age():
