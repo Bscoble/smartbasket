@@ -620,10 +620,16 @@ div:has(> .signup-links-marker) + div[data-testid="stHorizontalBlock"] button {
 }
 
 .header-profile-link img {
-    width: 72px;
+    width: 96px;
     height: auto;
     object-fit: contain;
     border-radius: 6px;
+}
+
+.header-profile-link {
+    width: 96px;
+    height: 96px;
+    flex: 0 0 96px;
 }
 
 /* ========================================================================
