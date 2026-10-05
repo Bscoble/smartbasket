@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime, timedelta
+import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
@@ -107,3 +108,42 @@ def test_revalidation_preserves_stronger_existing_brand_metadata(monkeypatch):
     assert saved["brand_source"] == "retailer"
     assert saved["brand_confidence"] == "high"
     assert refreshed == [sheets_manager.sh]
+
+
+@pytest.mark.parametrize("status", ["scraper_error", "connection", "not_found"])
+def test_revalidation_fails_when_no_prices_are_refreshed(monkeypatch, status):
+    class FakeSheetsManager:
+        def load_standard_prices(self):
+            return {("Coles", "milk"): {
+                "price": 3.0,
+                "last_verified": datetime.now() - timedelta(days=30),
+            }}
+
+        def save_standard_prices(self, _prices):
+            raise AssertionError("Failed results must not overwrite existing prices")
+
+    class FakeScraper:
+        def get_live_price_result(self, _store, _item, max_search_candidates):
+            return {"price": None, "status": status}
+
+    monkeypatch.setattr(
+        revalidation_job, "build_dependencies",
+        lambda: (FakeSheetsManager(), FakeScraper()),
+    )
+    monkeypatch.setattr(revalidation_job, "STALE_REVALIDATION_BATCH_LIMITS", {"Coles": 1})
+
+    with pytest.raises(RuntimeError, match="No stale prices were refreshed"):
+        revalidation_job.revalidate_stale_prices()
+
+
+def test_revalidation_succeeds_when_no_stale_prices_are_due(monkeypatch):
+    class FakeSheetsManager:
+        def load_standard_prices(self):
+            return {}
+
+    monkeypatch.setattr(
+        revalidation_job, "build_dependencies",
+        lambda: (FakeSheetsManager(), object()),
+    )
+
+    revalidation_job.revalidate_stale_prices()

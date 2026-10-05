@@ -3,6 +3,10 @@ name: Product Metadata Enrichment
 on:
   workflow_dispatch:
 
+concurrency:
+  group: catalogue-maintenance
+  cancel-in-progress: false
+
 jobs:
   enrich_product_metadata:
     runs-on: ubuntu-latest

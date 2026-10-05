@@ -9,9 +9,15 @@ from build_dashboard import write_dashboard
 
 
 class FakeWorksheet:
-    def __init__(self, ws_id):
+    def __init__(self, ws_id, rows, cols):
         self.id = ws_id
+        self.row_count = int(rows)
+        self.col_count = int(cols)
         self.cells = {}
+
+    def resize(self, rows, cols):
+        self.row_count = rows
+        self.col_count = cols
 
     def clear(self):
         self.cells = {}
@@ -19,6 +25,8 @@ class FakeWorksheet:
     def update(self, values, range_name):
         # Parse "A{row}" - only column A writes are used by write_dashboard.
         row = int(range_name[1:])
+        assert row + len(values) - 1 <= self.row_count
+        assert max(len(row_values) for row_values in values) <= self.col_count
         for offset, row_values in enumerate(values):
             self.cells[row + offset] = row_values
 
@@ -35,7 +43,7 @@ class FakeSpreadsheet:
         return self._sheets[name]
 
     def add_worksheet(self, title, rows, cols):
-        ws = FakeWorksheet(ws_id=len(self._sheets) + 1)
+        ws = FakeWorksheet(ws_id=len(self._sheets) + 1, rows=rows, cols=cols)
         self._sheets[title] = ws
         return ws
 
@@ -118,3 +126,25 @@ def test_write_dashboard_clears_existing_charts_before_adding_new_ones():
         req for call in spreadsheet.batch_update_calls for req in call["requests"] if "deleteEmbeddedObject" in req
     ]
     assert delete_calls == [{"deleteEmbeddedObject": {"objectId": 999}}]
+
+
+def test_write_dashboard_grows_existing_grid_to_fit_tables():
+    spreadsheet = FakeSpreadsheet()
+    ws = spreadsheet.add_worksheet("Performance Dashboard", rows="232", cols="20")
+    table = [["Day", "Count"]] + [[str(day), str(day)] for day in range(240)]
+
+    write_dashboard(spreadsheet, [("History", table, "LINE")])
+
+    assert ws.row_count >= 242
+    assert ws.col_count == 20
+    assert ws.cells[242] == ["239", "239"]
+
+
+def test_write_dashboard_does_not_shrink_existing_grid():
+    spreadsheet = FakeSpreadsheet()
+    ws = spreadsheet.add_worksheet("Performance Dashboard", rows="500", cols="20")
+
+    write_dashboard(spreadsheet, [("History", [["Day", "Count"], ["1", "2"]], "LINE")])
+
+    assert ws.row_count == 500
+    assert ws.col_count == 20

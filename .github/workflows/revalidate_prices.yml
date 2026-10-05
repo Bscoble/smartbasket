@@ -1,7 +1,13 @@
 name: Stale Price Revalidation
 
 on:
+  schedule:
+    - cron: '0 21 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: catalogue-maintenance
+  cancel-in-progress: false
 
 jobs:
   revalidate_prices:
@@ -43,4 +49,3 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
         run: python revalidate_stale_prices.py
-

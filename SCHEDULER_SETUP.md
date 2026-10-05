@@ -2,12 +2,14 @@
 
 ## GitHub Actions - Automated Daily Cache Warmup at 4:00 AM
 
-Automated supermarket scraping is currently paused. The workflows remain available for manual runs only.
+Price-refresh workflows run daily once these workflow files are deployed to the
+default branch (`master`). Manual runs remain available. Product metadata
+enrichment is manual-only.
 
 ### Current Setup Status
 
 ✅ **Workflow File**: `.github/workflows/warmup.yml`
-✅ **Schedule**: Paused
+✅ **Schedule**: Daily at 18:00 UTC (4:00 AM AEST / 5:00 AM AEDT)
 ✅ **Trigger**: Manual trigger available
 
 ### Step 1: Add GitHub Secrets
@@ -23,7 +25,7 @@ The workflow needs these environment variables. Add them as GitHub Secrets:
 ### Step 2: Verify the Workflow
 
 1. Go to: **https://github.com/Bscoble/smartbasket/actions**
-2. Click **"Cache Warmer - 4:00 AM Daily"** workflow
+2. Click **"Overnight Cache Warmer"** workflow
 3. You'll see runs scheduled and completed
 
 ### Step 3: Manual Test (Optional)
@@ -69,20 +71,47 @@ python3 cache_warmer.py
 
 ## Monitoring & Logs
 
-### Previously Scheduled Jobs
+### Scheduled Jobs
 
 | UTC | Job | Purpose |
 |-----|-----|---------|
 | 18:00 | Cache warmer | Refresh common staple prices |
 | 18:30 | Category crawl | Discover retailer catalogue products and detail URLs |
-| 20:00 | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
+| Manual only | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
 | 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
 
-These jobs are currently paused and can only be started manually from GitHub Actions. Each job refreshes the `Performance Dashboard` after its source data has been
+The cache warmer runs only the staple-price refresh; category discovery runs
+in its own workflow, avoiding a duplicate crawl. All four workflows share a
+concurrency group so their Google Sheets writes do not overlap. Do not dispatch
+multiple maintenance workflows at once: GitHub concurrency keeps only one
+pending run, and a newer queued run can replace it.
+
+Each job refreshes the `Performance Dashboard` after its source data has been
 successfully saved. This behavior lives in the Python job entry points, so it
 also applies when a job is run manually rather than through GitHub Actions.
 If persistence fails, the job exits with an error and skips the dashboard
 refresh instead of presenting a partial snapshot.
+The dashboard expands its worksheet grid as history grows. Stale-price
+revalidation fails explicitly if targets exist but no prices are refreshed;
+a green run must not conceal a zero-refresh batch.
+
+### Recovery from the October 1 pause
+
+The schedules were removed on October 1, 2026. The preceding runs showed:
+
+- Apify: `Monthly usage hard limit exceeded`.
+- ZenRows: HTTP 402 `Payment Required`.
+- Google Sheets: intermittent HTTP 500/429 errors.
+- Dashboard: writes exceeded the worksheet row limit.
+
+Verify provider credits and account limits before running paid scrapers. Start
+**Overnight Category Crawl**, wait for it to finish, then run **Stale Price
+Revalidation**. The cache warmer refreshes only six common staples, not an
+arbitrary shopping list. Confirm products were saved and re-run the app's price
+comparison; an existing report does not automatically recompute.
+
+Metadata enrichment remains manual-only because it is not required to refresh
+prices and was also hitting the ZenRows billing limit.
 
 Product metadata is written to the `Product Metadata` worksheet. Complete and
 partial records are refreshed after 180 days; unavailable pages retry after 14

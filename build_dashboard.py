@@ -242,6 +242,16 @@ def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
         rows=WORKSHEET_CONFIG["performance_dashboard"]["rows"],
         cols=WORKSHEET_CONFIG["performance_dashboard"]["cols"],
     )
+    required_rows = sum(1 + len(table) + TABLE_GAP_ROWS for _title, table, _chart_type in tables)
+    required_cols = max(
+        [CHART_ANCHOR_COL + 1]
+        + [len(row) for _title, table, _chart_type in tables for row in table]
+    )
+    if required_rows > ws.row_count or required_cols > ws.col_count:
+        ws.resize(
+            rows=max(required_rows, ws.row_count),
+            cols=max(required_cols, ws.col_count),
+        )
     ws.clear()
     _clear_existing_charts(spreadsheet, ws.id)
 

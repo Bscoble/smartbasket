@@ -98,6 +98,11 @@ def revalidate_stale_prices() -> None:
             raise RuntimeError("Revalidated prices were not saved; dashboard refresh skipped.")
         refresh_performance_dashboard(sheets_manager.sh)
     print(f"Completed {successful}/{len(targets)} stale-price revalidations.")
+    if not successful:
+        raise RuntimeError(
+            "No stale prices were refreshed. Check scraper errors, provider credits, "
+            "and API access in the job logs."
+        )
 
 
 if __name__ == "__main__":

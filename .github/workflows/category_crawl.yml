@@ -1,7 +1,13 @@
 name: Overnight Category Crawl
 
 on:
+  schedule:
+    - cron: '30 18 * * *'
   workflow_dispatch: # Allows you to run it manually from the GitHub dashboard
+
+concurrency:
+  group: catalogue-maintenance
+  cancel-in-progress: false
 
 jobs:
   category_crawl:
@@ -43,4 +49,3 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
         run: python bulk_category_backfill.py
-
