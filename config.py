@@ -96,6 +96,11 @@ STALE_REVALIDATION_BATCH_LIMITS = {
     "Coles": 5,
     "Aldi": 15,
 }
+EXPANDED_REVALIDATION_BATCH_LIMITS = {
+    "Woolworths": 200,
+    "Coles": 100,
+    "Aldi": 150,
+}
 
 # ============================================================================
 # PRODUCT DATABASE
@@ -130,6 +135,9 @@ WORKSHEET_NAMES = {
     "performance_dashboard": "Performance Dashboard",
     "product_metadata": "Product Metadata",
     "failed_barcode_scans": "Failed Barcode Scans",
+    "scraper_budget": "Scraper Budget",
+    "catalogue_metrics": "Catalogue Metrics",
+    "discovery_queue": "Discovery Queue",
 }
 
 WORKSHEET_CONFIG = {
@@ -140,13 +148,16 @@ WORKSHEET_CONFIG = {
     "product_catalog": {"rows": "5000", "cols": "7"},
     "standard_prices": {"rows": "5000", "cols": "15"},
     "daily_specials": {"rows": "2000", "cols": "5"},
-    "crawl_state": {"rows": "500", "cols": "4"},
+    "crawl_state": {"rows": "500", "cols": "7"},
     "user_events": {"rows": "20000", "cols": "7"},
     "scrape_log": {"rows": "20000", "cols": "7"},
     "catalog_size_history": {"rows": "5000", "cols": "3"},
     "performance_dashboard": {"rows": "200", "cols": "20"},
     "product_metadata": {"rows": "5000", "cols": "14"},
     "failed_barcode_scans": {"rows": "5000", "cols": "7"},
+    "scraper_budget": {"rows": "20000", "cols": "7"},
+    "catalogue_metrics": {"rows": "20000", "cols": "7"},
+    "discovery_queue": {"rows": "5000", "cols": "8"},
 }
 
 # ============================================================================

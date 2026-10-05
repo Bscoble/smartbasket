@@ -5,7 +5,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from build_dashboard import write_dashboard
+from build_dashboard import _read_rows, build_dashboard_tables, write_dashboard
 
 
 class FakeWorksheet:
@@ -29,6 +29,9 @@ class FakeWorksheet:
         assert max(len(row_values) for row_values in values) <= self.col_count
         for offset, row_values in enumerate(values):
             self.cells[row + offset] = row_values
+
+    def get_all_values(self):
+        return []
 
 
 class FakeSpreadsheet:
@@ -148,3 +151,75 @@ def test_write_dashboard_does_not_shrink_existing_grid():
 
     assert ws.row_count == 500
     assert ws.col_count == 20
+
+
+def test_read_rows_returns_empty_for_missing_or_unconfigured_worksheet():
+    spreadsheet = FakeSpreadsheet()
+
+    assert _read_rows(spreadsheet, "users") == []
+    assert _read_rows(spreadsheet, "catalogue_metrics") == []
+
+
+def test_build_dashboard_tables_includes_new_metrics_without_chart_types(monkeypatch):
+    import build_dashboard as dashboard
+
+    rows = {
+        "catalog_size_history": [["Date", "Store", "Product Count"]],
+        "standard_prices": [
+            ["Store", "Item", "Price", "Product Name", "Last Verified"],
+            ["Coles", "Milk", "4.00", "Milk", "2026-10-05 09:00:00"],
+        ],
+        "daily_specials": [["Store", "Item", "Price", "Product Name", "Date"]],
+        "scrape_log": [
+            ["Timestamp", "Source", "Store", "Query", "Status", "Duration Secs", "Cost USD"],
+            ["2026-10-05T09:00:00", "crawl", "Coles", "milk", "ok", "1", "0.10"],
+        ],
+        "user_events": [
+            ["Timestamp", "User ID", "Event Type", "Mode", "Items Ticked", "Items Total", "Savings"],
+            ["2026-10-05T09:00:00", "private@example.com", "comparison_run", "", "2", "3", ""],
+        ],
+        "users": [["Email", "Created At"]],
+        "catalogue_metrics": [
+            ["Timestamp", "Source", "Store", "Query", "New Products", "Refreshed Products", "Duplicate Products"],
+            ["2026-10-05T09:00:00", "crawl", "Coles", "milk", "1", "2", "0"],
+        ],
+        "scraper_budget": [
+            ["Timestamp", "Reservation ID", "Source", "Store", "Reserved USD", "Actual USD", "Status"],
+            ["2026-10-05T09:00:00", "r1", "crawl", "Coles", "1.00", "", "reserved"],
+        ],
+    }
+    monkeypatch.setattr(dashboard, "_refresh_todays_catalog_size", lambda _spreadsheet: None)
+    monkeypatch.setattr(dashboard, "_read_rows", lambda _spreadsheet, key: rows[key])
+
+    tables = build_dashboard_tables(FakeSpreadsheet())
+    by_title = {title: (table, chart_type) for title, table, chart_type in tables}
+
+    assert by_title["Catalogue Discovery Metrics"] == (
+        [
+            ["Date", "Source", "Store", "New Products", "Refreshed Products", "Duplicate Products"],
+            ["2026-10-05", "crawl", "Coles", "1", "2", "0"],
+        ],
+        None,
+    )
+    assert by_title["Comparison Basket Coverage"][0][1][3:] == ["2", "3", "66.7"]
+    assert by_title["Catalogue Freshness by Store"][0][1][1:4] == ["1", "0", "0"]
+    assert all(chart_type is None for title, _table, chart_type in tables if title in {
+        "Catalogue Discovery Metrics",
+        "Scrape Requests & Errors",
+        "Recorded Cost per New or Refreshed Product",
+        "Scraper Reservations and Actuals",
+        "Catalogue Freshness by Store",
+        "Comparison Basket Coverage",
+    })
+
+
+def test_write_dashboard_skips_chart_for_table_only_sections():
+    spreadsheet = FakeSpreadsheet()
+
+    write_dashboard(spreadsheet, [("Cost and Counts", [["Cost", "Requests"], ["", "2"]], None)])
+
+    assert spreadsheet.worksheet("Performance Dashboard").cells[2] == ["Cost", "Requests"]
+    chart_requests = [
+        req for call in spreadsheet.batch_update_calls for req in call["requests"] if "addChart" in req
+    ]
+    assert chart_requests == []

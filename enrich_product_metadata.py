@@ -17,6 +17,8 @@ from config import (
 from build_dashboard import refresh_performance_dashboard
 from modules.product_metadata import fetch_woolworths_product_metadata, select_metadata_candidates
 from modules.sheets import SheetsManager
+from modules.pricing import PriceScraper
+from modules.maintenance import setup_maintenance_scraper, BudgetExceeded, ProviderBlocked
 
 
 def require_environment_secret(name: str) -> str:
@@ -37,12 +39,13 @@ def build_sheets_manager() -> SheetsManager:
 
 def enrich_product_metadata() -> None:
     zenrows_key = require_environment_secret("ZENROWS_KEY")
-    configured_cost = os.environ.get("ZENROWS_COST_PER_REQUEST_USD", "").strip()
-    try:
-        cost_per_request = float(configured_cost) if configured_cost else None
-    except ValueError:
-        cost_per_request = None
     sheets_manager = build_sheets_manager()
+    scraper = PriceScraper("", zenrows_key)
+    budget = setup_maintenance_scraper(sheets_manager, scraper, "product_metadata")
+    cost_per_request = budget.zenrows_cost
+
+    def requester(_url, params, timeout):
+        return scraper._zenrows_get("Woolworths", params)
     standard_prices = sheets_manager.load_standard_prices()
     existing_metadata = sheets_manager.load_product_metadata()
     candidates = select_metadata_candidates(
@@ -62,6 +65,7 @@ def enrich_product_metadata() -> None:
             parsed, duration_secs = fetch_woolworths_product_metadata(
                 candidate["source_url"],
                 zenrows_key,
+                requester=requester,
             )
             entry = {
                 **candidate,
@@ -78,6 +82,11 @@ def enrich_product_metadata() -> None:
                 duration_secs=duration_secs,
                 cost_usd=cost_per_request,
             )
+        except BudgetExceeded as error:
+            print(f"Stopped at budget limit: {error}")
+            break
+        except ProviderBlocked:
+            raise
         except Exception as error:
             print(f"Metadata fetch failed for {candidate['source_url']}: {error}")
             sheets_manager.log_scrape_run(

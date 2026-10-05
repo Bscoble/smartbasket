@@ -19,6 +19,7 @@ from build_dashboard import refresh_performance_dashboard
 from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
+from modules.maintenance import setup_maintenance_scraper, BudgetExceeded, ProviderBlocked
 
 
 def require_environment_secret(name):
@@ -48,7 +49,7 @@ spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 
 sheets_manager = SheetsManager(spreadsheet)
 price_scraper = PriceScraper(APIFY_TOKEN, ZENROWS_KEY)
-price_scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="cache_warmer", **kw)
+budget = setup_maintenance_scraper(sheets_manager, price_scraper, "cache_warmer")
 
 STORES = ["Woolworths", "Coles", "Aldi"]
 COMMON_STAPLES = [
@@ -66,6 +67,8 @@ def warm_the_cache():
 
     cache = sheets_manager.load_price_cache()
     standard_prices = sheets_manager.load_standard_prices()
+    changed = {store: {"new": 0, "refreshed": 0, "duplicates": 0} for store in STORES}
+    blocked = None
 
     for item in COMMON_STAPLES:
         print(f"Fetching fresh prices for: {item}")
@@ -92,6 +95,7 @@ def warm_the_cache():
                         }
                         key = (store, item_lower)
                         existing = standard_prices.get(key, {})
+                        changed[store]["refreshed" if key in standard_prices else "new"] += 1
                         standard_prices[key] = {
                             **existing,
                             "price": price,
@@ -104,6 +108,10 @@ def warm_the_cache():
                         print(f"✅ {store} updated {item}: ${price}")
                     else:
                         print(f"❌ {store} no price for {item}: {result.get('message', 'unavailable')}")
+                except BudgetExceeded as e:
+                    print(f"Budget limit: {e}")
+                except ProviderBlocked as e:
+                    blocked = e
                 except Exception as e:
                     print(f"❌ Failed {store} for {item}: {e}")
 
@@ -112,10 +120,14 @@ def warm_the_cache():
     prices_saved = sheets_manager.save_standard_prices(standard_prices)
     if not cache_saved or not prices_saved:
         raise RuntimeError("Cache data was not fully saved; dashboard refresh skipped.")
+    for store, counts in changed.items():
+        if counts["new"] or counts["refreshed"]:
+            budget.record_products(store, "common staples", counts)
     refresh_performance_dashboard(spreadsheet)
+    if blocked:
+        raise blocked
     print("Cache warmup complete!")
 
 
 if __name__ == "__main__":
     warm_the_cache()
-

@@ -176,10 +176,11 @@ def select_metadata_candidates(
 def fetch_woolworths_product_metadata(
     source_url: str,
     zenrows_key: str,
+    requester=None,
 ) -> tuple[Dict[str, Any], float]:
     """Fetch and parse one Woolworths product-detail page through ZenRows."""
     started_at = time.monotonic()
-    response = requests.get(
+    response = (requester or requests.get)(
         ZENROWS_API_URL,
         params={
             "apikey": zenrows_key,

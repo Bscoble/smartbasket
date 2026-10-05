@@ -45,6 +45,7 @@ from helpers import (
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.catalog_matching import find_local_price_matches
+from modules.discovery import DiscoveryQueue
 from modules.brands import has_explicit_brand
 from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 from modules.failed_scans import FailedScanStore, encode_failed_scan
@@ -386,6 +387,18 @@ def summarize_store_health(diagnostics: list) -> dict:
     return summary
 
 
+def enqueue_missing_products(queries: list) -> bool:
+    """Queue product descriptions only, with visible feedback on persistence."""
+    try:
+        DiscoveryQueue(sheets_manager).enqueue(queries)
+        st.info("Missing products have been queued for offline catalogue discovery. No live lookup was made.")
+        return True
+    except Exception:
+        logger.exception("Failed to persist missing-product discovery requests")
+        st.warning("Could not queue missing products for discovery. Please try again later.")
+        return False
+
+
 def generate_smart_basket_report(user_items: list, selected_stores: list) -> Optional[dict]:
     """
     Generate a comprehensive price comparison report for shopping items.
@@ -608,6 +621,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     
     status_text.empty()
     progress_bar.empty()
+    if unpriced_items:
+        enqueue_missing_products(unpriced_items)
     
     # Generate rankings, retaining stores with partial coverage for visibility.
     available_stores = [
@@ -1362,6 +1377,8 @@ else:
                                     in favorite_titles
                                 )
                             st.session_state["search_results"] = priced_scraped_results
+                            if not priced_scraped_results:
+                                enqueue_missing_products([search_query])
                     else:
                         st.session_state["search_results"] = []
                         st.warning("Enter a product description first.")
@@ -1772,11 +1789,12 @@ else:
                 else:
                     with st.spinner("Matching your list against the local price catalogue..."):
                         report = generate_smart_basket_report(current_items, active_names)
-                        
+                    sheets_manager.log_user_event(
+                        user_id, "comparison_run",
+                        items_total=len(valid_rows_with_indices),
+                        items_ticked=len(report["item_breakdown"]) if report else 0,
+                    )
                     if report:
-                        sheets_manager.log_user_event(
-                            user_id, "comparison_run", items_total=report["total_items"]
-                        )
                         st.session_state["report"] = report
                         st.session_state["shopping_active"] = True
                         st.session_state["shop_mode"] = "overview"

@@ -67,6 +67,7 @@ class SheetsManager:
         self.sh = spreadsheet
         self._worksheet_cache: Dict[str, Any] = {}
         self._values_cache: Dict[str, Tuple[datetime, List[List[str]]]] = {}
+        self.strict_reads = False
         logger.info("SheetsManager initialized")
 
     def _cached_values(self, worksheet_name: str, ws: Any, force_refresh: bool = False) -> List[List[str]]:
@@ -85,6 +86,16 @@ class SheetsManager:
     def _invalidate_values_cache(self, worksheet_name: str) -> None:
         """Invalidate cached values after writes to a worksheet."""
         self._values_cache.pop(worksheet_name, None)
+
+    def _replace_table_values(self, worksheet_name: str, ws: Any, rows: List[List[Any]]) -> None:
+        """Replace a table in one values write, without a clear-before-save window."""
+        previous_rows = len(self._cached_values(worksheet_name, ws))
+        columns = len(rows[0])
+        values = rows + [[""] * columns for _ in range(max(0, previous_rows - len(rows)))]
+        if ws.row_count < len(values):
+            ws.resize(rows=len(values))
+        ws.update(range_name="A1", values=values, value_input_option="RAW")
+        self._invalidate_values_cache(worksheet_name)
     
     def _get_or_create_worksheet(self, name: str, rows: str = "1000", cols: str = "4") -> Any:
         """
@@ -247,6 +258,8 @@ class SheetsManager:
             logger.info(f"Loaded {len(cache)} price cache entries")
         except Exception as e:
             logger.error(f"Error loading price cache: {e}", exc_info=True)
+            if self.strict_reads:
+                raise
         
         return cache
     
@@ -369,6 +382,8 @@ class SheetsManager:
             logger.info(f"Loaded {len(prices)} standard price entries")
         except Exception as e:
             logger.error(f"Error loading standard prices: {e}", exc_info=True)
+            if self.strict_reads:
+                raise
         return prices
 
     def is_standard_price_valid(self, entry: Dict[str, Any]) -> bool:
@@ -480,9 +495,7 @@ class SheetsManager:
                     ]
                 )
 
-            ws.clear()
-            ws.append_rows(rows)
-            self._invalidate_values_cache(worksheet_name)
+            self._replace_table_values(worksheet_name, ws, rows)
             logger.info(f"Saved {len(prices)} standard price entries")
             return True
         except Exception as e:
@@ -702,6 +715,8 @@ class SheetsManager:
             logger.info(f"Loaded {len(specials)} active special entries")
         except Exception as e:
             logger.error(f"Error loading daily specials: {e}", exc_info=True)
+            if self.strict_reads:
+                raise
         return specials
 
     def save_daily_specials(self, specials: Dict[Tuple[str, str], Dict[str, Any]]) -> bool:
@@ -719,9 +734,7 @@ class SheetsManager:
             for (store, item), data in specials.items():
                 rows.append([store, item, str(data["price"]), data.get("product_name", ""), today])
 
-            ws.clear()
-            ws.append_rows(rows)
-            self._invalidate_values_cache(worksheet_name)
+            self._replace_table_values(worksheet_name, ws, rows)
             logger.info(f"Saved {len(specials)} special price entries")
             return True
         except Exception as e:
@@ -755,6 +768,9 @@ class SheetsManager:
                         state[(store, category)] = {
                             "last_page": int(last_page_str),
                             "last_run": row[3] if len(row) >= 4 else "",
+                            "page_signature": row[4] if len(row) >= 5 else "",
+                            "empty_runs": int(row[5]) if len(row) >= 6 and row[5] else 0,
+                            "retry_after": row[6] if len(row) >= 7 else "",
                         }
                     except (ValueError, IndexError) as e:
                         logger.debug(f"Skipping invalid crawl state row: {row}, error: {e}")
@@ -762,6 +778,8 @@ class SheetsManager:
             logger.info(f"Loaded {len(state)} crawl state entries")
         except Exception as e:
             logger.error(f"Error loading crawl state: {e}", exc_info=True)
+            if self.strict_reads:
+                raise
         return state
 
     def save_crawl_state(self, state: Dict[Tuple[str, str], Dict[str, Any]]) -> bool:
@@ -774,13 +792,18 @@ class SheetsManager:
                 cols=WORKSHEET_CONFIG["crawl_state"]["cols"],
             )
 
-            rows = [["Store", "Category", "Last Page Scraped", "Last Run"]]
+            rows = [[
+                "Store", "Category", "Last Page Scraped", "Last Run",
+                "Page Signature", "Empty Runs", "Retry After",
+            ]]
             for (store, category), data in state.items():
-                rows.append([store, category, str(data["last_page"]), data.get("last_run", "")])
+                rows.append([
+                    store, category, str(data["last_page"]), data.get("last_run", ""),
+                    data.get("page_signature", ""), str(data.get("empty_runs", 0)),
+                    data.get("retry_after", ""),
+                ])
 
-            ws.clear()
-            ws.append_rows(rows)
-            self._invalidate_values_cache(worksheet_name)
+            self._replace_table_values(worksheet_name, ws, rows)
             logger.info(f"Saved {len(state)} crawl state entries")
             return True
         except Exception as e:

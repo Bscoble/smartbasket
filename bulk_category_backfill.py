@@ -25,15 +25,17 @@ to .streamlit/secrets.toml:
 
 import os
 import json
+import hashlib
 import tomllib
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 import gspread
 from google.oauth2.service_account import Credentials
 
 from config import SPREADSHEET_ID, GOOGLE_SCOPES, STORES
 from build_dashboard import refresh_performance_dashboard
-from modules.brands import merge_brand_metadata
+from modules.catalog_maintenance import merge_products
+from modules.maintenance import setup_maintenance_scraper, BudgetExceeded, ProviderBlocked
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
 
@@ -121,6 +123,45 @@ COLES_CATALOG_TARGETS = [
     ("pet food", "Pet Care"),
 ]
 COLES_TARGETS_PER_RUN = 10
+EXPANDED_COLES_TARGETS_PER_RUN = 25
+EXPANDED_TARGETS_PER_RUN = 20
+EXPANDED_CATEGORY_TARGETS = CATEGORY_TARGETS + COLES_CATALOG_TARGETS + [
+    ("chocolate", "Snacks & Confectionery"),
+    ("crackers", "Snacks & Confectionery"),
+    ("baking mixes", "Pantry"),
+    ("facial tissues", "Cleaning & Household"),
+    ("shampoo", "Health & Beauty"),
+    ("toothpaste", "Health & Beauty"),
+    ("nappies", "Baby"),
+    ("baby formula", "Baby"),
+    ("dry dog food", "Pet Care"),
+    ("wet cat food", "Pet Care"),
+    ("Schweppes lemonade", "Drinks"),
+    ("Arnott's Shapes", "Snacks & Confectionery"),
+    ("McCain pizza", "Frozen"),
+    ("Cadbury chocolate", "Snacks & Confectionery"),
+    ("vanilla cupcake mix", "Pantry"),
+    ("full cream milk 2L", "Dairy, Eggs & Fridge"),
+    ("cherry tomatoes 250g", "Fruit & Vegetables"),
+    ("pork sausages 550g", "Meat & Seafood"),
+    ("apple juice 2L", "Drinks"),
+    ("facial tissues 224 pack", "Cleaning & Household"),
+    ("Cadbury Dairy Milk 315g", "Snacks & Confectionery"),
+    ("McCain pepperoni pizza 490g", "Frozen"),
+    ("Schweppes lemonade 30 pack", "Drinks"),
+]
+EXPANDED_CATEGORY_TARGETS = list(dict(EXPANDED_CATEGORY_TARGETS).items())
+EXPANDED_COLES_TARGETS = list(dict(
+    COLES_CATALOG_TARGETS + EXPANDED_CATEGORY_TARGETS
+).items())
+
+
+class CrawlPageError(RuntimeError):
+    """A listing request failed without advancing its page cursor."""
+
+
+def expansion_enabled() -> bool:
+    return os.environ.get("EXPANDED_CATALOG_ENABLED", "").lower() == "true"
 
 
 def load_secrets() -> dict:
@@ -167,10 +208,9 @@ def build_page_urls(store: str, keyword: str, start_page: int, page_count: int) 
 def get_coles_catalog_targets(crawl_state: dict) -> list:
     """Return the next bounded batch of mapped Coles queries, wrapping around."""
     cursor = crawl_state.get(("Coles", "__catalog_cursor__"), {}).get("last_page", 0)
-    return [
-        COLES_CATALOG_TARGETS[(cursor + offset) % len(COLES_CATALOG_TARGETS)]
-        for offset in range(COLES_TARGETS_PER_RUN)
-    ]
+    targets = EXPANDED_COLES_TARGETS if expansion_enabled() else COLES_CATALOG_TARGETS
+    limit = EXPANDED_COLES_TARGETS_PER_RUN if expansion_enabled() else COLES_TARGETS_PER_RUN
+    return [targets[(cursor + offset) % len(targets)] for offset in range(limit)]
 
 
 def crawl_keyword(
@@ -181,84 +221,154 @@ def crawl_keyword(
     standard_prices: dict,
     daily_specials: dict,
     category_fallback: str = "",
+    checkpoint=None,
+    seen_products=None,
 ) -> int:
     state_key = (store, keyword)
+    state = crawl_state.get(state_key, {})
+    retry_after = state.get("retry_after")
+    if retry_after and datetime.fromisoformat(retry_after) > datetime.now():
+        return 0
     start_page = (
-        crawl_state.get(state_key, {}).get("last_page", 0) + 1
+        state.get("last_page", 0) + 1
         if store in PAGINATED_STORES
         else 1
     )
     urls = build_page_urls(store, keyword, start_page, PAGES_PER_RUN)
-    pages_fetched = len(urls)
-
-    print(f"[{store}] '{keyword}' pages {start_page}-{start_page + pages_fetched - 1}")
-    products = scraper.get_bulk_products(store, urls, max_items=MAX_ITEMS_PER_PAGE)
-    print(f"  -> {len(products)} products found")
-
-    for product in products:
-        key = (store, product["product_name"].strip().lower())
-        existing = standard_prices.get(key, {})
-        standard_prices[key] = {
-            **existing,
-            "price": product["standard_price"],
-            "product_name": product["product_name"],
-            "last_verified": datetime.now(),
-            "unit_price": product.get("unit_price"),
-            "unit_label": product.get("unit_label", ""),
-            "image_url": product.get("image_url", ""),
-            "category": product.get("category") or category_fallback or keyword,
-            "subcategory": product.get("subcategory", ""),
-            **merge_brand_metadata(existing, product),
-            "barcode": product.get("barcode") or existing.get("barcode", ""),
-            "source_url": product.get("source_url") or existing.get("source_url", ""),
-        }
-        if product["is_special"] and product["price"] < product["standard_price"]:
-            daily_specials[key] = {
-                "price": product["price"],
-                "product_name": product["product_name"],
+    found = 0
+    for offset, url in enumerate(urls):
+        page = start_page + offset
+        print(f"[{store}] '{keyword}' page {page}")
+        result = scraper.get_bulk_products_result(store, url, max_items=MAX_ITEMS_PER_PAGE)
+        state = crawl_state.get(state_key, {})
+        if result["status"] == "error":
+            raise CrawlPageError(
+                f"{store}/{keyword} page {page} failed; cursor retained: {result['message']}"
+            )
+        if result["status"] in {"empty", "end"}:
+            empty_runs = state.get("empty_runs", 0) + 1
+            crawl_state[state_key] = {
+                **state,
+                "last_page": 0 if result["status"] == "end" or empty_runs >= 3 else state.get("last_page", 0),
+                "page_signature": "" if result["status"] == "end" or empty_runs >= 3 else state.get("page_signature", ""),
+                "last_run": datetime.now().isoformat(timespec="seconds"),
+                "empty_runs": empty_runs,
+                "retry_after": (datetime.now() + timedelta(
+                    days=min(7, 2 ** min(empty_runs - 1, 3)),
+                )).isoformat(timespec="seconds"),
             }
-
-    crawl_state[state_key] = {
-        "last_page": start_page + pages_fetched - 1 if store in PAGINATED_STORES else 1,
-        "last_run": datetime.now().isoformat(timespec="seconds"),
-    }
-    return len(products)
+            if checkpoint:
+                checkpoint(store, keyword, {"new": 0, "refreshed": 0, "duplicates": 0})
+            print("  -> empty/end; cooled down without guessing exhaustion")
+            break
+        products = result["products"]
+        identities = sorted(set(
+            product.get("product_id") or product.get("source_url") or product["product_name"].lower()
+            for product in products
+        ))
+        signature = hashlib.sha256(json.dumps(identities).encode()).hexdigest()
+        if signature == state.get("page_signature"):
+            crawl_state[state_key] = {
+                **state, "last_page": 0, "page_signature": "",
+                "retry_after": (datetime.now() + timedelta(days=1)).isoformat(timespec="seconds"),
+            }
+            if checkpoint:
+                checkpoint(store, keyword, {"new": 0, "refreshed": 0, "duplicates": len(products)})
+            print("  -> repeated page; wrapping cursor and cooling down")
+            break
+        counts = merge_products(
+            products, store, standard_prices, daily_specials, category_fallback, seen_products,
+        )
+        found += len(products)
+        last_page = page if store in PAGINATED_STORES else 1
+        has_ended = result.get("has_more") is False
+        crawl_state[state_key] = {
+            "last_page": 0 if has_ended else last_page,
+            "last_run": datetime.now().isoformat(timespec="seconds"),
+            "page_signature": "" if has_ended else signature, "empty_runs": 0,
+            "retry_after": (datetime.now() + timedelta(days=1)).isoformat(timespec="seconds")
+            if has_ended else "",
+        }
+        if checkpoint:
+            checkpoint(store, keyword, counts)
+        print(f"  -> new={counts['new']} refreshed={counts['refreshed']} duplicates={counts['duplicates']}")
+        if has_ended:
+            break
+    return found
 
 
 def backfill() -> None:
     secrets = load_secrets()
     scraper = PriceScraper(secrets.get("APIFY_TOKEN", ""), secrets.get("ZENROWS_KEY", ""))
     sheets_manager = build_sheets_manager(secrets)
-    scraper.usage_logger = lambda **kw: sheets_manager.log_scrape_run(source="bulk_category_crawl", **kw)
+    budget = setup_maintenance_scraper(sheets_manager, scraper, "bulk_category_crawl")
 
     standard_prices = sheets_manager.load_standard_prices()
     daily_specials = sheets_manager.load_daily_specials()
     crawl_state = sheets_manager.load_crawl_state()
 
-    total_added = 0
+    totals = {"new": 0, "refreshed": 0, "duplicates": 0}
+
+    def checkpoint(store, keyword, counts):
+        if not sheets_manager.save_standard_prices(standard_prices):
+            raise RuntimeError("Catalogue checkpoint failed; crawl cursor not saved")
+        if not sheets_manager.save_daily_specials(daily_specials):
+            raise RuntimeError("Specials checkpoint failed; crawl cursor not saved")
+        if not sheets_manager.save_crawl_state(crawl_state):
+            raise RuntimeError("Crawl checkpoint failed")
+        budget.record_products(store, keyword, counts)
+        for name in totals:
+            totals[name] += counts[name]
+
+    plans = {}
     for store in STORES_TO_CRAWL:
         targets = (
             get_coles_catalog_targets(crawl_state)
             if store == "Coles"
-            else CATEGORY_TARGETS
+            else EXPANDED_CATEGORY_TARGETS if expansion_enabled() else CATEGORY_TARGETS
         )
-        for keyword, category_fallback in targets:
-            total_added += crawl_keyword(
-                scraper,
-                store,
-                keyword,
-                crawl_state,
-                standard_prices,
-                daily_specials,
-                category_fallback,
-            )
-
-        if store == "Coles":
-            current_cursor = crawl_state.get((store, "__catalog_cursor__"), {}).get("last_page", 0)
-            crawl_state[(store, "__catalog_cursor__")] = {
-                "last_page": (current_cursor + COLES_TARGETS_PER_RUN) % len(COLES_CATALOG_TARGETS),
-                "last_run": datetime.now().isoformat(timespec="seconds"),
-            }
+        if store != "Coles" and expansion_enabled():
+            cursor = crawl_state.get((store, "__catalog_cursor__"), {}).get("last_page", 0)
+            targets = [
+                targets[(cursor + offset) % len(targets)]
+                for offset in range(EXPANDED_TARGETS_PER_RUN)
+            ]
+        plans[store] = targets
+    total_scraped = 0
+    seen_products = set()
+    failures = []
+    for target_index in range(max(len(targets) for targets in plans.values())):
+        for store, targets in plans.items():
+            if target_index >= len(targets):
+                continue
+            keyword, category_fallback = targets[target_index]
+            try:
+                total_scraped += crawl_keyword(
+                    scraper, store, keyword, crawl_state, standard_prices,
+                    daily_specials, category_fallback, checkpoint, seen_products,
+                )
+            except BudgetExceeded as error:
+                print(f"Stopped at budget limit: {error}")
+                refresh_performance_dashboard(sheets_manager.sh)
+                if failures:
+                    raise RuntimeError(f"Partial crawl: {len(failures)} listing failures")
+                return
+            except ProviderBlocked:
+                raise
+            except CrawlPageError as error:
+                print(error)
+                failures.append(str(error))
+            if expansion_enabled() or store == "Coles":
+                current = crawl_state.get((store, "__catalog_cursor__"), {}).get("last_page", 0)
+                target_count = len(EXPANDED_COLES_TARGETS if store == "Coles" else EXPANDED_CATEGORY_TARGETS)
+                if not expansion_enabled():
+                    target_count = len(COLES_CATALOG_TARGETS)
+                crawl_state[(store, "__catalog_cursor__")] = {
+                    "last_page": (current + 1) % target_count,
+                    "last_run": datetime.now().isoformat(timespec="seconds"),
+                }
+                if not sheets_manager.save_crawl_state(crawl_state):
+                    raise RuntimeError("Search rotation checkpoint failed")
 
     prices_saved = sheets_manager.save_standard_prices(standard_prices)
     specials_saved = sheets_manager.save_daily_specials(daily_specials)
@@ -272,9 +382,12 @@ def backfill() -> None:
         refresh_performance_dashboard(sheets_manager.sh)
     else:
         raise RuntimeError("Catalogue data was not fully saved; dashboard refresh skipped.")
+    if failures:
+        raise RuntimeError(f"Partial crawl: {len(failures)} listing failures; see job logs")
 
     print(
-        f"\nDone. +{total_added} product scrapes this run. "
+        f"\nDone. {total_scraped} product scrapes; new={totals['new']}, "
+        f"refreshed={totals['refreshed']}, duplicates={totals['duplicates']}. "
         f"{len(standard_prices)} standard entries, {len(daily_specials)} active specials, "
         f"{len(crawl_state)} crawl cursors saved."
     )

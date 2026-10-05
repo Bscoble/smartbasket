@@ -1,0 +1,31 @@
+name: Requested Product Discovery
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: catalogue-maintenance
+  cancel-in-progress: false
+
+jobs:
+  discover_products:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Discover requested products
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          SCRAPER_DAILY_BUDGET_USD: ${{ vars.SCRAPER_DAILY_BUDGET_USD || '20' }}
+          APIFY_MAX_RUN_COST_USD: ${{ vars.APIFY_MAX_RUN_COST_USD || '1' }}
+          ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
+          ZENROWS_MAX_REQUEST_COST_USD: ${{ vars.ZENROWS_MAX_REQUEST_COST_USD || '1' }}
+          SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '80' }}
+        run: python discover_requested_products.py

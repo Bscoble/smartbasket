@@ -21,6 +21,7 @@ from modules.brands import merge_brand_metadata
 from build_dashboard import refresh_performance_dashboard
 from modules.pricing import PriceScraper
 from modules.sheets import SheetsManager
+from modules.maintenance import setup_maintenance_scraper, BudgetExceeded, ProviderBlocked
 
 # 350 common Australian grocery items, grouped by category for maintainability.
 STAPLES = [
@@ -156,11 +157,21 @@ def backfill() -> None:
     secrets = load_secrets()
     scraper = PriceScraper(secrets.get("APIFY_TOKEN", ""), secrets.get("ZENROWS_KEY", ""))
     sheets_manager = build_sheets_manager(secrets)
+    budget = setup_maintenance_scraper(sheets_manager, scraper, "standard_backfill")
 
     standard_prices = sheets_manager.load_standard_prices()
     succeeded = 0
     failed = 0
     skipped = 0
+    counts = {store: {"new": 0, "refreshed": 0, "duplicates": 0} for store in STORES}
+
+    def checkpoint():
+        if not sheets_manager.save_standard_prices(standard_prices):
+            raise RuntimeError("Standard-price checkpoint failed")
+        for store, values in counts.items():
+            if values["new"] or values["refreshed"]:
+                budget.record_products(store, "staple backfill", values)
+                counts[store] = {"new": 0, "refreshed": 0, "duplicates": 0}
 
     for idx, item_name in enumerate(STAPLES, start=1):
         item_lower = item_name.lower()
@@ -172,9 +183,19 @@ def backfill() -> None:
                 skipped += 1
                 continue
 
-            result = scraper.get_live_price_result(store, item_name)
+            try:
+                result = scraper.get_live_price_result(store, item_name)
+            except BudgetExceeded as error:
+                checkpoint()
+                print(f"Backfill stopped at budget limit: {error}")
+                refresh_performance_dashboard(sheets_manager.sh)
+                return
+            except ProviderBlocked:
+                checkpoint()
+                raise
             price = result.get("price")
             if price is not None:
+                counts[store]["refreshed" if key in standard_prices else "new"] += 1
                 existing = standard_prices.get(key, {})
                 standard_prices[key] = {
                     **existing,
@@ -192,11 +213,10 @@ def backfill() -> None:
                 print(f"  MISS  {store:<12} {result.get('message', 'unavailable')}")
 
         if idx % SAVE_EVERY_N_ITEMS == 0:
-            sheets_manager.save_standard_prices(standard_prices)
+            checkpoint()
             print(f"  -- checkpoint saved at item {idx}/{len(STAPLES)} --")
 
-    if not sheets_manager.save_standard_prices(standard_prices):
-        raise RuntimeError("Standard prices were not saved; dashboard refresh skipped.")
+    checkpoint()
     refresh_performance_dashboard(sheets_manager.sh)
     print(
         f"\nDone. {succeeded} priced, {failed} missing, {skipped} already fresh. "

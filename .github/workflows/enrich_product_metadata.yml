@@ -10,6 +10,11 @@ concurrency:
 jobs:
   enrich_product_metadata:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SCRAPER_DAILY_BUDGET_USD: ${{ vars.SCRAPER_DAILY_BUDGET_USD || '20' }}
+      SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '80' }}
+      ZENROWS_MAX_REQUEST_COST_USD: ${{ vars.ZENROWS_MAX_REQUEST_COST_USD || '1' }}
 
     steps:
       - name: Checkout Repository

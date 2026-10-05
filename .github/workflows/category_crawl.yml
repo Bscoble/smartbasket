@@ -12,6 +12,13 @@ concurrency:
 jobs:
   category_crawl:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SCRAPER_DAILY_BUDGET_USD: ${{ vars.SCRAPER_DAILY_BUDGET_USD || '20' }}
+      SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '80' }}
+      APIFY_MAX_RUN_COST_USD: ${{ vars.APIFY_MAX_RUN_COST_USD || '1' }}
+      ZENROWS_MAX_REQUEST_COST_USD: ${{ vars.ZENROWS_MAX_REQUEST_COST_USD || '1' }}
+      EXPANDED_CATALOG_ENABLED: ${{ github.event_name == 'workflow_dispatch' && vars.EXPANDED_CATALOG_ENABLED == 'true' && 'true' || 'false' }}
 
     steps:
       - name: Checkout Repository
@@ -48,4 +55,4 @@ jobs:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
-        run: python bulk_category_backfill.py
+        run: python -u bulk_category_backfill.py

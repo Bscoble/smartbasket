@@ -14,12 +14,15 @@ from config import (
     STALE_REVALIDATION_BATCH_LIMITS,
     STANDARD_PRICE_MAX_AGE_DAYS,
     THREAD_POOL_MAX_WORKERS,
+    EXPANDED_REVALIDATION_BATCH_LIMITS,
 )
 from build_dashboard import refresh_performance_dashboard
 from modules.brands import merge_brand_metadata
 from modules.pricing import PriceScraper
 from modules.revalidation import select_stale_standard_prices
 from modules.sheets import SheetsManager
+from modules.maintenance import setup_maintenance_scraper, BudgetExceeded, ProviderBlocked
+from modules.discovery import DiscoveryQueue
 
 
 def require_environment_secret(name: str) -> str:
@@ -37,9 +40,11 @@ def build_dependencies() -> tuple[SheetsManager, PriceScraper]:
     spreadsheet = gspread.authorize(credentials).open_by_key(SPREADSHEET_ID)
     sheets_manager = SheetsManager(spreadsheet)
     scraper = PriceScraper(apify_token, zenrows_key)
-    scraper.usage_logger = lambda **kwargs: sheets_manager.log_scrape_run(
-        source="stale_revalidation", **kwargs
-    )
+    setup_maintenance_scraper(sheets_manager, scraper, "stale_revalidation")
+    sheets_manager.priority_queries = [
+        request["query"] for request in DiscoveryQueue(sheets_manager).load()
+        if request["status"] in {"pending", "retry", "revalidation"}
+    ]
     return sheets_manager, scraper
 
 
@@ -47,9 +52,17 @@ def revalidate_stale_prices() -> None:
     sheets_manager, scraper = build_dependencies()
     standard_prices = sheets_manager.load_standard_prices()
     shopping_item_names = sheets_manager.get_active_shopping_item_names()
+    shopping_item_names = list(dict.fromkeys(
+        shopping_item_names + getattr(sheets_manager, "priority_queries", []),
+    ))
+    limits = (
+        EXPANDED_REVALIDATION_BATCH_LIMITS
+        if os.environ.get("EXPANDED_CATALOG_ENABLED", "").lower() == "true"
+        else STALE_REVALIDATION_BATCH_LIMITS
+    )
     targets = select_stale_standard_prices(
         standard_prices,
-        STALE_REVALIDATION_BATCH_LIMITS,
+        limits,
         STANDARD_PRICE_MAX_AGE_DAYS,
         shopping_item_names=shopping_item_names,
     )
@@ -61,9 +74,11 @@ def revalidate_stale_prices() -> None:
     print(
         f"Revalidating {len(targets)} stale prices, prioritizing matches for "
         f"{len(shopping_item_names)} active shopping-list products: "
-        f"{dict(STALE_REVALIDATION_BATCH_LIMITS)}"
+        f"{dict(limits)}"
     )
     results = {}
+    blocked = None
+    budget_exhausted = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS) as executor:
         future_to_target = {
             executor.submit(
@@ -78,6 +93,11 @@ def revalidate_stale_prices() -> None:
             store, item, entry = future_to_target[future]
             try:
                 results[(store, item)] = (entry, future.result())
+            except BudgetExceeded as error:
+                budget_exhausted = True
+                print(f"Budget limit: {error}")
+            except ProviderBlocked as error:
+                blocked = error
             except Exception as error:
                 print(f"{store}: {item} failed with {error}")
 
@@ -103,8 +123,19 @@ def revalidate_stale_prices() -> None:
         if not sheets_manager.save_standard_prices(standard_prices):
             raise RuntimeError("Revalidated prices were not saved; dashboard refresh skipped.")
         refresh_performance_dashboard(sheets_manager.sh)
+        budget = getattr(scraper, "maintenance_budget", None)
+        if budget:
+            for store in limits:
+                refreshed = sum(s == store and result.get("price") is not None
+                                for (s, _), (_, result) in results.items())
+                if refreshed:
+                    budget.record_products(store, "stale revalidation", {
+                        "new": 0, "refreshed": refreshed, "duplicates": 0,
+                    })
     print(f"Completed {successful}/{len(targets)} stale-price revalidations.")
-    if not successful:
+    if blocked:
+        raise blocked
+    if not successful and not budget_exhausted:
         raise RuntimeError(
             "No stale prices were refreshed. Check scraper errors, provider credits, "
             "and API access in the job logs."

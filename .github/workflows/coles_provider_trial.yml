@@ -1,0 +1,35 @@
+name: Coles Provider Trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      actor:
+        description: Explicit candidate actor ID (owner/name); production is not changed
+        required: true
+        type: string
+
+concurrency:
+  group: catalogue-maintenance
+  cancel-in-progress: false
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Validate candidate pagination and metadata
+        env:
+          COLES_CANDIDATE_ACTOR: ${{ inputs.actor }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+          SCRAPER_DAILY_BUDGET_USD: ${{ vars.SCRAPER_DAILY_BUDGET_USD || '20' }}
+          SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '80' }}
+          APIFY_MAX_RUN_COST_USD: ${{ vars.APIFY_MAX_RUN_COST_USD || '1' }}
+          ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
+        run: python -u evaluate_coles_provider.py

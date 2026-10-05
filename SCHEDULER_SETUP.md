@@ -79,9 +79,11 @@ python3 cache_warmer.py
 | 18:30 | Category crawl | Discover retailer catalogue products and detail URLs |
 | Manual only | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
 | 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
+| Manual only | Requested Product Discovery | Discover missing shopping-list/search products |
+| Manual only | Coles Provider Trial | Test a candidate actor without changing production |
 
 The cache warmer runs only the staple-price refresh; category discovery runs
-in its own workflow, avoiding a duplicate crawl. All four workflows share a
+in its own workflow, avoiding a duplicate crawl. All maintenance workflows share a
 concurrency group so their Google Sheets writes do not overlap. Do not dispatch
 multiple maintenance workflows at once: GitHub concurrency keeps only one
 pending run, and a newer queued run can replace it.
@@ -155,6 +157,128 @@ Click on any workflow run to see:
 | Google Sheets errors | Verify GCP service account has Sheets access |
 
 ---
+
+## Catalogue Expansion and US$20 Daily Budget
+
+Expanded crawling and higher revalidation throughput are opt-in and manual-only.
+Existing scheduled jobs retain their original batch sizes. No new workflow
+automatically runs a candidate provider or discovers queued demand.
+
+### Repository Variables
+
+Set these under GitHub **Settings > Secrets and variables > Actions > Variables**:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SCRAPER_DAILY_BUDGET_USD` | `20` | Shared daily reservation budget, in USD |
+| `SCRAPER_MAX_REQUESTS_PER_DAY` | `80` | Shared paid-request/run cap, including retries |
+| `APIFY_MAX_RUN_COST_USD` | `1` | Reservation and Apify maximum-charge setting per actor run |
+| `ZENROWS_MAX_REQUEST_COST_USD` | `1` | Conservative reservation when ZenRows unit cost is unknown |
+| `ZENROWS_COST_PER_REQUEST_USD` | unset | Your measured all-in cost for a rendered premium-proxy request |
+| `EXPANDED_CATALOG_ENABLED` | unset/false | Set `true` to enable expansion on manual crawl/revalidation runs |
+
+The `Scraper Budget` worksheet is a persistent UTC-day ledger shared by cache
+warmup, category crawling, stale-price revalidation, requested discovery,
+metadata enrichment, and provider trials. A reservation must be saved before a
+paid call. Known actual Apify charges replace reservations; unknown costs and
+unfinished calls retain their full reservation. Ledger errors stop paid work.
+The local `backfill_standard_prices.py` entry point also uses this ledger.
+Retries each consume a reservation and a request slot. Billing/access failures
+stop further calls in that process.
+
+**This is a planning guard, not a guaranteed provider billing ceiling.** Apify's
+maximum-charge setting depends on the actor's billing model. ZenRows does not
+receive a per-request dollar cap: its configured cost or unknown-cost
+reservation may differ from the final bill. Set provider-side account spending
+limits as well, and verify actual costs before increasing request caps or
+reducing reservations. Charges from other apps, manual debugging scripts, or
+uncoordinated local jobs are outside this ledger. Do not run local maintenance
+alongside GitHub jobs: the GitHub concurrency group serializes cloud jobs, not
+arbitrary external processes.
+
+If all costs are unknown, the default $1 reservations permit at most 20 paid
+requests that UTC day, even though the request ceiling is 80. Prioritize
+shopping-list revalidation/discovery before broad discovery when manually
+allocating the budget. A budget stop is logged explicitly; already saved
+checkpoints remain available, and a subsequent day can resume.
+
+### Discovery and Refresh Behaviour
+
+- Expanded Coles rotates **25 queries per run**, instead of 10, through broad,
+  specific product-family, brand and package-size searches. Its current actor
+  still uses the first page only.
+- Expanded Woolworths/Aldi rotate **20 search targets per store**, with up to
+  three sequential pages per target. Work alternates between stores rather
+  than exhausting every Woolworths target before starting Coles/Aldi.
+- Expanded revalidation has target ceilings of **200 Woolworths, 100 Coles,
+  and 150 Aldi**. These are selection ceilings, not promised refresh counts:
+  the daily budget, request cap and provider success rates govern actual work.
+- Stale matches for active shopping lists and queued requests take priority.
+  Existing fresh matches are skipped; reliable app prices still expire after
+  14 days.
+- Missing searches and unpriced comparisons enqueue only product descriptions
+  and stores, never customer identifiers. The manual **Requested Product
+  Discovery** workflow also seeds missing matches from saved shopping lists.
+  It processes up to 15 requests, tries at most three times, and cools failed
+  requests down for a day. Existing stale matches go to revalidation instead.
+- Every successful page is checkpointed before its cursor can be reused in
+  later jobs. Catalogue replacement uses a single values write, rather than
+  clearing the table first; table grids expand as needed.
+- Failed pages do not advance their page cursor. Ambiguous empty results are
+  retried and cooled down, not interpreted as proven end-of-results. After
+  three empty visits, the query restarts at page one after cooldown, avoiding
+  indefinite spending at an unproductive page.
+- Identical page signatures trigger a wrap and cooldown. Explicit pagination
+  metadata, when supplied by the actor for the requested page, can confirm
+  exhaustion and wrap the cursor. Merely receiving fewer than 20 products
+  is not treated as proof of exhaustion.
+
+### Growth and Efficiency Reporting
+
+`Catalogue Metrics` records new entries, existing entries refreshed and
+duplicate products **after successful persistence**. Duplicates are suppressed
+within a run using retailer IDs or product URLs where available; name keys are
+the fallback. Multiple jobs on the same day can refresh the same product, so
+aggregated refresh counts represent refresh operations, not a distinct daily
+product count.
+
+The `Performance Dashboard` now includes catalogue growth/refresh metrics,
+logged request/error counts, known/unknown costs, cost per new or refreshed
+entry, reservation versus actual spend, freshness by store, and basket
+coverage. Cost efficiency prefers the persistent spend ledger where available;
+ratios remain blank if any request cost in that group is unknown. Legacy
+comparison events without matched-item counts have unknown coverage, not zero.
+The crawler's total products returned is no longer labelled as new additions.
+
+### Manual Rollout
+
+1. Deploy the changes to `master`, confirm scraper credits and provider-side
+   limits, and configure the variables above.
+2. Run **Stale Price Revalidation**, then **Requested Product Discovery**,
+   waiting for each to complete before dispatching the next job.
+3. Set `EXPANDED_CATALOG_ENABLED=true` and manually run **Overnight Category
+   Crawl** when the ledger has budget remaining.
+4. Compare new entries, refreshed entries, freshness, basket coverage and
+   cost-efficiency over several runs. Re-run **Compare Prices** in the app to
+   recompute a report; existing reports do not automatically refresh.
+5. Increase throughput only after measuring real provider charges and
+   verifying increased coverage. Automatic expanded scheduling is deliberately
+   not enabled by this change.
+
+### Alternative Coles Provider Trial
+
+The manual **Coles Provider Trial** accepts an explicit candidate actor ID and
+makes two budgeted requests for pages one and two of a biscuits search.
+The candidate must accept `urls`/`max_items_per_url` input and return the
+supported Coles payload schema. The trial requires product IDs, product URLs,
+prices and unit metadata, and at least **80% new product IDs on page two**.
+Empty results, missing metadata and repeating pages fail the trial.
+
+The trial never writes to the catalogue or switches the production actor.
+A passing result is a prerequisite for review, not proof of broad reliability:
+check additional categories, package sizes, price accuracy, retailer terms,
+location-specific pricing and real billing before adopting it. No candidate
+has been validated live as part of this implementation.
 
 ## Alternative: Local Cron Job
 

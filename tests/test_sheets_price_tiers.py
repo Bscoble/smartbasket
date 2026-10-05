@@ -28,9 +28,41 @@ class FakeWorksheet:
     def clear(self):
         self.values = []
 
-    def update(self, range_name, values):
+    def resize(self, rows):
+        self.row_count = rows
+
+    def update(self, range_name, values, **kwargs):
         row_number = int(range_name.split(":", 1)[0][1:])
-        self.values[row_number - 1] = list(values[0])
+        while len(self.values) < row_number - 1 + len(values):
+            self.values.append([])
+        self.values[row_number - 1:row_number - 1 + len(values)] = [list(row) for row in values]
+
+
+def test_replacement_table_failure_never_clears_saved_catalogue():
+    class FailingWorksheet(FakeWorksheet):
+        def update(self, **kwargs):
+            raise RuntimeError("Write failed")
+
+        def clear(self):
+            raise AssertionError("Catalogue must not be cleared before replacement")
+
+    spreadsheet = FakeSpreadsheet([])
+    spreadsheet.worksheet_value = FailingWorksheet([["Old catalogue"]])
+    manager = SheetsManager(spreadsheet)
+    assert not manager.save_standard_prices({})
+    assert spreadsheet.worksheet_value.values == [["Old catalogue"]]
+
+
+def test_replacement_removes_old_tail_and_expands_grid():
+    spreadsheet = FakeSpreadsheet([["Old header"], ["Old row"], ["Old tail"]])
+    manager = SheetsManager(spreadsheet)
+    assert manager.save_standard_prices({})
+    assert spreadsheet.worksheet_value.values[1:] == [[""] * 15, [""] * 15]
+    manager._replace_table_values(
+        "Standard Prices", spreadsheet.worksheet_value, [["Header"], ["1"], ["2"], ["3"]],
+    )
+    assert spreadsheet.worksheet_value.row_count == 4
+    assert spreadsheet.worksheet_value.values == [["Header"], ["1"], ["2"], ["3"]]
 
 
 class FakeSpreadsheet:
@@ -72,6 +104,20 @@ def test_active_shopping_names_surface_read_errors(caplog):
     with pytest.raises(RuntimeError, match="Sheets read unavailable"):
         manager.get_active_shopping_item_names()
     assert "Error loading active shopping-list products" in caplog.text
+
+
+def test_maintenance_reads_fail_instead_of_overwriting_with_empty_catalogue():
+    class BrokenSpreadsheet:
+        def worksheet(self, _name):
+            raise RuntimeError("Sheets unavailable")
+    manager = SheetsManager(BrokenSpreadsheet())
+    manager.strict_reads = True
+    for load in (
+        manager.load_price_cache, manager.load_standard_prices,
+        manager.load_daily_specials, manager.load_crawl_state,
+    ):
+        with pytest.raises(RuntimeError, match="Sheets unavailable"):
+            load()
 
 
 def test_standard_price_valid_within_max_age():

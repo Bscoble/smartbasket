@@ -10,7 +10,7 @@ import re
 import time
 from datetime import timedelta
 from typing import Optional, Dict, Any
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse, parse_qs
 import requests
 from bs4 import BeautifulSoup
 from apify_client import ApifyClient
@@ -38,6 +38,8 @@ from helpers import (
 )
 from modules.brands import resolve_brand
 from modules.gtin import normalize_gtin
+from modules.maintenance import BudgetExceeded, ProviderBlocked, apify_call_options
+from modules.catalog_matching import find_local_price_matches
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,57 @@ class PriceScraper:
         # Optional callable(store, query, status, duration_secs, cost_usd, product_count) for
         # usage/cost tracking. Left as None by default so scraping never depends on logging.
         self.usage_logger = None
+        self.maintenance_budget = None
         logger.info("PriceScraper initialized")
+
+    def _call_actor(self, client, actor, store, run_input):
+        budget = self.maintenance_budget
+        reservation = budget.reserve(store, "apify") if budget else None
+        run = None
+        try:
+            run = client.actor(actor).call(
+                run_input=run_input,
+                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                run_timeout=timedelta(seconds=APIFY_RUN_TIMEOUT),
+                **apify_call_options(budget),
+            )
+            if run is not None and str(run.status) in {"RUNNING", "READY"}:
+                client.run(run.id).abort()
+            return run
+        except (BudgetExceeded, ProviderBlocked):
+            raise
+        except Exception as error:
+            text = str(error).lower()
+            if budget and any(word in text for word in (
+                "payment", "credit", "hard limit", "unauthorized", "forbidden",
+            )):
+                budget.blocked = True
+                raise ProviderBlocked("Apify billing/access error; paid requests stopped") from error
+            raise
+        finally:
+            if reservation:
+                budget.settle(
+                    reservation, getattr(run, "usage_total_usd", None),
+                    "settled" if run and run.status == "SUCCEEDED" else "error",
+                )
+
+    def _zenrows_get(self, store, params):
+        budget = self.maintenance_budget
+        reservation = budget.reserve(store, "zenrows") if budget else None
+        succeeded = False
+        try:
+            response = requests.get(ZENROWS_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+            if budget and response.status_code in {401, 402, 403, 429}:
+                budget.blocked = True
+                raise ProviderBlocked(
+                    f"ZenRows returned HTTP {response.status_code}; paid requests stopped"
+                )
+            response.raise_for_status()
+            succeeded = True
+            return response
+        finally:
+            if reservation:
+                budget.settle(reservation, status="settled" if succeeded else "error")
 
     def _log_apify_usage(self, store: str, query: str, run, product_count: int = 0) -> None:
         """Best-effort logging of an Apify run's cost/duration/status; never raises."""
@@ -161,6 +213,8 @@ class PriceScraper:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
         except requests.RequestException:
             return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except (BudgetExceeded, ProviderBlocked):
+            raise
         except Exception as e:
             logger.error(f"Error fetching structured price for {store}/{item_name}: {e}", exc_info=True)
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
@@ -185,50 +239,89 @@ class PriceScraper:
         pages embed a full product payload (Nuxt __NUXT_DATA__ JSON) that can
         be parsed directly without per-item CSS scraping.
         """
-        if store == "Aldi":
-            return self._get_aldi_bulk_products(urls)
-
-        if not self.apify_token:
-            return []
-
         url_list = [urls] if isinstance(urls, str) else list(urls)
-        query_label = "|".join(url_list)
+        products = []
+        for url in url_list:
+            result = self.get_bulk_products_result(store, url, max_items)
+            products.extend(result["products"])
+        return products
 
+    def get_bulk_products_result(self, store: str, url: str, max_items: int = 20) -> Dict[str, Any]:
+        """Return explicit listing outcomes; empty actor data is not proven exhaustion."""
+        if store not in STORES:
+            raise ValueError(f"Unknown store: {store}")
+        if not (self.zenrows_key if store == "Aldi" else self.apify_token):
+            logger.error("Missing scraper credentials for %s", store)
+            return {"status": "error", "products": [], "message": "Missing scraper credentials"}
         for attempt in range(1, BULK_SCRAPE_MAX_RETRIES + 2):
             try:
-                store_config = STORES[store]
-                client = ApifyClient(self.apify_token)
-                run_input = {
-                    "urls": url_list,
-                    **{**APIFY_DEFAULT_CONFIG, "max_items_per_url": max_items},
-                }
-                run = client.actor(store_config["api_actor"]).call(
-                    run_input=run_input,
-                    wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-                )
-                if run is None or run.status != "SUCCEEDED":
-                    self._log_apify_usage(store, query_label, run)
-                    return []
-
-                results = []
-                for product in self._iter_apify_products(client.dataset(run.default_dataset_id).list_items().items):
-                    info = self._extract_bulk_product_info(store, product)
-                    if info and is_valid_price(info["price"]) and info["price"] < PRICE_VALIDITY_THRESHOLD:
-                        results.append(info)
-                self._log_apify_usage(store, query_label, run, len(results))
-
-                if results or attempt > BULK_SCRAPE_MAX_RETRIES:
-                    return results
-
-                logger.info(
-                    f"Zero results for {store}/{query_label} on attempt {attempt}; retrying"
-                )
+                exhausted = False
+                if store == "Aldi":
+                    started_at = time.monotonic()
+                    response = self._zenrows_get(store, {
+                        "apikey": self.zenrows_key, "url": url,
+                        **ZENROWS_PARAMS, "wait": "4000",
+                    })
+                    results = self._parse_aldi_nuxt_products(response.text)
+                    self._log_zenrows_usage(store, url, "SUCCEEDED" if results else "empty", started_at, len(results))
+                else:
+                    client = ApifyClient(self.apify_token)
+                    run = self._call_actor(client, STORES[store]["api_actor"], store, {
+                        "urls": [url], **{**APIFY_DEFAULT_CONFIG, "max_items_per_url": max_items},
+                    })
+                    if run is None or run.status != "SUCCEEDED":
+                        self._log_apify_usage(store, url, run)
+                        return {"status": "error", "products": [], "message": "Actor did not succeed"}
+                    items = client.dataset(run.default_dataset_id).list_items().items
+                    exhausted = self._confirmed_listing_end(items, url)
+                    results = [
+                        info for product in self._iter_apify_products(
+                            items,
+                        )
+                        if (info := self._extract_bulk_product_info(store, product))
+                    ]
+                    self._log_apify_usage(store, url, run, len(results))
+                results = [
+                    product for product in results
+                    if is_valid_price(product["price"]) and product["price"] < PRICE_VALIDITY_THRESHOLD
+                ]
+                for product in results:
+                    product["product_id"] = str(product.get("product_id") or product.pop("_sku", "") or "")
+                if results or exhausted or attempt > BULK_SCRAPE_MAX_RETRIES:
+                    return {
+                        "status": "ok" if results else "end" if exhausted else "empty",
+                        "products": results, "has_more": False if exhausted else None,
+                        "message": "" if results else "Empty data; exhaustion is not confirmed",
+                        "product_ids": [
+                            product.get("product_id") or product.get("source_url") or product["product_name"].lower()
+                            for product in results
+                        ],
+                    }
+                logger.warning("Empty listing for %s/%s on attempt %s; retrying", store, url, attempt)
                 time.sleep(BULK_SCRAPE_RETRY_DELAY_SECS)
+            except (BudgetExceeded, ProviderBlocked):
+                raise
             except Exception as e:
-                logger.error(f"Bulk category scrape failed for {store}/{url_list}: {e}", exc_info=True)
-                return []
+                logger.error("Bulk category scrape failed for %s/%s: %s", store, url, e, exc_info=True)
+                return {"status": "error", "products": [], "message": str(e)}
 
-        return []
+    @staticmethod
+    def _confirmed_listing_end(items, url):
+        query = parse_qs(urlparse(url).query)
+        requested = query.get("pageNumber", query.get("page", ["1"]))[0]
+        for item in items:
+            pagination = item.get("pagination") if isinstance(item, dict) else None
+            if not isinstance(pagination, dict):
+                continue
+            page = pagination.get("page", pagination.get("currentPage"))
+            if str(page) != requested:
+                continue
+            if pagination.get("hasNextPage") is False:
+                return True
+            total_pages = pagination.get("totalPages")
+            if isinstance(total_pages, int) and total_pages > 0 and int(requested) >= total_pages:
+                return True
+        return False
 
     def _get_aldi_bulk_products(self, urls) -> "list[Dict[str, Any]]":
         """Fetch one or more Aldi search/results pages via ZenRows and parse every product."""
@@ -242,15 +335,13 @@ class PriceScraper:
         for target_url in url_list:
             started_at = time.monotonic()
             try:
-                response = requests.get(
-                    ZENROWS_API_URL,
-                    params={
+                response = self._zenrows_get(
+                    "Aldi", {
                         "apikey": self.zenrows_key,
                         "url": target_url,
                         **ZENROWS_PARAMS,
                         "wait": "4000",
                     },
-                    timeout=REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
             except requests.RequestException as e:
@@ -358,6 +449,7 @@ class PriceScraper:
         brand_metadata = resolve_brand(product_name, record.get("brandName"), "Aldi")
         return {
             "product_name": product_name,
+            "product_id": str(record.get("sku") or ""),
             **brand_metadata,
             "barcode": PriceScraper._extract_product_barcode(record),
             "source_url": PriceScraper._extract_product_source_url("Aldi", record),
@@ -435,6 +527,7 @@ class PriceScraper:
         brand_metadata = resolve_brand(product_name, brand, store)
         return {
             "product_name": product_name,
+            "product_id": str(product.get("stockcode") or product.get("id") or product.get("sku") or ""),
             **brand_metadata,
             "barcode": PriceScraper._extract_product_barcode(product),
             "source_url": PriceScraper._extract_product_source_url(store, product),
@@ -463,10 +556,9 @@ class PriceScraper:
             search_candidates = build_store_search_candidates(item_name, store)[:max_search_candidates]
             for search_query in search_candidates:
                 search_url = store_config["search_url"].format(quote(search_query))
-                run = client.actor(store_config["api_actor"]).call(
-                    run_input={"urls": [search_url], **APIFY_DEFAULT_CONFIG},
-                    wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-                )
+                run = self._call_actor(client, store_config["api_actor"], store, {
+                    "urls": [search_url], **APIFY_DEFAULT_CONFIG,
+                })
                 if run is None or run.status != "SUCCEEDED":
                     self._log_apify_usage(store, search_query, run)
                     return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
@@ -502,6 +594,8 @@ class PriceScraper:
             return {"price": None, "status": "timeout", "message": "The supermarket request timed out"}
         except requests.RequestException:
             return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except (BudgetExceeded, ProviderBlocked):
+            raise
         except Exception as e:
             logger.error(f"Apify error for {store}/{item_name}: {e}", exc_info=True)
             return {"price": None, "status": "scraper_error", "message": "The supermarket scraper failed"}
@@ -579,18 +673,36 @@ class PriceScraper:
 
         try:
             target_url = STORES[store]["search_url"].format(quote(item_name))
-            response = requests.get(
-                ZENROWS_API_URL,
-                params={
+            response = self._zenrows_get(
+                store, {
                     "apikey": self.zenrows_key,
                     "url": target_url,
                     **ZENROWS_PARAMS,
                     "wait": "5000",
                 },
-                timeout=REQUEST_TIMEOUT,
             )
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
+            if soup.find("script", id="__NUXT_DATA__"):
+                products = self._parse_aldi_nuxt_products(response.text)
+                matches = find_local_price_matches(
+                    item_name, [store],
+                    {(store, product["product_name"].lower()): product for product in products},
+                    lambda product: is_valid_price(product["price"])
+                    and product["price"] < PRICE_VALIDITY_THRESHOLD,
+                )
+                if store in matches:
+                    product = matches[store][1]
+                    log_result("SUCCEEDED", len(products))
+                    return {
+                        **product, "status": "ok",
+                        "message": f"Price found: {product['product_name']}",
+                    }
+                log_result("not_found")
+                return {
+                    "price": None, "status": "not_found",
+                    "message": "No matching product price was found in the retailer payload",
+                }
             selector = ".box--price .value, .product-price, .price, span.price" if store == "Aldi" else ".item-price, .price"
             price_element = soup.select_one(selector)
             price = self._parse_price_from_element(price_element.text, store) if price_element else None
@@ -615,6 +727,8 @@ class PriceScraper:
         except requests.RequestException:
             log_result("connection")
             return {"price": None, "status": "connection", "message": "Could not connect to the supermarket service"}
+        except (BudgetExceeded, ProviderBlocked):
+            raise
         except Exception as e:
             logger.error(f"ZenRows error for {store}/{item_name}: {e}", exc_info=True)
             log_result("scraper_error")
@@ -650,10 +764,7 @@ class PriceScraper:
             }
             
             logger.debug(f"Calling Apify actor for {store}: {actor}")
-            run = client.actor(actor).call(
-                run_input=run_input,
-                wait_duration=timedelta(seconds=APIFY_RUN_TIMEOUT),
-            )
+            run = self._call_actor(client, actor, store, run_input)
             if run is None or run.status != "SUCCEEDED":
                 logger.debug(f"Apify run for {store}/{item_name} did not finish within {APIFY_RUN_TIMEOUT}s")
                 return APIFY_DEFAULT_PRICE
@@ -667,6 +778,8 @@ class PriceScraper:
             
             logger.debug(f"No valid price found via Apify for {item_name} at {store}")
             return APIFY_DEFAULT_PRICE
+        except (BudgetExceeded, ProviderBlocked):
+            raise
         except Exception as e:
             logger.error(f"Apify error for {store}/{item_name}: {e}", exc_info=True)
             return APIFY_DEFAULT_PRICE
@@ -811,11 +924,7 @@ class PriceScraper:
             }
             
             logger.debug(f"Fetching from {store} via ZenRows: {target_url}")
-            response = requests.get(
-                ZENROWS_API_URL,
-                params=params,
-                timeout=REQUEST_TIMEOUT,
-            )
+            response = self._zenrows_get(store, params)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, "html.parser")
@@ -841,6 +950,8 @@ class PriceScraper:
         except requests.RequestException as e:
             logger.error(f"ZenRows request error for {store}/{item_name}: {e}")
             return DEFAULT_PRICE_FALLBACK
+        except (BudgetExceeded, ProviderBlocked):
+            raise
         except Exception as e:
             logger.error(f"ZenRows parsing error for {store}/{item_name}: {e}", exc_info=True)
             return DEFAULT_PRICE_FALLBACK

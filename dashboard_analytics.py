@@ -18,7 +18,10 @@ dashboard sheet and chart.
 
 from collections import defaultdict
 from datetime import datetime, timedelta
+import math
 from typing import List
+
+from config import STANDARD_PRICE_MAX_AGE_DAYS
 
 
 def _safe_float(value: str, default: float = 0.0) -> float:
@@ -31,6 +34,261 @@ def _safe_float(value: str, default: float = 0.0) -> float:
 def _date_part(timestamp: str) -> str:
     """Return the YYYY-MM-DD portion of an ISO timestamp or plain date string."""
     return (timestamp or "")[:10]
+
+
+def _optional_nonnegative_float(value: str):
+    """Parse a recorded USD value without turning missing or invalid data into zero."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    return amount if math.isfinite(amount) and amount >= 0 else None
+
+
+def aggregate_catalogue_metrics(rows: List[List[str]]) -> List[List[str]]:
+    """Group successfully persisted catalogue checkpoint metrics by date, source, and store."""
+    totals: dict = defaultdict(lambda: [0, 0, 0])
+    for row in rows[1:] if rows else []:
+        if len(row) < 7:
+            continue
+        timestamp, source, store = row[:3]
+        if not timestamp or not store:
+            continue
+        key = (_date_part(timestamp), source, store)
+        for index, value in enumerate(row[4:7]):
+            try:
+                totals[key][index] += max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+
+    table = [["Date", "Source", "Store", "New Products", "Refreshed Products", "Duplicate Products"]]
+    for (date, source, store), counts in sorted(totals.items()):
+        table.append([date, source, store, *(str(count) for count in counts)])
+    return table
+
+
+def aggregate_scrape_requests_and_errors(rows: List[List[str]]) -> List[List[str]]:
+    """Count logged scraper requests and non-success statuses by date, source, and store."""
+    counts: dict = defaultdict(lambda: [0, 0])
+    for row in rows[1:] if rows else []:
+        if len(row) < 5:
+            continue
+        timestamp, source, store, _query, status = row[:5]
+        if not timestamp or not store:
+            continue
+        key = (_date_part(timestamp), source, store)
+        counts[key][0] += 1
+        if status.strip().lower() not in ("ok", "succeeded"):
+            counts[key][1] += 1
+
+    table = [["Date", "Source", "Store", "Requests", "Errors"]]
+    for (date, source, store), (requests, errors) in sorted(counts.items()):
+        table.append([date, source, store, str(requests), str(errors)])
+    return table
+
+
+def aggregate_catalogue_cost_efficiency(
+    catalogue_rows: List[List[str]],
+    scrape_rows: List[List[str]],
+    budget_rows: List[List[str]] = None,
+) -> List[List[str]]:
+    """Compare recorded scrape spend with new/refreshed products, preserving unknown costs."""
+    products: dict = defaultdict(lambda: [0, 0])
+    for row in catalogue_rows[1:] if catalogue_rows else []:
+        if len(row) < 7 or not row[0] or not row[2]:
+            continue
+        key = (_date_part(row[0]), row[1], row[2])
+        for index, value in enumerate(row[4:6]):
+            try:
+                products[key][index] += max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+
+    if budget_rows and len(budget_rows) > 1:
+        covered = {(row[0][:10], row[2], row[3]) for row in budget_rows[1:] if len(row) >= 7}
+        scrape_rows = [scrape_rows[0] if scrape_rows else []] + [
+            row for row in scrape_rows[1:]
+            if len(row) >= 7 and (row[0][:10], row[1], row[2]) not in covered
+        ] + [
+            [row[0], row[2], row[3], "", row[6], "", row[5]]
+            for row in budget_rows[1:] if len(row) >= 7
+        ]
+    spend: dict = defaultdict(lambda: [0.0, 0, 0])
+    for row in scrape_rows[1:] if scrape_rows else []:
+        if len(row) < 7 or not row[0] or not row[2]:
+            continue
+        key = (_date_part(row[0]), row[1], row[2])
+        cost = _optional_nonnegative_float(row[6])
+        if cost is None:
+            spend[key][2] += 1
+        else:
+            spend[key][0] += cost
+            spend[key][1] += 1
+
+    table = [[
+        "Date", "Source", "Store", "New Products", "Refreshed Products",
+        "Known Requests", "Unpriced Requests", "Recorded Cost USD",
+        "Recorded USD / New Product", "Recorded USD / Refreshed Product",
+    ]]
+    for key in sorted(set(products) | set(spend)):
+        new_count, refreshed_count = products[key]
+        recorded_cost, known_requests, unpriced_requests = spend[key]
+        cost_text = f"{recorded_cost:.4f}" if known_requests else ""
+        new_ratio = (
+            f"{recorded_cost / new_count:.4f}"
+            if known_requests and new_count and not unpriced_requests else ""
+        )
+        refreshed_ratio = (
+            f"{recorded_cost / refreshed_count:.4f}"
+            if known_requests and refreshed_count and not unpriced_requests else ""
+        )
+        table.append([
+            *key,
+            str(new_count),
+            str(refreshed_count),
+            str(known_requests),
+            str(unpriced_requests),
+            cost_text,
+            new_ratio,
+            refreshed_ratio,
+        ])
+    return table
+
+
+def aggregate_scraper_budget(rows: List[List[str]]) -> List[List[str]]:
+    """Summarize reservation caps separately from known and unknown actual spend."""
+    totals: dict = defaultdict(lambda: [0, 0.0, 0.0, 0, 0])
+    status_order = {"reserved": 0, "settled": 1, "error": 2, "blocked": 3, "unknown": 4}
+    for row in rows[1:] if rows else []:
+        if len(row) < 7 or not row[0] or not row[3]:
+            continue
+        timestamp, _reservation_id, source, store, reserved_text, actual_text, status_text = row[:7]
+        status = status_text.strip().lower() or "unknown"
+        key = (_date_part(timestamp), source, store, status)
+        totals[key][0] += 1
+
+        reserved = _optional_nonnegative_float(reserved_text)
+        if reserved is not None:
+            totals[key][1] += reserved
+
+        actual = _optional_nonnegative_float(actual_text)
+        if actual is None:
+            totals[key][4] += 1
+        else:
+            totals[key][2] += actual
+            totals[key][3] += 1
+
+    table = [[
+        "Date", "Source", "Store", "Status", "Requests",
+        "Reserved USD (Planning Cap)", "Actual USD (Known)", "Actual USD Missing",
+    ]]
+    for key in sorted(
+        totals,
+        key=lambda item: (item[0], item[1], item[2], status_order.get(item[3], 5), item[3]),
+    ):
+        requests, reserved, actual, known_actual_count, missing_actual_count = totals[key]
+        table.append([
+            *key,
+            str(requests),
+            f"{reserved:.4f}",
+            f"{actual:.4f}" if known_actual_count else "",
+            str(missing_actual_count),
+        ])
+    return table
+
+
+def aggregate_catalogue_freshness(
+    standard_rows: List[List[str]],
+    now: datetime = None,
+    max_age_days: int = STANDARD_PRICE_MAX_AGE_DAYS,
+) -> List[List[str]]:
+    """Count distinct store/product keys by freshness, using the scraper's strict age limit."""
+    now = now or datetime.now()
+    latest_verified: dict = {}
+    product_stores: dict = {}
+    for row in standard_rows[1:] if standard_rows else []:
+        if len(row) < 2 or not row[0].strip() or not row[1].strip():
+            continue
+        store = row[0].strip()
+        key = (store.casefold(), row[1].strip().casefold())
+        product_stores[key] = store
+        verified = None
+        if len(row) > 4 and row[4].strip():
+            try:
+                verified = datetime.fromisoformat(row[4].strip().replace("Z", "+00:00"))
+                if verified.tzinfo is not None:
+                    verified = verified.replace(tzinfo=None)
+            except ValueError:
+                pass
+        if verified is not None and (key not in latest_verified or verified > latest_verified[key]):
+            latest_verified[key] = verified
+
+    counts: dict = defaultdict(lambda: [0, 0, 0])
+    for key, store in product_stores.items():
+        verified = latest_verified.get(key)
+        if verified is None:
+            counts[store][2] += 1
+        elif now - verified < timedelta(days=max_age_days):
+            counts[store][0] += 1
+        else:
+            counts[store][1] += 1
+
+    table = [[
+        "Store", f"Current (<{max_age_days} Days)", f"Stale ({max_age_days}+ Days)", "Unknown Freshness",
+        "Distinct Products",
+    ]]
+    total_current = total_stale = total_unknown = 0
+    for store in sorted(counts):
+        current, stale, unknown = counts[store]
+        total_current += current
+        total_stale += stale
+        total_unknown += unknown
+        table.append([store, str(current), str(stale), str(unknown), str(current + stale + unknown)])
+    if counts:
+        table.append([
+            "Total", str(total_current), str(total_stale), str(total_unknown),
+            str(total_current + total_stale + total_unknown),
+        ])
+    return table
+
+
+def aggregate_comparison_basket_coverage(rows: List[List[str]]) -> List[List[str]]:
+    """Summarize matched versus requested items for comparison_run events without user identifiers."""
+    totals: dict = defaultdict(lambda: {"runs": 0, "measured": 0, "matched": 0, "items": 0})
+    for row in rows[1:] if rows else []:
+        if len(row) < 7 or row[2] != "comparison_run" or not row[0]:
+            continue
+        date = _date_part(row[0])
+        totals[date]["runs"] += 1
+        try:
+            matched = int(row[4]) if row[4].strip() else None
+            items = int(row[5]) if row[5].strip() else None
+        except (TypeError, ValueError):
+            continue
+        if matched is None or items is None or matched < 0 or items < 0:
+            continue
+        totals[date]["measured"] += 1
+        totals[date]["matched"] += matched
+        totals[date]["items"] += items
+
+    table = [[
+        "Date", "Comparison Runs", "Measured Runs", "Matched Items",
+        "Items Total", "Match Coverage %",
+    ]]
+    for date, values in sorted(totals.items()):
+        coverage = (
+            f"{100 * values['matched'] / values['items']:.1f}"
+            if values["measured"] and values["items"] else ""
+        )
+        table.append([
+            date,
+            str(values["runs"]),
+            str(values["measured"]),
+            str(values["matched"]) if values["measured"] else "",
+            str(values["items"]) if values["measured"] else "",
+            coverage,
+        ])
+    return table
 
 
 def aggregate_catalog_size_over_time(rows: List[List[str]]) -> List[List[str]]:

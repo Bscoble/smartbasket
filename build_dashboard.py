@@ -25,9 +25,15 @@ from modules.sheets import SheetsManager
 from dashboard_analytics import (
     aggregate_category_coverage,
     aggregate_catalog_size_over_time,
+    aggregate_catalogue_cost_efficiency,
+    aggregate_catalogue_freshness,
+    aggregate_catalogue_metrics,
+    aggregate_comparison_basket_coverage,
     aggregate_oldest_price_age_by_category,
     aggregate_scrape_cost_by_day,
     aggregate_scrape_issues_by_day,
+    aggregate_scrape_requests_and_errors,
+    aggregate_scraper_budget,
     aggregate_store_health,
     aggregate_shopping_activity_by_day,
     aggregate_signups_last_n_days,
@@ -66,8 +72,11 @@ def _get_or_create_worksheet(spreadsheet: gspread.Spreadsheet, name: str, rows: 
 
 def _read_rows(spreadsheet: gspread.Spreadsheet, worksheet_key: str) -> list:
     """Read raw rows from an existing log worksheet; returns [] if it doesn't exist yet."""
+    worksheet_name = WORKSHEET_NAMES.get(worksheet_key)
+    if not worksheet_name:
+        return []
     try:
-        ws = spreadsheet.worksheet(WORKSHEET_NAMES[worksheet_key])
+        ws = spreadsheet.worksheet(worksheet_name)
     except gspread.WorksheetNotFound:
         return []
     return ws.get_all_values()
@@ -100,6 +109,8 @@ def build_dashboard_tables(spreadsheet: gspread.Spreadsheet) -> list:
     scrape_rows = _read_rows(spreadsheet, "scrape_log")
     event_rows = _read_rows(spreadsheet, "user_events")
     user_rows = _read_rows(spreadsheet, "users")
+    catalogue_metrics_rows = _read_rows(spreadsheet, "catalogue_metrics")
+    scraper_budget_rows = _read_rows(spreadsheet, "scraper_budget")
 
     return [
         ("Catalog Size Over Time", aggregate_catalog_size_over_time(catalog_rows), "LINE"),
@@ -112,6 +123,16 @@ def build_dashboard_tables(spreadsheet: gspread.Spreadsheet) -> list:
         ("New Signups (Last 7 Days)", aggregate_signups_last_n_days(user_rows), "COLUMN"),
         ("Single vs Split Shopping", aggregate_shop_mode_split(event_rows), "PIE"),
         ("Referral & Contact Events by Week", aggregate_engagement_by_week(event_rows), "COLUMN"),
+        ("Catalogue Discovery Metrics", aggregate_catalogue_metrics(catalogue_metrics_rows), None),
+        ("Scrape Requests & Errors", aggregate_scrape_requests_and_errors(scrape_rows), None),
+        (
+            "Recorded Cost per New or Refreshed Product",
+            aggregate_catalogue_cost_efficiency(catalogue_metrics_rows, scrape_rows, scraper_budget_rows),
+            None,
+        ),
+        ("Scraper Reservations and Actuals", aggregate_scraper_budget(scraper_budget_rows), None),
+        ("Catalogue Freshness by Store", aggregate_catalogue_freshness(standard_rows), None),
+        ("Comparison Basket Coverage", aggregate_comparison_basket_coverage(event_rows), None),
     ]
 
 
@@ -268,10 +289,11 @@ def write_dashboard(spreadsheet: gspread.Spreadsheet, tables: list) -> None:
             format_requests.append(_bold_row_request(ws.id, data_start_row, len(table[0])))
             if table[-1][0] == "Total":
                 format_requests.append(_bold_row_request(ws.id, data_start_row + len(table) - 1, len(table[0])))
-            if chart_type == "PIE":
-                chart_requests.append(_pie_chart_request(ws.id, title, table, data_start_row))
-            else:
-                chart_requests.append(_basic_chart_request(ws.id, chart_type, title, table, data_start_row))
+            if chart_type:
+                if chart_type == "PIE":
+                    chart_requests.append(_pie_chart_request(ws.id, title, table, data_start_row))
+                else:
+                    chart_requests.append(_basic_chart_request(ws.id, chart_type, title, table, data_start_row))
         else:
             ws.update(values=[["No data yet"]], range_name=f"A{data_start_row + 1}")
 
