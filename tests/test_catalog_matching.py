@@ -21,6 +21,24 @@ def _is_fresh(entry):
     return datetime.now() - entry["last_verified"] < timedelta(days=14)
 
 
+def test_support_banner_uses_icon_and_escapes_text(monkeypatch):
+    import app
+
+    rendered = []
+    monkeypatch.setattr(
+        app.st, "markdown",
+        lambda body, **kwargs: rendered.append((body, kwargs)),
+    )
+
+    app.render_support_banner("Contact <Support>", "Help & sharing")
+
+    body, kwargs = rendered[0]
+    assert f'src="{app.BRAND_MARK_DATA_URI}"' in body
+    assert "Contact &lt;Support&gt;" in body
+    assert "Help &amp; sharing" in body
+    assert kwargs["unsafe_allow_html"] is True
+
+
 def test_local_price_matching_finds_name_variants_per_store():
     prices = {
         ("Coles", "arnotts tim tam double coat 200g"): _entry("Arnott's Tim Tam Double Coat 200g", 4.50),

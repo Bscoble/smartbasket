@@ -271,6 +271,22 @@ st.session_state["prefs"] = prefs
 # ============================================================================
 
 
+def render_support_banner(title: str, subtitle: str) -> None:
+    st.markdown(
+        f"""
+        <div class="support-banner">
+            <span class="support-banner-arrow" aria-hidden="true">←</span>
+            <div class="support-banner-copy">
+                <h1>{html.escape(title)}</h1>
+                <p>{html.escape(subtitle)}</p>
+            </div>
+            <img src="{BRAND_MARK_DATA_URI}" alt="{html.escape(BRAND_NAME)}" />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def split_shopping_available(report: dict) -> bool:
     """Return whether split-store shopping offers a materially different outcome."""
     item_breakdown = report.get("item_breakdown", [])
@@ -1064,15 +1080,7 @@ else:
     # VIEW: REFER A FRIEND
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "refer":
-        st.markdown("""
-        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
-            <div style="font-size: 20px;">←</div>
-            <div>
-                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Refer a Friend</h1>
-                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Share the savings</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        render_support_banner("Refer a Friend", "Share the savings")
         
         st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
         if st.button("Back", key="btn_refer_back"):
@@ -1115,15 +1123,7 @@ else:
     # VIEW: ABOUT US PAGE
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "about":
-        st.markdown("""
-        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
-            <div style="font-size: 20px;">←</div>
-            <div>
-                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">About Us</h1>
-                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Grocery Gecko Information</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        render_support_banner("About Us", "Grocery Gecko Information")
         
         st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
         if st.button("Back", key="btn_about_back"):
@@ -1147,15 +1147,7 @@ else:
     # VIEW: PRIVACY POLICY PAGE
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "privacy":
-        st.markdown("""
-        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
-            <div style="font-size: 20px;">←</div>
-            <div>
-                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Privacy Policy</h1>
-                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Data Protection & Terms</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        render_support_banner("Privacy Policy", "Data Protection & Terms")
         
         st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
         if st.button("Back", key="btn_privacy_back"):
@@ -1187,15 +1179,7 @@ else:
     # VIEW: CONTACT / SPOT A PROBLEM PAGE
     # -----------------------------------------------------------
     elif st.session_state["current_page"] == "contact":
-        st.markdown("""
-        <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
-            <div style="font-size: 20px;">←</div>
-            <div>
-                <h1 style="margin: 0; color: white; font-size: 22px; font-weight: 800;">Spot a Problem</h1>
-                <p style="margin: 0; font-size: 13px; opacity: 0.9;">Contact & Support</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        render_support_banner("Spot a Problem", "Contact & Support")
         
         st.markdown('<div id="subpage-back-anchor"></div>', unsafe_allow_html=True)
         if st.button("Back", key="btn_contact_back"):
