@@ -1222,7 +1222,7 @@ else:
                 <p>{greeting}</p>
                 <h1>{display_name}</h1>
             </div>
-            <a class="header-logout-link header-profile-link" href="?profile=1&amp;auth_token={st.query_params.get('auth_token', '')}" title="Open profile" aria-label="Open profile"><img src="{BRAND_MARK_DATA_URI}" alt="" /></a>
+            <a class="header-logout-link header-profile-link" href="?profile=1&amp;auth_token={st.query_params.get('auth_token', '')}" title="Open profile" aria-label="Open profile"><img src="{BRAND_LOGO_DATA_URI}" alt="" /></a>
         </div>
         """, unsafe_allow_html=True)
         if matched_item_added_notice:
