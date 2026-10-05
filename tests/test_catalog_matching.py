@@ -98,6 +98,67 @@ def test_local_price_matching_rejects_partial_short_names_and_wrong_pack_product
     ) == {}
 
 
+def test_local_price_matching_handles_multipacks_and_plural_variants():
+    prices = {
+        ("Coles", "sprite lemonade 10 x 375ml"): _entry(
+            "Sprite Lemonade Soft Drink 10 x 375mL",
+            11.50,
+        ),
+        ("Woolworths", "uncle tobys protein vanilla quick oats 8 x 46g"): _entry(
+            "Uncle Tobys Big Bowl Protein Vanilla Quick Oats 8 x 46g",
+            6.75,
+        ),
+        ("Aldi", "pork sausages 550g"): _entry("Pork Sausages 550g", 5.99),
+    }
+
+    matches = find_local_price_matches(
+        "Sprite Lemonade Soft Drink Cans 375ml x 10 Pack",
+        ["Coles", "Woolworths", "Aldi"],
+        prices,
+        _is_fresh,
+    )
+    assert set(matches) == {"Coles"}
+
+    matches = find_local_price_matches(
+        "Uncle Tobys Big Bowl Quick Oats Protein Vanilla Porridge 368g x 8 Pack",
+        ["Coles", "Woolworths", "Aldi"],
+        prices,
+        _is_fresh,
+    )
+    assert set(matches) == {"Woolworths"}
+
+    matches = find_local_price_matches(
+        "Pork Sausage 550g",
+        ["Coles", "Woolworths", "Aldi"],
+        prices,
+        _is_fresh,
+    )
+    assert set(matches) == {"Aldi"}
+
+    matches = find_local_price_matches(
+        "Woolworths washed & ready to cook mixed rainbow vegetables 750g",
+        ["Woolworths"],
+        {
+            ("Woolworths", "mixed rainbow vegetables 750g"): _entry(
+                "Mixed Rainbow Vegetables 750g",
+                3.50,
+            ),
+        },
+        _is_fresh,
+    )
+    assert set(matches) == {"Woolworths"}
+
+    matches = find_local_price_matches(
+        "Olive Oil 1L",
+        ["Coles"],
+        {
+            ("Coles", "olive oil 1000ml"): _entry("Olive Oil 1000mL", 8.00),
+        },
+        _is_fresh,
+    )
+    assert set(matches) == {"Coles"}
+
+
 def test_basket_report_uses_local_matches_without_live_scraping(monkeypatch):
     import app
 
@@ -294,3 +355,51 @@ def test_basket_savings_include_unselected_store_prices(monkeypatch):
         "amount": 1.80,
         "compared_items": 1,
     }
+
+
+def test_basket_report_matches_local_multipack_variants(monkeypatch):
+    import app
+
+    class Placeholder:
+        def text(self, _value):
+            pass
+
+        def progress(self, _value):
+            pass
+
+        def empty(self):
+            pass
+
+    class FakeSheets:
+        def load_price_cache(self):
+            return {}
+
+        def load_daily_specials(self):
+            return {}
+
+        def load_standard_prices(self):
+            return {
+                ("Coles", "sprite lemonade 10 x 375ml"): _entry(
+                    "Sprite Lemonade Soft Drink 10 x 375mL",
+                    11.50,
+                ),
+            }
+
+        def is_standard_price_valid(self, entry):
+            return _is_fresh(entry)
+
+        def is_cache_valid(self, _entry):
+            return False
+
+    monkeypatch.setattr(app, "sheets_manager", FakeSheets())
+    monkeypatch.setattr(app.st, "progress", lambda _value: Placeholder())
+    monkeypatch.setattr(app.st, "empty", Placeholder)
+
+    report = app.generate_smart_basket_report(
+        [["Sprite Lemonade Soft Drink Cans 375ml x 10 Pack", "1", "each", "", "1"]],
+        ["Coles"],
+    )
+
+    assert report is not None
+    assert report["unpriced_items"] == []
+    assert report["item_breakdown"][0]["cheapest_store"] == "Coles"

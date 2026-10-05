@@ -10,33 +10,107 @@ _IGNORED_TERMS = {
     "an",
     "and",
     "coles",
+    "flavour",
     "fresh",
     "new",
     "of",
     "the",
     "woolworths",
+    "x",
 }
+
+_ALIASES = {
+    "barbecue": "bbq",
+    "biscuits": "biscuit",
+    "cans": "can",
+    "coca": "coke",
+    "cola": "coke",
+    "crackers": "cracker",
+    "flavored": "flavour",
+    "flavoured": "flavour",
+    "potatoes": "potato",
+    "sausages": "sausage",
+    "tams": "tam",
+    "tissues": "tissue",
+    "tomatoes": "tomato",
+    "vegetables": "vegetable",
+}
+
+
+def _format_size_number(value: float) -> str:
+    return str(int(value)) if value.is_integer() else str(value).rstrip("0").rstrip(".")
+
+
+def _canonical_metric_token(amount: float, unit: str) -> str:
+    normalized_unit = unit.lower()
+    normalized_amount = amount
+    if normalized_unit == "kg":
+        normalized_amount *= 1000
+        normalized_unit = "g"
+    elif normalized_unit == "l":
+        normalized_amount *= 1000
+        normalized_unit = "ml"
+    return f"{_format_size_number(normalized_amount)}{normalized_unit}"
+
+
+def _expand_multipack_sizes(text: str) -> str:
+    additions = []
+    for match in re.finditer(
+        r"\b(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l)\b",
+        text,
+    ):
+        pack_count = int(match.group(1))
+        unit_size = float(match.group(2))
+        unit = match.group(3)
+        total_size = pack_count * unit_size
+        additions.append(f"{pack_count}pk")
+        additions.append(_canonical_metric_token(total_size, unit))
+    return f"{text} {' '.join(additions)}".strip() if additions else text
 
 
 def _normalize(value: str) -> list[str]:
     text = value.lower().replace("'", "")
+    text = re.sub(r"\bwashed\s+(?:&|and)\s+ready\s+to\s+cook\b", " ", text)
+    text = _expand_multipack_sizes(text)
+    text = re.sub(r"\b(\d+)\s*x\s*(\d+)\s*(?:pack|packs|pk)\b", r"\2pk \1", text)
+    text = re.sub(r"\bx\s*(\d+)\s*(?:pack|packs|pk)\b", r"\1pk", text)
     text = re.sub(r"\b(\d+)\s*(?:pack|packs|pk)\b", r"\1pk", text)
+    text = re.sub(r"\b(\d+)\s*ply\b", r"\1ply", text)
     text = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:grams?|g)\b", r"\1g", text)
     text = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:kilograms?|kilos?|kg)\b", r"\1kg", text)
     text = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:millilitres?|milliliters?|ml)\b", r"\1ml", text)
     text = re.sub(r"\b(\d+(?:\.\d+)?)\s*(?:litres?|liters?|l)\b", r"\1l", text)
     terms = re.sub(r"[^a-z0-9.]+", " ", text).split()
-    aliases = {"barbecue": "bbq", "coca": "coke", "cola": "coke", "tams": "tam"}
-    return [aliases.get(term, term) for term in terms if term not in _IGNORED_TERMS]
+    normalized_terms = []
+    for term in terms:
+        if term in _IGNORED_TERMS:
+            continue
+        term = _ALIASES.get(term, term)
+        metric_match = re.fullmatch(r"(\d+(?:\.\d+)?)(g|kg|ml|l)", term)
+        if metric_match:
+            term = _canonical_metric_token(
+                float(metric_match.group(1)),
+                metric_match.group(2),
+            )
+        normalized_terms.append(term)
+    return normalized_terms
 
 
 def _size_terms(terms: Iterable[str]) -> set[str]:
-    return {
-        term
-        for term in terms
-        if re.fullmatch(r"\d+(?:\.\d+)?(?:g|kg|ml|l)", term)
-        or re.fullmatch(r"\d+(?:pk|pack)", term)
-    }
+    size_tokens = set()
+    for term in terms:
+        metric_match = re.fullmatch(r"(\d+(?:\.\d+)?)(g|kg|ml|l)", term)
+        if metric_match:
+            size_tokens.add(
+                _canonical_metric_token(
+                    float(metric_match.group(1)),
+                    metric_match.group(2),
+                )
+            )
+            continue
+        if re.fullmatch(r"\d+pk", term):
+            size_tokens.add(term)
+    return size_tokens
 
 
 def _match_score(query: str, candidate: str) -> Optional[float]:
