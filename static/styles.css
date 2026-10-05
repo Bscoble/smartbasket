@@ -1251,6 +1251,21 @@ form[method="post"] div[data-testid="stFormSubmitButton"] button {
 /* ========================================================================
    SUBPAGE BACK BUTTON - INVISIBLE OVERLAY
    ======================================================================== */
+.referral-email-link {
+    display: block;
+    padding: 12px;
+    border-radius: 10px;
+    background: #005A36;
+    color: #FFFFFF !important;
+    text-align: center;
+    font-weight: 700;
+    text-decoration: none !important;
+}
+
+.referral-email-link:hover {
+    background: #004D2E;
+}
+
 .support-banner {
     display: flex;
     align-items: center;

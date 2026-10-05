@@ -186,6 +186,8 @@ APP_VERSION = "Beta 1.0"
 APP_TITLE = BRAND_NAME
 APP_ICON = "🦎"
 APP_LAYOUT = "centered"
+# Set the deployed web-app URL here or via the PUBLIC_APP_URL environment variable.
+PUBLIC_APP_URL = ""
 PHONE_FRAME_WIDTH = 412
 PHONE_FRAME_HEIGHT = 850
 

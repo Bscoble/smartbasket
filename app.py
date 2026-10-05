@@ -49,6 +49,7 @@ from modules.brands import has_explicit_brand
 from modules.dietary import has_gluten_free_claim, product_is_gluten_free
 from modules.failed_scans import FailedScanStore, encode_failed_scan
 from modules.gtin import normalize_gtin
+from modules.referrals import build_email_draft, build_invitation, validate_public_app_url
 from modules.shopping import (
     infer_quantity_and_unit,
     mark_all_items_collected,
@@ -1095,29 +1096,48 @@ else:
         
         savings = st.session_state.get("last_savings", 0.0)
         
-        # Dynamically build the message body using the saved trip amount and dynamic signature 
-        if savings > 0:
-            default_msg = f"Hey you should give this a try. It saved me ${savings:.2f} on this week's shop.\n\nCheers,\nBrad\n\nTry Grocery Gecko:"
-        else:
-            default_msg = "Hey, you should give this a try. It helps me compare grocery prices before I shop.\n\nCheers,\nBrad\n\nTry Grocery Gecko:"
-            
-        with st.form("refer_form"):
-            recipient = st.text_input("Friend's Email Address", placeholder="e.g. friend@example.com")
-            msg = st.text_area("Message Preview", value=default_msg, height=140)
-            
-            st.markdown("""
-            <div style="display:flex; gap:10px; margin-bottom: 25px; justify-content: center;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" width="120" style="cursor: pointer;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" width="120" style="cursor: pointer;">
-            </div>
-            """, unsafe_allow_html=True)
-            
-            submit = st.form_submit_button("Send Invitation", type="primary", use_container_width=True)
-            if submit:
-                if recipient:
-                    st.success(f"Awesome! Invitation sent to {recipient}.")
-                else:
-                    st.error("Please enter an email address.")
+        configured_url = os.environ.get("PUBLIC_APP_URL", config.PUBLIC_APP_URL)
+        try:
+            app_url = validate_public_app_url(configured_url)
+        except ValueError as error:
+            logger.error("Invalid public referral URL: %s", error)
+            st.error(str(error))
+            app_url = ""
+
+        if not app_url:
+            st.info(
+                "The public app link is not configured yet. You can copy a message, "
+                "but app links and email invitations will be available after deployment."
+            )
+        current_user = st.session_state.get("current_user") or {}
+        first_name = current_user.get("first_name") or (
+            current_user.get("name", "").split() or [""]
+        )[0]
+        default_msg = build_invitation(first_name, savings, app_url)
+        recipient = st.text_input(
+            "Friend's Email Address", placeholder="e.g. friend@example.com",
+            key="referral_recipient",
+        )
+        msg = st.text_area("Message Preview", value=default_msg, height=200)
+
+        st.caption("Copy invitation using the copy icon at the top right of this message.")
+        st.code(msg, language=None, wrap_lines=True)
+
+        if app_url:
+            st.link_button("Open Grocery Gecko", app_url, use_container_width=True)
+            recipient_valid = not recipient.strip() or validate_email(recipient.strip())
+            if not recipient_valid:
+                st.error("Please enter a valid email address, or leave it blank to choose one in your email app.")
+            if recipient_valid and msg.strip():
+                draft_url = build_email_draft(recipient, msg)
+                st.markdown(
+                    f'<a class="referral-email-link" href="{html.escape(draft_url, quote=True)}">'
+                    'Open email draft</a>',
+                    unsafe_allow_html=True,
+                )
+                st.caption("Opens your email app. Review the draft and send it there; nothing is sent automatically.")
+            elif not msg.strip():
+                st.error("Please enter an invitation message.")
                     
     # -----------------------------------------------------------
     # VIEW: ABOUT US PAGE
