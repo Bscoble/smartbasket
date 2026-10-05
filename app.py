@@ -77,6 +77,11 @@ BRAND_MARK_DATA_URI = (
     "data:image/svg+xml;base64,"
     + base64.b64encode(BRAND_MARK_PATH.read_bytes()).decode("ascii")
 )
+BRAND_LOGO_PATH = pathlib.Path(__file__).parent / "static" / "grocery-gecko-logo.jpg"
+BRAND_LOGO_DATA_URI = (
+    "data:image/jpeg;base64,"
+    + base64.b64encode(BRAND_LOGO_PATH.read_bytes()).decode("ascii")
+)
 
 
 def _build_sheets_connection_error(error: Exception) -> tuple[str, list[str]]:
@@ -694,13 +699,11 @@ if not st.session_state["app_started"]:
             display: none !important;
         }}
     </style>
-    <div style="background-color: #005A36; padding: 180px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
-        <img class="splash-brand-mark" src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" />
+    <div style="background-color: #005A36; padding: 110px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
         <div class="splash-brand-title">
-            <h1 style="font-family: 'Georgia', serif; font-size: 36px; font-weight: 700; margin: 0; color: white;">{BRAND_NAME}</h1>
+            <img class="splash-brand-logo" src="{BRAND_LOGO_DATA_URI}" alt="{BRAND_NAME}" />
             <span class="splash-beta-badge">BETA</span>
         </div>
-        <p style="font-size: 15px; opacity: 0.9; margin: 0 0 40px 0; font-weight: 400;">{BRAND_TAGLINE}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -722,7 +725,7 @@ elif not st.session_state["authenticated"]:
     if st.session_state["auth_mode"] == "login":
         st.markdown(f"""
         <div class="auth-header">
-            <div class="auth-logo"><img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" /></div>
+            <div class="auth-logo"><img src="{BRAND_LOGO_DATA_URI}" alt="{BRAND_NAME}" /></div>
             <h1>Welcome back</h1>
             <p class="auth-subtitle">Sign in to pick up your shopping list.</p>
         </div>
@@ -772,7 +775,7 @@ elif not st.session_state["authenticated"]:
     elif st.session_state["auth_mode"] == "signup":
         st.markdown(f"""
         <div class="auth-header">
-            <div class="auth-logo"><img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" /></div>
+            <div class="auth-logo"><img src="{BRAND_LOGO_DATA_URI}" alt="{BRAND_NAME}" /></div>
             <h1>Create account</h1>
             <p class="auth-subtitle">Save your list. Compare prices. Keep the difference.</p>
         </div>
@@ -930,7 +933,7 @@ else:
                 <h1>Profile</h1>
                 <p>Your account, preferences and support in one place.</p>
             </div>
-            <img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME} gecko mark" />
+            <img src="{BRAND_LOGO_DATA_URI}" alt="{BRAND_NAME}" />
         </div>
         """, unsafe_allow_html=True)
 
@@ -2259,4 +2262,3 @@ else:
             f"<p class='footer-tagline'>© 2026 {BRAND_NAME} · {BRAND_TAGLINE}</p>",
             unsafe_allow_html=True,
         )
-
