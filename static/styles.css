@@ -1585,7 +1585,7 @@ button[data-testid="baseButton-secondary"]:has(
     align-items: center;
     min-height: 172px;
     margin: -60px -20px 22px;
-    padding: 64px 24px 24px;
+    padding: 24px;
     overflow: hidden;
     color: #FFFFFF;
     background: #075C3B;
@@ -1708,6 +1708,7 @@ div:has(> .profile-done-marker) + div[data-testid="stButton"] button {
 
 .profile-account-copy h2 {
     margin: 0 0 2px;
+    padding: 0;
     color: #13251D;
     font-size: 20px;
     line-height: 1.25;
@@ -1888,8 +1889,8 @@ div:has(> .profile-action-marker) + div[data-testid="stButton"] button {
 @media (max-width: 480px) {
     .profile-hero {
         grid-template-columns: minmax(0, 1fr) 112px;
-        min-height: 158px;
-        padding: 58px 20px 20px;
+        min-height: 138px;
+        padding: 20px;
     }
 
     .profile-hero img {
