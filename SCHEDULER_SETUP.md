@@ -160,6 +160,28 @@ Click on any workflow run to see:
 
 ## Catalogue Expansion and US$20 Daily Budget
 
+### Temporary development-only stale-price fallback
+
+To test the app while price refreshes are being repaired, opt in on a private
+development instance:
+
+```sh
+DEVELOPMENT_ALLOW_STALE_PRICES=true streamlit run app.py
+```
+
+The flag defaults to `false` and accepts only `true` or `false`. Do not enable it
+on the public app. Comparison still prefers today's specials, fresh shelf prices,
+and fresh cached prices. Only when these are unavailable does it use a matching,
+dated, valid older shelf price. Expired specials and expired cache entries remain
+excluded. There is no maximum age for this development fallback.
+
+Outdated prices show their last-verified dates, and affected comparisons label
+totals, rankings and savings as estimates. The fallback does not update price
+timestamps, call paid scrapers, or change the 14-day revalidation cutoff.
+Disable the flag (or unset it) to restore normal comparison behavior; development
+reports are discarded when the flag is disabled. Generate a new comparison after
+scraping to see refreshed prices.
+
 Expanded crawling and higher revalidation throughput are opt-in and manual-only.
 Existing scheduled jobs retain their original batch sizes. No new workflow
 automatically runs a candidate provider or discovers queued demand.

@@ -42,6 +42,7 @@ from helpers import (
     get_greeting,
     validate_email,
     build_product_search_query,
+    is_valid_price,
 )
 from modules import SheetsManager, PriceScraper, BarcodeScanner, ProductLookup, FeedbackManager, AuthManager
 from modules.catalog_matching import find_local_price_matches
@@ -399,6 +400,13 @@ def enqueue_missing_products(queries: list) -> bool:
         return False
 
 
+def development_stale_prices_enabled() -> bool:
+    value = os.environ.get("DEVELOPMENT_ALLOW_STALE_PRICES", "false").strip().lower()
+    if value not in {"true", "false"}:
+        raise ValueError("DEVELOPMENT_ALLOW_STALE_PRICES must be true or false")
+    return value == "true"
+
+
 def generate_smart_basket_report(user_items: list, selected_stores: list) -> Optional[dict]:
     """
     Generate a comprehensive price comparison report for shopping items.
@@ -416,6 +424,9 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     unpriced_items = []
     split_store_total = 0.0
     unavailable_reasons = []
+    allow_stale_prices = development_stale_prices_enabled()
+    has_estimates = False
+    outdated_prices = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -435,6 +446,17 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         return (
             entry.get("price", config.DEFAULT_PRICE_FALLBACK) < config.PRICE_VALIDITY_THRESHOLD
             and sheets_manager.is_cache_valid(entry)
+        )
+
+    def is_usable_stale_price(entry: dict) -> bool:
+        price = entry.get("price")
+        return (
+            isinstance(entry.get("last_verified"), datetime)
+            and isinstance(price, (int, float))
+            and not isinstance(price, bool)
+            and is_valid_price(price)
+            and price < config.PRICE_VALIDITY_THRESHOLD
+            and not sheets_manager.is_standard_price_valid(entry)
         )
     
     for idx, row in enumerate(valid_items):
@@ -459,18 +481,6 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
         
         item_store_prices = {}
         item_store_status = {}
-        local_matches = find_local_price_matches(
-            item_name,
-            stores_to_search,
-            standard_prices,
-            sheets_manager.is_standard_price_valid,
-        )
-        local_cache_matches = find_local_price_matches(
-            item_name,
-            stores_to_search,
-            price_cache,
-            is_valid_cached_price,
-        )
         all_store_matches = find_local_price_matches(
             item_name,
             config.STORE_NAMES,
@@ -483,48 +493,58 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             price_cache,
             is_valid_cached_price,
         )
+
+        stale_matches = {}
+        if allow_stale_prices:
+            stale_matches = find_local_price_matches(
+                item_name,
+                [store for store in config.STORE_NAMES if store not in all_store_matches],
+                standard_prices,
+                is_usable_stale_price,
+            )
+
+        def resolve_local_price(store: str) -> dict:
+            cache_key = (store, item_lower)
+            matched_key, standard_data = all_store_matches.get(
+                store, stale_matches.get(store, (cache_key, None)),
+            )
+            special_data = daily_specials.get(matched_key) or daily_specials.get(cache_key)
+            cached_data = price_cache.get(cache_key)
+            if not is_valid_cached_price(cached_data or {}):
+                cached_data = all_store_cache_matches.get(store, (None, None))[1]
+            if special_data and special_data.get("price") is not None:
+                return {
+                    **special_data, "status": "special", "message": "Today's special price",
+                }
+            if standard_data and sheets_manager.is_standard_price_valid(standard_data):
+                return {
+                    **standard_data, "status": "standard", "message": "Standard shelf price",
+                }
+            if cached_data and is_valid_cached_price(cached_data):
+                return {
+                    **cached_data, "status": "cached", "message": "Using a cached price",
+                }
+            if allow_stale_prices and standard_data and is_usable_stale_price(standard_data):
+                verified = standard_data["last_verified"].strftime("%Y-%m-%d")
+                return {
+                    **standard_data, "status": "stale",
+                    "message": f"Outdated price - last verified {verified}",
+                }
+            return {
+                "price": None, "status": "not_found",
+                "message": "No fresh local catalogue match",
+            }
+
+        resolved_prices = {
+            store: resolve_local_price(store) for store in config.STORE_NAMES
+        }
         
         # Check cache and determine which stores need fresh prices
         for store in selected_stores:
             if store in stores_to_search:
-                cache_key = (store, item_lower)
-                special_data = daily_specials.get(cache_key)
-                matched_key, standard_data = local_matches.get(store, (cache_key, None))
-                special_data = daily_specials.get(matched_key) or special_data
-                cached_data = price_cache.get(cache_key)
-                if not is_valid_cached_price(cached_data or {}):
-                    cached_data = local_cache_matches.get(store, (None, None))[1]
-                
-                if special_data and special_data.get("price") is not None:
-                    item_store_prices[store] = special_data["price"]
-                    item_store_status[store] = {
-                        "status": "special",
-                        "message": "Today's special price",
-                        "product_name": special_data.get("product_name") or item_name,
-                    }
-                    logger.debug(f"Using special price for {item_name} at {store}")
-                elif standard_data and sheets_manager.is_standard_price_valid(standard_data):
-                    item_store_prices[store] = standard_data["price"]
-                    item_store_status[store] = {
-                        "status": "standard",
-                        "message": "Standard shelf price",
-                        "product_name": standard_data.get("product_name") or item_name,
-                    }
-                    logger.debug(f"Using standard price for {item_name} at {store}")
-                elif cached_data and is_valid_cached_price(cached_data):
-                    item_store_prices[store] = cached_data["price"]
-                    item_store_status[store] = {
-                        "status": "cached",
-                        "message": "Using a cached price",
-                        "product_name": cached_data.get("product_name") or item_name,
-                    }
-                    logger.debug(f"Using cached price for {item_name} at {store}")
-                else:
-                    item_store_prices[store] = None
-                    item_store_status[store] = {
-                        "status": "not_found",
-                        "message": "No fresh local catalogue match",
-                    }
+                result = resolved_prices[store]
+                item_store_prices[store] = result["price"]
+                item_store_status[store] = result
             else:
                 item_store_prices[store] = None
                 item_store_status[store] = {
@@ -560,6 +580,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 "status": item_store_status.get(store, {}).get("status", "ok"),
                 "message": item_store_status.get(store, {}).get("message", "Price found"),
                 "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
+                "last_verified": item_store_status.get(store, {}).get("last_verified"),
             }
         
         sorted_item_stores = sorted(
@@ -577,24 +598,18 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
 
         cheapest_store = available_item_stores[0][0]
         best_price = available_item_stores[0][1]["total_price"]
-        all_store_prices = []
-        for store in config.STORE_NAMES:
-            cache_key = (store, item_lower)
-            matched_key, standard_data = all_store_matches.get(store, (cache_key, None))
-            special_data = daily_specials.get(matched_key) or daily_specials.get(cache_key)
-            if special_data and special_data.get("price") is not None:
-                all_store_prices.append(special_data["price"] * pack_count)
-            elif standard_data and sheets_manager.is_standard_price_valid(standard_data):
-                all_store_prices.append(standard_data["price"] * pack_count)
-            else:
-                cached_data = price_cache.get(cache_key)
-                if not is_valid_cached_price(cached_data or {}):
-                    cached_data = all_store_cache_matches.get(store, (None, None))[1]
-                if (
-                    cached_data
-                    and is_valid_cached_price(cached_data)
-                ):
-                    all_store_prices.append(cached_data["price"] * pack_count)
+        for store, data in resolved_prices.items():
+            if data["status"] == "stale":
+                has_estimates = True
+                outdated_prices.append({
+                    "item": item_name, "store": store, "price": data["price"],
+                    "message": data["message"],
+                    "last_verified": data["last_verified"],
+                })
+        all_store_prices = [
+            data["price"] * pack_count
+            for data in resolved_prices.values() if data["price"] is not None
+        ]
 
         lowest_comparable_price = min(all_store_prices) if all_store_prices else best_price
         highest_comparable_price = max(all_store_prices) if all_store_prices else best_price
@@ -681,6 +696,9 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     
     return {
         "total_items": total_items,
+        "has_estimates": has_estimates,
+        "outdated_prices": outdated_prices,
+        "stale_fallback_enabled": allow_stale_prices,
         "trip_savings": trip_savings,
         "price_selection_savings": {
             "amount": price_selection_savings,
@@ -1782,6 +1800,15 @@ else:
                 st.markdown("<hr style='margin: 10px 0; opacity: 0.2;'>", unsafe_allow_html=True)
             
             store_count_label = len(active_names)
+
+            if development_stale_prices_enabled():
+                st.warning(
+                    "Development mode: older shelf prices may be used when no fresh "
+                    "price is available. Expired specials remain excluded."
+                )
+            elif st.session_state.get("report", {}).get("stale_fallback_enabled"):
+                st.session_state.pop("report")
+                st.session_state["shopping_active"] = False
             
             if st.button(f"🔍 Compare Prices at {store_count_label} Stores", type="primary", use_container_width=True, key="compare_prices"):
                 if not active_names:
@@ -1889,6 +1916,18 @@ else:
             # --- RESULTS SCREEN ---
             if "report" in st.session_state and st.session_state.get("shopping_active", False):
                 report = st.session_state["report"]
+                estimate_label = "Estimated " if report.get("has_estimates") else ""
+                if report.get("has_estimates"):
+                    st.warning(
+                        "Development estimate: this comparison includes outdated shelf "
+                        "prices. Totals, rankings and savings are estimates, not current quotes."
+                    )
+                    with st.expander("Outdated prices and last-verified dates"):
+                        for data in report["outdated_prices"]:
+                            st.write(
+                                f"{data['item']} - {data['store']}: "
+                                f"{format_price(data['price'])}. {data['message']}"
+                            )
                 
                 st.markdown(f"""
                 <div style="background-color: #005A36; color: white; padding: 30px 20px 20px 20px; margin: -60px -20px 20px -20px; border-radius: 0 0 20px 20px; display: flex; align-items: center; gap: 15px;">
@@ -1940,7 +1979,7 @@ else:
 
                         html_combined = (
                             f'<div style="background-color: #F6E7B9; border-radius: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">'
-                            f'<div style="font-weight: 800; color: #333; font-size: 16px;">Combined total</div>'
+                            f'<div style="font-weight: 800; color: #333; font-size: 16px;">{estimate_label}Combined total</div>'
                             f'<div style="font-size: 20px; font-weight: 900; color: #005A36;">${active_cost:.2f}</div>'
                             f'</div>'
                         )
@@ -1957,6 +1996,14 @@ else:
                                     "unit_price": item["unit_price"],
                                     "total_price": item["total_price"],
                                     "savings_vs_highest": item.get("savings_vs_highest", 0.0),
+                                    "price_message": next(
+                                        (
+                                            data["message"]
+                                            for store_name, data in item["all_stores"]
+                                            if store_name == store and data.get("status") == "stale"
+                                        ),
+                                        "",
+                                    ),
                                     "matched_name": next(
                                         (
                                             data.get("product_name")
@@ -1977,6 +2024,10 @@ else:
                                         "unit_price": store_data["unit_price"],
                                         "total_price": f"${store_data['total_price']:.2f}",
                                         "matched_name": store_data.get("product_name", ""),
+                                        "price_message": (
+                                            store_data["message"]
+                                            if store_data.get("status") == "stale" else ""
+                                        ),
                                     })
 
                         brand_colors = {
@@ -2033,6 +2084,8 @@ else:
                                         matched_name = item.get("matched_name")
                                         if matched_name and matched_name.strip().lower() != item["item_name"].strip().lower():
                                             st.caption(f"Matched: {matched_name}")
+                                        if item.get("price_message"):
+                                            st.caption(item["price_message"])
                                     with c_price:
                                         st.markdown(
                                             f'<div class="shopping-detail-item-price">{item["total_price"]}</div>',
@@ -2077,7 +2130,7 @@ else:
                                 f'<div style="font-weight: 800; color: #111; font-size: 16px;">{single_title}</div>'
                                 f'<div style="font-size: 13px; color: #666;">{single_subtitle}</div>'
                                 f'</div></div>'
-                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${single_best["total_cost"]:.2f}</div>'
+                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">{estimate_label}${single_best["total_cost"]:.2f}</div>'
                                 f'</div></div>'
                             )
 
@@ -2111,7 +2164,7 @@ else:
                                 st.markdown(
                                     '<div class="price-selection-savings">'
                                     '<div>'
-                                    '<div class="price-selection-savings-label">GROCERY GECKO SAVING</div>'
+                                    f'<div class="price-selection-savings-label">{estimate_label}GROCERY GECKO SAVING</div>'
                                     f'<div class="price-selection-savings-copy">Best available prices across {compared_items} comparable {compared_label}</div>'
                                     '</div>'
                                     f'<div class="price-selection-savings-amount">Save up to ${savings_amount:.2f}</div>'
@@ -2133,7 +2186,7 @@ else:
                                 f'<div style="font-weight: 800; color: #111; font-size: 16px;">Split across preferred stores</div>'
                                 f'<div style="font-size: 13px; color: #666;">Buy each item where it\'s cheapest</div>'
                                 f'</div></div>'
-                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">${split_opt["total_cost"]:.2f}</div>'
+                                f'<div style="font-size: 20px; font-weight: 800; color: #005A36;">{estimate_label}${split_opt["total_cost"]:.2f}</div>'
                                 f'</div></div>'
                             )
 
@@ -2190,7 +2243,7 @@ else:
                                 f'<div style="font-size: 13px; color: #888;">{store["coverage_count"]}/{store["coverage_total"]} items priced</div>'
                                 f'</div></div>'
                                 f'<div style="text-align: right;">'
-                                f'<div style="font-size: 18px; font-weight: 800; color: #111;">${s_cost:.2f}</div>'
+                                f'<div style="font-size: 18px; font-weight: 800; color: #111;">{estimate_label}${s_cost:.2f}</div>'
                                 f'{diff_html}'
                                 f'</div></div>'
                                 f'<div style="width: 100%; background-color: #F0F0F0; height: 4px; border-radius: 2px;">'
