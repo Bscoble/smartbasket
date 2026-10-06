@@ -739,7 +739,7 @@ if not st.session_state["app_started"]:
     st.markdown(f"""
     <style>
         .stApp {{
-            background-color: #005A36 !important;
+            background-color: #075C3B !important;
         }}
         div[data-testid="stMainBlockContainer"], .main .block-container {{
             padding: 0 !important;
@@ -748,7 +748,7 @@ if not st.session_state["app_started"]:
             display: none !important;
         }}
     </style>
-    <div style="background-color: #005A36; padding: 110px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
+    <div style="background-color: #075C3B; padding: 110px 20px 30px 20px; text-align: center; color: white; box-sizing: border-box;">
         <div class="splash-brand-title">
             <img class="splash-brand-logo" src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME}" />
             <span class="splash-beta-badge">BETA</span>
