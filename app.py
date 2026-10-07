@@ -1093,11 +1093,26 @@ else:
         """, unsafe_allow_html=True)
         
         savings = st.session_state.get("last_savings", 0.0)
+        lifetime_savings = st.session_state.get("lifetime_savings")
         
         st.markdown(f"""
         <div style="text-align: center; margin: 40px 0;">
-            <div style="font-size: 14px; color: #666; font-weight: bold; text-transform: uppercase;">Total Saved This Week</div>
+            <div style="font-size: 14px; color: #666; font-weight: bold; text-transform: uppercase;">Estimated Savings This Shop</div>
             <div style="font-size: 48px; font-weight: 900; color: #005A36;">${savings:.2f}</div>
+            <div style="font-size: 13px; color: #666; margin-top: 4px;">Based on available supermarket prices, not a receipt comparison.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        lifetime_savings_display = (
+            f"${lifetime_savings:.2f}"
+            if isinstance(lifetime_savings, (int, float))
+            else "Unavailable"
+        )
+        st.markdown(f"""
+        <div style="text-align: center; margin: 10px 0 35px;">
+            <div style="font-size: 14px; color: #666; font-weight: bold; text-transform: uppercase;">Lifetime Savings</div>
+            <div style="font-size: 32px; font-weight: 800; color: #005A36;">{lifetime_savings_display}</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">Total of recorded completed-shop estimates for your account.</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -2329,13 +2344,20 @@ else:
                             report_total_items = st.session_state["report"].get("total_items")
                             st.session_state["last_savings"] = report_savings
                             del st.session_state["report"]
-                        sheets_manager.log_user_event(
+                        shop_event_saved = sheets_manager.log_user_event(
                             st.session_state["current_user"]["email"],
                             "shop_completed",
                             mode=st.session_state.get("shop_mode", ""),
                             items_ticked=len(selected_purchase_names),
                             items_total=report_total_items,
                             savings=report_savings,
+                        )
+                        st.session_state["lifetime_savings"] = (
+                            sheets_manager.load_lifetime_savings(
+                                st.session_state["current_user"]["email"]
+                            )
+                            if shop_event_saved
+                            else None
                         )
 
                         st.session_state["shopping_active"] = False

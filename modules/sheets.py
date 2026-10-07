@@ -4,6 +4,7 @@ Handles all interactions with Google Sheets for data persistence.
 """
 
 import logging
+import math
 import re
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
@@ -849,6 +850,39 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error logging user event: {e}", exc_info=True)
             return False
+
+    def load_lifetime_savings(self, user_id: str) -> Optional[float]:
+        """Sum recorded savings from completed shops for one customer."""
+        try:
+            worksheet_name = WORKSHEET_NAMES["user_events"]
+            ws = self._get_or_create_worksheet(
+                worksheet_name,
+                rows=WORKSHEET_CONFIG["user_events"]["rows"],
+                cols=WORKSHEET_CONFIG["user_events"]["cols"],
+            )
+            normalized_user_id = user_id.strip().lower()
+            savings_total = 0.0
+            for row in self._cached_values(worksheet_name, ws, force_refresh=True)[1:]:
+                if (
+                    len(row) < 7
+                    or row[1].strip().lower() != normalized_user_id
+                    or row[2].strip() != "shop_completed"
+                    or not row[6].strip()
+                ):
+                    continue
+                try:
+                    savings = float(row[6])
+                except ValueError:
+                    logger.warning("Skipping invalid savings value in customer event history")
+                    continue
+                if not math.isfinite(savings) or savings < 0:
+                    logger.warning("Skipping invalid savings value in customer event history")
+                    continue
+                savings_total += savings
+            return round(savings_total, 2)
+        except Exception as e:
+            logger.error(f"Error loading lifetime savings: {e}", exc_info=True)
+            return None
 
     def log_scrape_run(
         self,

@@ -95,6 +95,19 @@ def test_active_shopping_names_deduplicate_and_exclude_customer_data():
     ]
 
 
+def test_lifetime_savings_sums_only_completed_shops_for_the_customer():
+    manager = SheetsManager(FakeSpreadsheet([
+        ["Timestamp", "User ID", "Event Type", "Mode", "Items Ticked", "Items Total", "Savings"],
+        ["2026-10-01", "shopper@example.com", "shop_completed", "split", "2", "3", "1.25"],
+        ["2026-10-02", "shopper@example.com", "comparison_run", "", "", "", "9.00"],
+        ["2026-10-03", "other@example.com", "shop_completed", "single", "1", "1", "4.50"],
+        ["2026-10-04", "SHOPPER@example.com", "shop_completed", "single", "1", "1", "0.75"],
+        ["2026-10-05", "shopper@example.com", "shop_completed", "single", "1", "1", "invalid"],
+    ]))
+
+    assert manager.load_lifetime_savings("shopper@example.com") == 2.0
+
+
 def test_active_shopping_names_surface_read_errors(caplog):
     class BrokenSpreadsheet:
         def worksheet(self, _name):
