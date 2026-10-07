@@ -3,6 +3,8 @@
 import re
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
+from modules.brands import resolve_brand
+
 
 _IGNORED_TERMS = {
     "a",
@@ -114,6 +116,11 @@ def _size_terms(terms: Iterable[str]) -> set[str]:
 
 
 def _match_score(query: str, candidate: str) -> Optional[float]:
+    query_brand = resolve_brand(query)["brand"]
+    candidate_brand = resolve_brand(candidate)["brand"]
+    if query_brand and query_brand != candidate_brand:
+        return None
+
     query_terms = _normalize(query)
     candidate_terms = _normalize(candidate)
     if not query_terms or not candidate_terms:

@@ -98,6 +98,24 @@ def test_local_price_matching_rejects_partial_short_names_and_wrong_pack_product
     ) == {}
 
 
+def test_local_price_matching_rejects_a_different_known_brand():
+    prices = {
+        ("Woolworths", "coca-cola classic soft drink cans 375ml x 10 pack"): _entry(
+            "Coca-Cola Classic Soft Drink Cans 375mL x 10 Pack",
+            23.00,
+        ),
+    }
+
+    matches = find_local_price_matches(
+        "Sprite Lemonade Soft Drink Cans 375ml x 10 Pack",
+        ["Woolworths"],
+        prices,
+        _is_fresh,
+    )
+
+    assert matches == {}
+
+
 def test_local_price_matching_handles_multipacks_and_plural_variants():
     prices = {
         ("Coles", "sprite lemonade 10 x 375ml"): _entry(
