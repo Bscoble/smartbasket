@@ -309,13 +309,9 @@ def aggregate_catalog_size_over_time(rows: List[List[str]]) -> List[List[str]]:
         by_date[date][store] = max(count, by_date[date].get(store, 0))
 
     table = [["Date"] + stores + ["Total"]]
-    column_totals = [0] * len(stores)
     for date in sorted(by_date.keys()):
         store_counts = [by_date[date].get(store, 0) for store in stores]
-        column_totals = [total + count for total, count in zip(column_totals, store_counts)]
         table.append([date] + [str(count) if count else "" for count in store_counts] + [str(sum(store_counts))])
-    if by_date:
-        table.append(["Total"] + [str(total) for total in column_totals] + [str(sum(column_totals))])
     return table
 
 

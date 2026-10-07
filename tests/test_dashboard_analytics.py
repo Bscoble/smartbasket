@@ -41,7 +41,8 @@ def test_aggregate_catalog_size_over_time_pivots_by_store_and_keeps_max_per_day(
     assert table[0] == ["Date", "Aldi", "Coles", "Woolworths", "Total"]
     assert table[1] == ["2026-08-20", "", "80", "120", "200"]
     assert table[2] == ["2026-08-21", "40", "", "130", "170"]
-    assert table[3] == ["Total", "40", "80", "250", "370"]
+    assert len(table) == 3
+    assert all(row[0] != "Total" for row in table[1:])
 
 
 def test_aggregate_category_coverage_counts_standard_and_specials_by_store():
