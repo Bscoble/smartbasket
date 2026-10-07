@@ -193,7 +193,7 @@ Set these under GitHub **Settings > Secrets and variables > Actions > Variables*
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SCRAPER_DAILY_BUDGET_USD` | `20` | Shared daily reservation budget, in USD |
-| `SCRAPER_MAX_REQUESTS_PER_DAY` | `80` | Shared paid-request/run cap, including retries |
+| `SCRAPER_MAX_REQUESTS_PER_DAY` | `120` | Shared paid-request/run cap, including retries |
 | `APIFY_MAX_RUN_COST_USD` | `1` | Reservation and Apify maximum-charge setting per actor run |
 | `ZENROWS_MAX_REQUEST_COST_USD` | `1` | Conservative reservation when ZenRows unit cost is unknown |
 | `ZENROWS_COST_PER_REQUEST_USD` | unset | Your measured all-in cost for a rendered premium-proxy request |

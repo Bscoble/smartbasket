@@ -37,7 +37,7 @@ class MaintenanceBudget:
         self.sheets = sheets_manager
         self.source = source
         self.limit = positive_setting("SCRAPER_DAILY_BUDGET_USD", 20)
-        self.max_requests = int(positive_setting("SCRAPER_MAX_REQUESTS_PER_DAY", 80))
+        self.max_requests = int(positive_setting("SCRAPER_MAX_REQUESTS_PER_DAY", 120))
         if self.max_requests < 1:
             raise ValueError("SCRAPER_MAX_REQUESTS_PER_DAY must be at least 1")
         self.apify_cap = positive_setting("APIFY_MAX_RUN_COST_USD", 1)

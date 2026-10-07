@@ -27,5 +27,5 @@ jobs:
           APIFY_MAX_RUN_COST_USD: ${{ vars.APIFY_MAX_RUN_COST_USD || '1' }}
           ZENROWS_COST_PER_REQUEST_USD: ${{ vars.ZENROWS_COST_PER_REQUEST_USD }}
           ZENROWS_MAX_REQUEST_COST_USD: ${{ vars.ZENROWS_MAX_REQUEST_COST_USD || '1' }}
-          SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '80' }}
+          SCRAPER_MAX_REQUESTS_PER_DAY: ${{ vars.SCRAPER_MAX_REQUESTS_PER_DAY || '120' }}
         run: python discover_requested_products.py
