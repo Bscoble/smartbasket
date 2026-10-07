@@ -1375,7 +1375,7 @@ class SheetsManager:
                     continue
 
                 coverage = len(set(matched_terms)) / len(set(terms))
-                if coverage < 0.5:
+                if coverage < 0.6:
                     continue
 
                 normalized_item = normalize(title)

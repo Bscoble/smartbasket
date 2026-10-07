@@ -523,6 +523,26 @@ def test_search_scraped_products_uses_stored_product_images():
     assert results[0]["stores"] == ["Woolworths"]
 
 
+def test_search_scraped_products_excludes_ice_cream_from_milk_search():
+    class FakeWorksheet:
+        def get_all_values(self):
+            return [
+                ["Store", "Item", "Price", "Product Name", "Last Verified", "Unit Price", "Unit Label", "Image URL", "Category", "Subcategory"],
+                ["Woolworths", "Original Vanilla Ice Cream 2L", "8.00", "Original Vanilla Ice Cream 2L", "2026-08-21 12:00:00", "4.00", "per L", "", "Frozen", "Ice Cream"],
+                ["Coles", "Full Cream Milk 2L", "3.20", "Full Cream Milk 2L", "2026-08-21 12:00:00", "1.60", "per L", "", "Dairy", "Milk"],
+            ]
+
+    class FakeSpreadsheet:
+        def worksheet(self, _name):
+            return FakeWorksheet()
+
+    manager = __import__("modules.sheets", fromlist=["SheetsManager"]).SheetsManager(FakeSpreadsheet())
+
+    results = manager.search_scraped_products("milk full cream 2L", limit=None)
+
+    assert [result["title"] for result in results] == ["Full Cream Milk 2L"]
+
+
 def test_search_scraped_products_uses_images_from_legacy_standard_price_rows():
     class FakeWorksheet:
         def get_all_values(self):
