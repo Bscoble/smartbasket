@@ -11,6 +11,7 @@ import pathlib
 import re
 import sys
 import time
+import textwrap
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
@@ -2052,7 +2053,7 @@ else:
                                     collected_count += 1
 
                             with st.container(border=True):
-                                st.markdown(f'''
+                                st.markdown(textwrap.dedent(f'''
                                 <div style="background-color: {b_color}; color: white; padding: 15px; margin: -16px -16px 15px -16px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center;">
                                     <div style="display: flex; gap: 10px; align-items: center;">
                                         <div style="background: rgba(255,255,255,0.2); width: 32px; height: 32px; display: flex; justify-content: center; align-items: center; border-radius: 6px; font-weight: 800; font-size: 16px;">{s_initial}</div>
@@ -2064,7 +2065,7 @@ else:
                                     </div>
                                     <div style="font-weight: 800; font-size: 18px;">${store_total:.2f}</div>
                                 </div>
-                                ''', unsafe_allow_html=True)
+                                '''), unsafe_allow_html=True)
 
                                 for idx, item in enumerate(items):
                                     st.markdown(
