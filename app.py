@@ -1334,7 +1334,7 @@ else:
                     label_visibility="collapsed",
                     key="add_item_description",
                 )
-                c1, c2, c3 = st.columns([1.2, 2, 1.4])
+                c1, c2, c3 = st.columns([0.9, 1.6, 2])
                 with c1:
                     qty = st.number_input("Qty", min_value=1, value=1, label_visibility="collapsed")
                 with c2:
