@@ -6,6 +6,7 @@ A Streamlit-based app that helps users compare prices across major supermarkets.
 import base64
 import html
 import logging
+import math
 import os
 import pathlib
 import re
@@ -407,6 +408,39 @@ def development_stale_prices_enabled() -> bool:
     return value == "true"
 
 
+def _normalized_unit_price(entry: dict) -> Optional[tuple[str, float]]:
+    """Return a comparable price per gram, millilitre, or item."""
+    try:
+        unit_price = float(entry.get("unit_price"))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(unit_price) or unit_price <= 0:
+        return None
+
+    unit_label = str(entry.get("unit_label") or "").strip().lower()
+    unit_label = re.sub(r"^per\s+", "", unit_label)
+    match = re.fullmatch(
+        r"(?:(\d+(?:\.\d+)?)\s*)?(kg|g|ml|l|each|ea|items?|units?|packs?)",
+        unit_label,
+    )
+    if not match:
+        return None
+
+    amount = float(match.group(1) or 1)
+    unit = match.group(2)
+    if amount <= 0:
+        return None
+    if unit == "kg":
+        return "mass", unit_price / (amount * 1000)
+    if unit == "g":
+        return "mass", unit_price / amount
+    if unit == "l":
+        return "volume", unit_price / (amount * 1000)
+    if unit == "ml":
+        return "volume", unit_price / amount
+    return "each", unit_price / amount
+
+
 def generate_smart_basket_report(user_items: list, selected_stores: list) -> Optional[dict]:
     """
     Generate a comprehensive price comparison report for shopping items.
@@ -513,8 +547,17 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             if not is_valid_cached_price(cached_data or {}):
                 cached_data = all_store_cache_matches.get(store, (None, None))[1]
             if special_data and special_data.get("price") is not None:
+                unit_price = special_data.get("unit_price")
+                unit_label = special_data.get("unit_label", "")
+                if standard_data:
+                    if unit_price is None:
+                        unit_price = standard_data.get("unit_price")
+                    unit_label = unit_label or standard_data.get("unit_label", "")
                 return {
-                    **special_data, "status": "special", "message": "Today's special price",
+                    **special_data,
+                    "unit_price": unit_price,
+                    "unit_label": unit_label,
+                    "status": "special", "message": "Today's special price",
                 }
             if standard_data and sheets_manager.is_standard_price_valid(standard_data):
                 return {
@@ -608,16 +651,43 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     "message": data["message"],
                     "last_verified": data["last_verified"],
                 })
-        all_store_prices = [
-            data["price"] * pack_count
-            for data in resolved_prices.values() if data["price"] is not None
-        ]
+        matched_prices = {
+            store: data for store, data in resolved_prices.items()
+            if data["price"] is not None
+        }
+        comparable_unit_prices: dict[str, list[tuple[str, dict, float]]] = {}
+        for store, data in matched_prices.items():
+            normalized = _normalized_unit_price(data)
+            if normalized:
+                dimension, price_per_unit = normalized
+                comparable_unit_prices.setdefault(dimension, []).append(
+                    (store, data, price_per_unit),
+                )
 
-        lowest_comparable_price = min(all_store_prices) if all_store_prices else best_price
-        highest_comparable_price = max(all_store_prices) if all_store_prices else best_price
+        unit_price_groups = [
+            matches for matches in comparable_unit_prices.values()
+            if len(matches) > 1
+        ]
+        if unit_price_groups:
+            benchmark_matches = max(unit_price_groups, key=len)
+            highest_unit_match = max(benchmark_matches, key=lambda match: match[2])
+            highest_comparable_price = highest_unit_match[1]["price"]
+            comparable_price_count = len(benchmark_matches)
+        elif not comparable_unit_prices:
+            # Older catalogue rows may not have unit-price metadata.
+            package_prices = list(matched_prices.values())
+            highest_comparable_price = max(
+                (data["price"] for data in package_prices),
+                default=best_price / pack_count,
+            )
+            comparable_price_count = len(package_prices)
+        else:
+            highest_comparable_price = best_price / pack_count
+            comparable_price_count = 0
+
         savings_vs_highest = (
-            round(max(0.0, highest_comparable_price - lowest_comparable_price), 2)
-            if len(all_store_prices) > 1
+            round(max(0.0, (highest_comparable_price - best_price / pack_count) * pack_count), 2)
+            if comparable_price_count > 1
             else 0.0
         )
         
@@ -630,7 +700,8 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             "unit_price": format_price(best_price / pack_count),
             "total_price": format_price(best_price),
             "savings_vs_highest": savings_vs_highest,
-            "price_options_count": len(all_store_prices),
+            "price_options_count": len(matched_prices),
+            "savings_comparison_count": comparable_price_count,
             "list_image_url": row[3].strip() if len(row) >= 4 and row[3] else "",
             "all_stores": sorted_item_stores,
         })
@@ -690,7 +761,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
     best_available_store = ranked_stores[0][0]
     best_available_cost = store_totals[best_available_store]
     comparable_items = [
-        item for item in item_breakdown if item["price_options_count"] > 1
+        item for item in item_breakdown if item["savings_comparison_count"] > 1
     ]
     price_selection_savings = round(
         sum(item["savings_vs_highest"] for item in comparable_items),
@@ -2215,7 +2286,7 @@ else:
                                     '</div>'
                                     f'<div class="price-selection-savings-amount">Save up to ${savings_amount:.2f}</div>'
                                     '</div>'
-                                    '<p class="price-selection-savings-note">Compared item by item with the highest available price for the same products across all supermarkets.</p>',
+                                    '<p class="price-selection-savings-note">Compared using matched product unit prices across all supermarkets; estimated savings use the listed quantities and matched shelf prices.</p>',
                                     unsafe_allow_html=True,
                                 )
 

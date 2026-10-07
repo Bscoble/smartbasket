@@ -9,11 +9,13 @@ if ROOT not in sys.path:
 from modules.catalog_matching import find_local_price_matches
 
 
-def _entry(product_name, price, age_days=0):
+def _entry(product_name, price, age_days=0, unit_price=None, unit_label=""):
     return {
         "product_name": product_name,
         "price": price,
         "last_verified": datetime.now() - timedelta(days=age_days),
+        "unit_price": unit_price,
+        "unit_label": unit_label,
     }
 
 
@@ -388,6 +390,61 @@ def test_basket_savings_include_unselected_store_prices(monkeypatch):
 
     assert report["price_selection_savings"] == {
         "amount": 1.80,
+        "compared_items": 1,
+    }
+
+
+def test_basket_savings_use_highest_comparable_unit_price_across_all_stores(monkeypatch):
+    import app
+
+    class Placeholder:
+        def text(self, _value):
+            pass
+
+        def progress(self, _value):
+            pass
+
+        def empty(self):
+            pass
+
+    class FakeSheets:
+        def load_price_cache(self):
+            return {}
+
+        def load_daily_specials(self):
+            return {}
+
+        def load_standard_prices(self):
+            return {
+                ("Coles", "full cream milk 2l"): _entry(
+                    "Full Cream Milk 2L", 2.50, unit_price=0.80, unit_label="100g",
+                ),
+                ("Woolworths", "full cream milk 2l"): _entry(
+                    "Full Cream Milk 2L", 7.00, unit_price=1.00, unit_label="100g",
+                ),
+                ("Aldi", "full cream milk 2l"): _entry(
+                    "Full Cream Milk 2L", 10.00, unit_price=9.00, unit_label="1kg",
+                ),
+                ("Aldi", "premium cream 2l"): _entry(
+                    "Premium Cream 2L", 20.00, unit_price=50.00, unit_label="100g",
+                ),
+            }
+
+        def is_standard_price_valid(self, entry):
+            return _is_fresh(entry)
+
+    monkeypatch.setattr(app, "sheets_manager", FakeSheets())
+    monkeypatch.setattr(app.st, "progress", lambda _value: Placeholder())
+    monkeypatch.setattr(app.st, "empty", Placeholder)
+
+    report = app.generate_smart_basket_report(
+        [["Full Cream Milk 2L", "2", "each", "", "2"]],
+        ["Coles"],
+    )
+
+    assert report["item_breakdown"][0]["savings_vs_highest"] == 9.0
+    assert report["price_selection_savings"] == {
+        "amount": 9.0,
         "compared_items": 1,
     }
 
