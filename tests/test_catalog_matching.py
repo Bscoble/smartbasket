@@ -199,7 +199,10 @@ def test_basket_report_uses_local_matches_without_live_scraping(monkeypatch):
 
         def load_standard_prices(self):
             return {
-                ("Coles", "full cream milk 2l"): _entry("Coles Full Cream Milk 2L", 3.20),
+                ("Coles", "full cream milk 2l"): {
+                    **_entry("Coles Full Cream Milk 2L", 3.20),
+                    "image_url": "https://images.example.test/milk.jpg",
+                },
                 ("Woolworths", "beef rump steak 500g"): _entry("Beef Rump Steak 500g", 9.00),
             }
 
@@ -216,7 +219,15 @@ def test_basket_report_uses_local_matches_without_live_scraping(monkeypatch):
     monkeypatch.setattr(app.st, "empty", Placeholder)
 
     report = app.generate_smart_basket_report(
-        [["Milk Full Cream 2L", "1", "each", "", "1"]],
+        [
+            [
+                "Milk Full Cream 2L",
+                "1",
+                "each",
+                "https://images.example.test/saved-milk.jpg",
+                "1",
+            ]
+        ],
         ["Coles", "Woolworths"],
     )
 
@@ -224,6 +235,12 @@ def test_basket_report_uses_local_matches_without_live_scraping(monkeypatch):
     assert report["store_rankings"][0]["store"] == "Coles"
     assert report["store_rankings"][0]["coverage_count"] == 1
     assert report["item_breakdown"][0]["cheapest_store"] == "Coles"
+    assert report["item_breakdown"][0]["all_stores"][0][1]["image_url"] == (
+        "https://images.example.test/milk.jpg"
+    )
+    assert report["item_breakdown"][0]["list_image_url"] == (
+        "https://images.example.test/saved-milk.jpg"
+    )
 
 
 def test_basket_report_uses_fresh_cached_prices_for_name_variants(monkeypatch):

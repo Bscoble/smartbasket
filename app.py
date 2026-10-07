@@ -568,6 +568,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                     "status": item_store_status.get(store, {}).get("status", "unavailable"),
                     "message": item_store_status.get(store, {}).get("message", "Price unavailable"),
                     "product_name": item_store_status.get(store, {}).get("product_name"),
+                    "image_url": item_store_status.get(store, {}).get("image_url", ""),
                 }
                 continue
 
@@ -580,6 +581,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
                 "status": item_store_status.get(store, {}).get("status", "ok"),
                 "message": item_store_status.get(store, {}).get("message", "Price found"),
                 "product_name": item_store_status.get(store, {}).get("product_name") or item_name,
+                "image_url": item_store_status.get(store, {}).get("image_url", ""),
                 "last_verified": item_store_status.get(store, {}).get("last_verified"),
             }
         
@@ -629,6 +631,7 @@ def generate_smart_basket_report(user_items: list, selected_stores: list) -> Opt
             "total_price": format_price(best_price),
             "savings_vs_highest": savings_vs_highest,
             "price_options_count": len(all_store_prices),
+            "list_image_url": row[3].strip() if len(row) >= 4 and row[3] else "",
             "all_stores": sorted_item_stores,
         })
         
@@ -2011,6 +2014,14 @@ else:
                                     "unit_price": item["unit_price"],
                                     "total_price": item["total_price"],
                                     "savings_vs_highest": item.get("savings_vs_highest", 0.0),
+                                    "image_url": next(
+                                        (
+                                            data.get("image_url", "")
+                                            for store_name, data in item["all_stores"]
+                                            if store_name == store
+                                        ),
+                                        "",
+                                    ) or item.get("list_image_url", ""),
                                     "price_message": next(
                                         (
                                             data["message"]
@@ -2039,6 +2050,10 @@ else:
                                         "unit_price": store_data["unit_price"],
                                         "total_price": f"${store_data['total_price']:.2f}",
                                         "matched_name": store_data.get("product_name", ""),
+                                        "image_url": (
+                                            store_data.get("image_url", "")
+                                            or item.get("list_image_url", "")
+                                        ),
                                         "price_message": (
                                             store_data["message"]
                                             if store_data.get("status") == "stale" else ""
@@ -2086,7 +2101,7 @@ else:
                                         '<div class="shopping-detail-item-marker"></div>',
                                         unsafe_allow_html=True,
                                     )
-                                    c_select, c_name, c_price = st.columns([0.3, 3, 0.8])
+                                    c_select, c_image, c_name, c_price = st.columns([0.3, 0.65, 3, 0.8])
                                     chk_key = f"chk_{st.session_state['shop_mode']}_{store_name}_{idx}"
                                     with c_select:
                                         st.checkbox(
@@ -2094,6 +2109,22 @@ else:
                                             key=chk_key,
                                             label_visibility="collapsed",
                                         )
+                                    with c_image:
+                                        image_url = str(item.get("image_url") or "").strip()
+                                        if image_url.lower().startswith(("https://", "http://")):
+                                            st.markdown(
+                                                f'<img src="{html.escape(image_url, quote=True)}" '
+                                                f'alt="{html.escape(item["item_name"], quote=True)}" '
+                                                'class="shopping-detail-item-image" />',
+                                                unsafe_allow_html=True,
+                                            )
+                                        else:
+                                            st.markdown(
+                                                f'<div class="shopping-detail-item-image-placeholder">'
+                                                f'<img src="{BRAND_MARK_DATA_URI}" alt="{BRAND_NAME}" />'
+                                                '</div>',
+                                                unsafe_allow_html=True,
+                                            )
                                     with c_name:
                                         st.markdown(item["item_name"])
                                         matched_name = item.get("matched_name")

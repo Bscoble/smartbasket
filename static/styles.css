@@ -43,8 +43,8 @@ div:has(> .shopping-detail-item-marker) {
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"] {
     align-items: flex-start !important;
     display: grid !important;
-    grid-template-columns: 24px minmax(0, 1fr) 68px !important;
-    gap: 10px !important;
+    grid-template-columns: 24px 48px minmax(0, 1fr) 68px !important;
+    gap: 8px !important;
 }
 
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
@@ -56,16 +56,16 @@ div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
 }
 
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
-    > div[data-testid="stColumn"]:nth-child(2),
+    > div[data-testid="stColumn"]:nth-child(3),
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
-    > div[data-testid="column"]:nth-child(2) {
+    > div[data-testid="column"]:nth-child(3) {
     overflow-wrap: anywhere !important;
 }
 
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
-    > div[data-testid="stColumn"]:nth-child(2) p,
+    > div[data-testid="stColumn"]:nth-child(3) p,
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
-    > div[data-testid="column"]:nth-child(2) p {
+    > div[data-testid="column"]:nth-child(3) p {
     margin: 3px 0 0 !important;
     white-space: normal !important;
     overflow-wrap: anywhere !important;
@@ -75,6 +75,31 @@ div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
 div:has(> .shopping-detail-item-marker) + div[data-testid="stHorizontalBlock"]
     div[data-testid="stCheckbox"] {
     margin-top: 2px !important;
+}
+
+.shopping-detail-item-image,
+.shopping-detail-item-image-placeholder {
+    display: block;
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+}
+
+.shopping-detail-item-image {
+    object-fit: contain;
+    background: #FFFFFF;
+}
+
+.shopping-detail-item-image-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #E6F4EA;
+}
+
+.shopping-detail-item-image-placeholder img {
+    width: 42px;
+    height: auto;
 }
 
 .shopping-detail-item-price {
