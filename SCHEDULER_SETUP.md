@@ -1,16 +1,18 @@
 # Grocery Gecko Scheduler Setup
 
-## GitHub Actions - Automated Daily Cache Warmup at 4:00 AM
+## GitHub Actions - External Scraping Paused
 
-Price-refresh workflows run daily once these workflow files are deployed to the
-default branch (`master`). Manual runs remain available. Product metadata
-enrichment is manual-only.
+Automated external scraping is currently paused. The cache warmer, category
+crawl, and stale-price revalidation workflows no longer have scheduled triggers.
+Manual runs remain available when an operator explicitly needs to run a job.
+Product metadata enrichment, requested product discovery, and the Coles provider
+trial are manual-only.
 
 ### Current Setup Status
 
-✅ **Workflow File**: `.github/workflows/warmup.yml`
-✅ **Schedule**: Daily at 18:00 UTC (4:00 AM AEST / 5:00 AM AEDT)
-✅ **Trigger**: Manual trigger available
+✅ **Automated schedules**: Disabled
+✅ **Manual triggers**: Available for intentional runs
+✅ **Local scheduler**: Disabled
 
 ### Step 1: Add GitHub Secrets
 
@@ -38,16 +40,13 @@ Test the workflow manually before waiting for the automatic run:
 
 ---
 
-## Local Testing (Optional)
+## Intentional Manual Runs (Optional)
 
 If you want to test locally before relying on GitHub Actions:
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-
-# Run the scheduler locally (keeps running)
-python3 scheduler.py
 
 # Or run the cache warmer once
 python3 cache_warmer.py
@@ -57,15 +56,14 @@ python3 cache_warmer.py
 
 ## How It Works
 
-1. **GitHub Actions** checks the schedule daily
-2. At **18:00 UTC** (4:00 AM AEST), the workflow triggers
-3. Workflow steps:
+1. An operator manually starts a GitHub Actions workflow
+2. Workflow steps:
    - Checks out your code
    - Sets up Python 3.11
    - Installs dependencies
    - Runs `cache_warmer.py` with environment variables
-4. Prices are scraped and cached in Google Sheets
-5. Logs available in GitHub Actions dashboard
+3. Prices are scraped and cached in Google Sheets
+4. Logs available in GitHub Actions dashboard
 
 ---
 
@@ -75,10 +73,10 @@ python3 cache_warmer.py
 
 | UTC | Job | Purpose |
 |-----|-----|---------|
-| 18:00 | Cache warmer | Refresh common staple prices |
-| 18:30 | Category crawl | Discover retailer catalogue products and detail URLs |
+| Manual only | Cache warmer | Refresh common staple prices |
+| Manual only | Category crawl | Discover retailer catalogue products and detail URLs |
 | Manual only | Product metadata enrichment | Fetch up to 20 Woolworths ingredient/allergen records |
-| 21:00 | Stale price revalidation | Refresh bounded stale-price batches |
+| Manual only | Stale price revalidation | Refresh bounded stale-price batches |
 | Manual only | Requested Product Discovery | Discover missing shopping-list/search products |
 | Manual only | Coles Provider Trial | Test a candidate actor without changing production |
 
@@ -115,20 +113,21 @@ To refresh shopping-list matches after deploying this change, run **Stale Price
 Revalidation** from GitHub Actions, wait for completion, then click **Compare
 Prices** again in the app. An existing report does not update automatically.
 
-### Recovery from the October 1 pause
+### Previous pause context
 
-The schedules were removed on October 1, 2026. The preceding runs showed:
+The previous runs showed:
 
 - Apify: `Monthly usage hard limit exceeded`.
 - ZenRows: HTTP 402 `Payment Required`.
 - Google Sheets: intermittent HTTP 500/429 errors.
 - Dashboard: writes exceeded the worksheet row limit.
 
-Verify provider credits and account limits before running paid scrapers. Start
-**Overnight Category Crawl**, wait for it to finish, then run **Stale Price
-Revalidation**. The cache warmer refreshes only six common staples, not an
-arbitrary shopping list. Confirm products were saved and re-run the app's price
-comparison; an existing report does not automatically recompute.
+External scraping remains paused. If it is intentionally resumed, first verify
+provider credits and account limits before manually starting **Overnight
+Category Crawl** and **Stale Price Revalidation**. The cache warmer refreshes
+only six common staples, not an arbitrary shopping list. Confirm products were
+saved and re-run the app's price comparison; an existing report does not
+automatically recompute.
 
 Metadata enrichment remains manual-only because it is not required to refresh
 prices and was also hitting the ZenRows billing limit.
@@ -183,8 +182,8 @@ reports are discarded when the flag is disabled. Generate a new comparison after
 scraping to see refreshed prices.
 
 Expanded crawling and higher revalidation throughput are opt-in and manual-only.
-Existing scheduled jobs retain their original batch sizes. No new workflow
-automatically runs a candidate provider or discovers queued demand.
+The workflows retain their original batch sizes, but no workflow automatically
+runs a candidate provider or discovers queued demand.
 
 ### Repository Variables
 
@@ -302,15 +301,16 @@ check additional categories, package sizes, price accuracy, retailer terms,
 location-specific pricing and real billing before adopting it. No candidate
 has been validated live as part of this implementation.
 
-## Alternative: Local Cron Job
+## Local Cron Job
 
-If you're running this on your own Linux/Mac server:
+Do not add a local cron entry while external scraping is paused. If scraping is
+intentionally resumed on your own Linux/Mac server:
 
 ```bash
 # Edit crontab
 crontab -e
 
-# Add this line (runs at 4:00 AM daily)
+# Add this line only after scraping is intentionally resumed
 0 4 * * * cd /workspaces/smartbasket && python3 cache_warmer.py >> /var/log/smartbasket-cache.log 2>&1
 ```
 
@@ -318,8 +318,8 @@ crontab -e
 
 ## Next Steps
 
-1. **Add GitHub Secrets** (see Step 1 above)
-2. **Verify workflow runs** (see Step 2 above)
-3. **Monitor in GitHub Actions** dashboard
+1. Keep automated schedules disabled
+2. Start a workflow manually only when a refresh is intentional
+3. Monitor intentional runs in the GitHub Actions dashboard
 
-Your cache warmer is now **automated and running at 4:00 AM daily!** 🎉
+External scraping is currently **paused**.

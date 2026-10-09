@@ -1,8 +1,6 @@
 name: Overnight Cache Warmer
 
 on:
-  schedule:
-    - cron: '0 18 * * *'
   workflow_dispatch: # Allows you to run it manually from the GitHub dashboard
 
 concurrency:
